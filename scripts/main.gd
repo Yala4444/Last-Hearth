@@ -5,12 +5,15 @@ const HEARTH_POS := Vector2(240.0, 410.0)
 const HUB_MAP_POS := Vector2(240.0, 160.0)
 const HUB_CARRY_POS := Vector2(115.0, 430.0)
 const HUB_DAMAGE_POS := Vector2(365.0, 430.0)
+const HUB_HEARTH_UPGRADE_POS := Vector2(240.0, 590.0)
 
 const HERO_SPEED := 178.0
 const HERO_INTERACT_RADIUS := 46.0
 const HERO_PICKUP_RADIUS := 34.0
 const JOYSTICK_RADIUS := 64.0
 const JOYSTICK_DEADZONE := 0.10
+const TWILIGHT_DURATION := 3.4
+const UNLOAD_INTERVAL := 0.16
 const SAVE_PATH := "user://hearth_meta.json"
 
 enum Mode {
@@ -41,10 +44,12 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
+	"build_version": 5,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
 	"damage_level": 0,
+	"hearth_bonus": 0,
 	"attempts": 0,
 	"forest_cleared": false,
 	"hearth_rank": 1
@@ -53,6 +58,7 @@ var meta: Dictionary = {
 var hero_pos := Vector2(240.0, 650.0)
 var hero_target := Vector2(240.0, 650.0)
 var hero_walk_phase := 0.0
+var hero_facing := Vector2(1.0, 0.0)
 var hero_damage := 22.0
 var hero_fire_rate := 0.52
 var hero_shot_cd := 0.0
@@ -81,13 +87,20 @@ var run_seed := 0
 
 var resource_nodes: Array[Dictionary] = []
 var resource_pickups: Array[Dictionary] = []
+var resource_flights: Array[Dictionary] = []
 var pickup_cd := 0.0
+var unload_cd := 0.0
+var unload_active := false
 var enemies: Array[Dictionary] = []
 var shots: Array[Dictionary] = []
 var floaters: Array[Dictionary] = []
 var particles: Array[Dictionary] = []
 var night_queue: Array[String] = []
 var night_spawn_cd := 0.0
+var twilight_timer := 0.0
+var camera_shake := 0.0
+var hearth_pulse := 0.0
+var decor_points: Array[Dictionary] = []
 
 var survivor_one_pos := Vector2.ZERO
 var survivor_two_pos := Vector2.ZERO
@@ -135,7 +148,11 @@ func _process(delta: float) -> void:
 	hero_shot_cd = maxf(0.0, hero_shot_cd - delta)
 	gather_cd = maxf(0.0, gather_cd - delta)
 	pickup_cd = maxf(0.0, pickup_cd - delta)
+	unload_cd = maxf(0.0, unload_cd - delta)
 	tower_cd = maxf(0.0, tower_cd - delta)
+	camera_shake = maxf(0.0, camera_shake - delta * 8.0)
+	hearth_pulse = maxf(0.0, hearth_pulse - delta * 2.5)
+	_update_resource_flights(delta)
 
 	if mode == Mode.HUB:
 		_update_movement(delta)
@@ -161,6 +178,13 @@ func _load_meta() -> void:
 		for key: Variant in saved.keys():
 			meta[key] = saved[key]
 
+	# v0.5 changes the opening flow and readability substantially.
+	# Existing testers get one fresh expedition without losing permanent upgrades.
+	var loaded_version := int(meta.get("build_version", 0))
+	if loaded_version < 5:
+		meta["build_version"] = 5
+		meta["first_run"] = true
+
 
 func _save_meta() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -177,6 +201,8 @@ func _enter_hub(message: String = "") -> void:
 	shots.clear()
 	resource_nodes.clear()
 	resource_pickups.clear()
+	resource_flights.clear()
+	decor_points.clear()
 	core_active = false
 	core_carried = false
 	hub_zone_lock = ""
@@ -196,6 +222,7 @@ func _start_expedition() -> void:
 	hero_pos = Vector2(rng.randf_range(175.0, 305.0), rng.randf_range(640.0, 700.0))
 	hero_target = hero_pos
 	hero_walk_phase = 0.0
+	hero_facing = Vector2(1.0, 0.0)
 	hero_damage = 22.0 * (1.0 + 0.10 * float(int(meta.get("damage_level", 0))))
 	hero_fire_rate = 0.52
 	hero_shot_cd = 0.0
@@ -210,9 +237,10 @@ func _start_expedition() -> void:
 	survivors = 1
 	survivor_agents.clear()
 	hearth_level = 1
-	hearth_max_hp = 150.0
+	var permanent_hearth := int(meta.get("hearth_bonus", 0))
+	hearth_max_hp = 150.0 + float(permanent_hearth) * 18.0
 	hearth_hp = hearth_max_hp
-	light_radius = 165.0
+	light_radius = 165.0 + float(permanent_hearth) * 8.0
 	workshop_built = false
 	workshop_choice = ""
 	tower_built = false
@@ -226,8 +254,14 @@ func _start_expedition() -> void:
 	floaters.clear()
 	particles.clear()
 	resource_pickups.clear()
+	resource_flights.clear()
 	pickup_cd = 0.0
+	unload_cd = 0.0
+	unload_active = false
 	night_queue.clear()
+	twilight_timer = 0.0
+	camera_shake = 0.0
+	hearth_pulse = 0.0
 	core_active = false
 	core_carried = false
 	survivor_one_found = false
@@ -280,14 +314,33 @@ func _generate_layout() -> void:
 			"drop_spawned": false
 		})
 
-	var rescue_slots: Array[Vector2] = [
-		Vector2(95, 180), Vector2(380, 185), Vector2(80, 520), Vector2(400, 525)
+	decor_points.clear()
+	for i in range(46):
+		var dpos := Vector2(rng.randf_range(28.0, 452.0), rng.randf_range(128.0, 770.0))
+		if dpos.distance_to(HEARTH_POS) < 82.0:
+			continue
+		var roll := rng.randf()
+		var kind := "grass"
+		if roll > 0.72:
+			kind = "pebble"
+		if roll > 0.90:
+			kind = "branch"
+		decor_points.append({
+			"pos": dpos,
+			"kind": kind,
+			"scale": rng.randf_range(0.75, 1.25)
+		})
+
+	var first_rescue_slots: Array[Vector2] = [
+		Vector2(92, 520), Vector2(392, 525), Vector2(108, 325), Vector2(372, 330)
 	]
-	var first_index: int = rng.randi_range(0, rescue_slots.size() - 1)
-	survivor_one_pos = rescue_slots[first_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
-	rescue_slots.remove_at(first_index)
-	var second_index: int = rng.randi_range(0, rescue_slots.size() - 1)
-	survivor_two_pos = rescue_slots[second_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
+	var second_rescue_slots: Array[Vector2] = [
+		Vector2(92, 184), Vector2(388, 188), Vector2(72, 655), Vector2(408, 650)
+	]
+	var first_index: int = rng.randi_range(0, first_rescue_slots.size() - 1)
+	survivor_one_pos = first_rescue_slots[first_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
+	var second_index: int = rng.randi_range(0, second_rescue_slots.size() - 1)
+	survivor_two_pos = second_rescue_slots[second_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
 
 	if rng.randf() < 0.5:
 		left_choice_pos = Vector2(130.0, 285.0)
@@ -310,6 +363,7 @@ func _update_movement(delta: float) -> void:
 			movement = to_target.normalized() * HERO_SPEED
 
 	if movement.length() > 0.0:
+		hero_facing = movement.normalized()
 		hero_pos += movement * delta
 		hero_pos.x = clampf(hero_pos.x, 22.0, VIEW_SIZE.x - 22.0)
 		hero_pos.y = clampf(hero_pos.y, 118.0, VIEW_SIZE.y - 24.0)
@@ -317,11 +371,12 @@ func _update_movement(delta: float) -> void:
 
 
 func _update_hub_interactions() -> void:
-	var near_map := hero_pos.distance_to(HUB_MAP_POS) < 58.0
-	var near_carry := hero_pos.distance_to(HUB_CARRY_POS) < 52.0
-	var near_damage := hero_pos.distance_to(HUB_DAMAGE_POS) < 52.0
+	var near_map := hero_pos.distance_to(HUB_MAP_POS) < 54.0
+	var near_carry := hero_pos.distance_to(HUB_CARRY_POS) < 48.0
+	var near_damage := hero_pos.distance_to(HUB_DAMAGE_POS) < 48.0
+	var near_hearth := hero_pos.distance_to(HUB_HEARTH_UPGRADE_POS) < 46.0
 
-	if not near_map and not near_carry and not near_damage:
+	if not near_map and not near_carry and not near_damage and not near_hearth:
 		hub_zone_lock = ""
 
 	if near_map and hub_zone_lock != "map":
@@ -337,9 +392,9 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["carry_level"] = level + 1
 			_save_meta()
-			_banner("Рюкзак улучшен · вместимость +1", 2.0)
+			_banner("Склад улучшен · перенос +1", 2.0)
 		else:
-			_banner("Нужно %d углей" % cost, 1.6)
+			_banner("Для склада нужно %d углей" % cost, 1.7)
 
 	if near_damage and hub_zone_lock != "damage":
 		hub_zone_lock = "damage"
@@ -349,13 +404,29 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["damage_level"] = level + 1
 			_save_meta()
-			_banner("Оружие усилено · урон +10%", 2.0)
+			_banner("Кузница усилена · урон +10%", 2.0)
 		else:
-			_banner("Нужно %d углей" % cost, 1.6)
+			_banner("Для кузницы нужно %d углей" % cost, 1.7)
+
+	if near_hearth and hub_zone_lock != "hearth":
+		hub_zone_lock = "hearth"
+		var level := int(meta.get("hearth_bonus", 0))
+		var cost := 5 + level * 4
+		if level >= 3:
+			_banner("Очаг уже усилен до предела этой главы", 1.9)
+		elif int(meta.get("embers", 0)) >= cost:
+			meta["embers"] = int(meta.get("embers", 0)) - cost
+			meta["hearth_bonus"] = level + 1
+			_save_meta()
+			hearth_pulse = 1.0
+			camera_shake = 2.0
+			_banner("Сердце Очагa усилено · больше света и прочности", 2.3)
+		else:
+			_banner("Для Очагa нужно %d углей" % cost, 1.7)
 
 
 func _update_expedition(delta: float) -> void:
-	_deposit_resources_if_close()
+	_deposit_resources_if_close(delta)
 	_update_resource_gathering()
 	_update_resource_pickups(delta)
 	_update_survivor_agents(delta)
@@ -472,14 +543,31 @@ func _update_resource_pickups(delta: float) -> void:
 	var pickup_pos: Vector2 = pickup["pos"]
 	if kind == "wood":
 		carried_wood += 1
-		_float_text(hero_pos + Vector2(0, -34), "+1 БРЕВНО", Color(0.95, 0.76, 0.42))
 	else:
 		carried_stone += 1
-		_float_text(hero_pos + Vector2(0, -34), "+1 КАМЕНЬ", Color(0.75, 0.80, 0.84))
 
-	_burst(pickup_pos, 5)
+	resource_flights.append({
+		"kind": kind,
+		"mode": "pickup",
+		"from": pickup_pos,
+		"to": hero_pos,
+		"t": 0.0,
+		"duration": 0.24
+	})
+	_burst(pickup_pos, 4)
 	resource_pickups.remove_at(nearest_index)
-	pickup_cd = 0.12
+	pickup_cd = 0.11
+
+
+func _update_resource_flights(delta: float) -> void:
+	for i in range(resource_flights.size() - 1, -1, -1):
+		var flight: Dictionary = resource_flights[i]
+		var duration := maxf(0.01, float(flight.get("duration", 0.24)))
+		var t := float(flight.get("t", 0.0)) + delta / duration
+		flight["t"] = t
+		resource_flights[i] = flight
+		if t >= 1.0:
+			resource_flights.remove_at(i)
 
 
 func _spawn_resource_drops(source_kind: String, source_pos: Vector2) -> void:
@@ -495,22 +583,41 @@ func _spawn_resource_drops(source_kind: String, source_pos: Vector2) -> void:
 		})
 
 
-func _deposit_resources_if_close() -> void:
-	if hero_pos.distance_to(HEARTH_POS) > 66.0:
+func _deposit_resources_if_close(delta: float) -> void:
+	var near_hearth := hero_pos.distance_to(HEARTH_POS) <= 70.0
+	if not near_hearth:
+		unload_active = false
+		unload_cd = 0.0
 		return
+
 	if carried_wood <= 0 and carried_stone <= 0:
+		unload_active = false
 		return
 
-	if carried_wood > 0:
-		camp_wood += carried_wood
-		_float_text(HEARTH_POS + Vector2(-25, -55), "+%d дерева" % carried_wood, Color(0.95, 0.76, 0.42))
-	if carried_stone > 0:
-		camp_stone += carried_stone
-		_float_text(HEARTH_POS + Vector2(25, -42), "+%d камня" % carried_stone, Color(0.76, 0.82, 0.86))
+	unload_active = true
+	unload_cd -= delta
+	if unload_cd > 0.0:
+		return
 
-	carried_wood = 0
-	carried_stone = 0
-	_burst(HEARTH_POS, 10)
+	var kind := "wood" if carried_wood > 0 else "stone"
+	if kind == "wood":
+		carried_wood -= 1
+		camp_wood += 1
+	else:
+		carried_stone -= 1
+		camp_stone += 1
+
+	resource_flights.append({
+		"kind": kind,
+		"mode": "unload",
+		"from": hero_pos + Vector2(0, -16),
+		"to": HEARTH_POS + Vector2(rng.randf_range(-18.0, 18.0), rng.randf_range(-10.0, 12.0)),
+		"t": 0.0,
+		"duration": 0.22
+	})
+	hearth_pulse = minf(1.0, hearth_pulse + 0.18)
+	_burst(HEARTH_POS + Vector2(rng.randf_range(-12.0, 12.0), 4), 3)
+	unload_cd = UNLOAD_INTERVAL
 	_check_day_progress()
 
 
@@ -522,8 +629,10 @@ func _check_day_progress() -> void:
 		hearth_hp = hearth_max_hp
 		light_radius = 225.0
 		stage = Stage.DAY1_RESCUE
-		flash_timer = 0.55
-		_banner("Очаг II · тьма отступила", 2.0)
+		flash_timer = 0.75
+		hearth_pulse = 1.0
+		camera_shake = 4.0
+		_banner("ОЧАГ II · свет открыл новую часть леса", 2.4)
 
 	elif stage == Stage.DAY2_BUILD and camp_wood >= 8 and camp_stone >= 5:
 		camp_wood -= 8
@@ -531,8 +640,9 @@ func _check_day_progress() -> void:
 		workshop_built = true
 		stage = Stage.WORKSHOP_CHOICE
 		light_radius = 255.0
-		flash_timer = 0.45
-		_banner("Мастерская восстановлена", 1.8)
+		flash_timer = 0.55
+		camera_shake = 2.0
+		_banner("Мастерская восстановлена · выбери специализацию", 2.1)
 
 	elif stage == Stage.DAY3_TOWER and camp_wood >= 6 and camp_stone >= 6:
 		camp_wood -= 6
@@ -540,8 +650,9 @@ func _check_day_progress() -> void:
 		tower_built = true
 		stage = Stage.EXPEDITION_CHOICE
 		light_radius = 300.0
-		flash_timer = 0.45
-		_banner("Сторожевая башня готова", 1.8)
+		flash_timer = 0.55
+		camera_shake = 2.2
+		_banner("Башня готова · лагерь защищён лучше", 2.1)
 
 
 func _update_workshop_choice() -> void:
@@ -582,32 +693,41 @@ func _update_expedition_choice() -> void:
 func _start_night(number: int) -> void:
 	current_night = number
 	night_queue.clear()
-	night_spawn_cd = 0.45
+	night_spawn_cd = 0.55
+	twilight_timer = TWILIGHT_DURATION
 	hearth_hp = hearth_max_hp
 
 	if number == 1:
 		stage = Stage.NIGHT1
 		for i in range(8):
 			night_queue.append("basic")
-		_banner("НОЧЬ 1 · держись у огня", 2.0)
+		night_queue.append("guard")
+		_banner("СУМЕРКИ · охотник занимает позицию", 2.5)
 	elif number == 2:
 		stage = Stage.NIGHT2
-		for i in range(8):
+		for i in range(9):
 			night_queue.append("fast" if i % 3 == 2 else "basic")
 		night_queue.append("elite")
-		_banner("НОЧЬ 2 · быстрые идут первыми", 2.0)
+		_banner("СУМЕРКИ · вернись к свету", 2.5)
 	else:
 		stage = Stage.NIGHT3
-		for i in range(11):
+		for i in range(12):
 			if i % 4 == 2:
 				night_queue.append("fast")
 			else:
 				night_queue.append("basic")
 		night_queue.append("boss")
-		_banner("НОЧЬ 3 · что-то большое приближается", 2.4)
+		_banner("СУМЕРКИ · лес вокруг Очагa замолчал", 2.8)
 
 
 func _update_night_spawner(delta: float) -> void:
+	if twilight_timer > 0.0:
+		twilight_timer = maxf(0.0, twilight_timer - delta)
+		if twilight_timer <= 0.0:
+			_banner("НОЧЬ %d · защити Последний Очаг" % current_night, 2.0)
+			camera_shake = 1.5
+		return
+
 	night_spawn_cd -= delta
 	if night_queue.size() > 0 and night_spawn_cd <= 0.0:
 		var kind: String = night_queue.pop_front()
@@ -696,7 +816,8 @@ func _spawn_enemy_at(kind: String, pos: Vector2) -> void:
 		"speed": speed,
 		"damage": damage,
 		"radius": radius,
-		"hit_cd": 0.0
+		"hit_cd": 0.0,
+		"hit_flash": 0.0
 	})
 
 
@@ -740,10 +861,12 @@ func _update_survivor_agents(delta: float) -> void:
 		var target := _survivor_defense_target(i) if night else _survivor_day_target(i, role)
 		var to_target := target - pos
 
-		if to_target.length() > 5.0:
+		var moving := to_target.length() > 5.0
+		if moving:
 			var move_speed := 100.0 if night else 68.0
 			pos += to_target.normalized() * minf(to_target.length(), move_speed * delta)
-			agent["phase"] = float(agent.get("phase", 0.0)) + delta * 6.0
+		var phase_speed := 6.0 if moving else (4.2 if role == "worker" and not night else 1.8)
+		agent["phase"] = float(agent.get("phase", 0.0)) + delta * phase_speed
 
 		var cd := maxf(0.0, float(agent.get("shot_cd", 0.0)) - delta)
 		var can_fight := enemies.size() > 0 and (night or role == "hunter" or role == "guard")
@@ -841,8 +964,12 @@ func _update_shots(delta: float) -> void:
 
 		if distance < 17.0:
 			enemy["hp"] = float(enemy["hp"]) - float(shot.get("damage", 10.0))
+			enemy["hit_flash"] = 0.11
+			if distance > 0.001:
+				enemy["pos"] = enemy_pos + to_enemy.normalized() * 3.5
 			enemies[target_index] = enemy
-			_float_text(enemy_pos + Vector2(0, -20), "-%d" % int(shot.get("damage", 0)), Color(1.0, 0.86, 0.62))
+			if String(enemy.get("kind", "basic")) in ["elite", "boss"]:
+				camera_shake = maxf(camera_shake, 1.2)
 			shots.remove_at(i)
 		else:
 			shot_pos += to_enemy.normalized() * minf(distance, speed * delta)
@@ -865,6 +992,7 @@ func _update_enemies(delta: float) -> void:
 		var radius := float(enemy.get("radius", 14.0))
 		var speed := float(enemy.get("speed", 35.0))
 		var hit_cd := maxf(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
+		var hit_flash := maxf(0.0, float(enemy.get("hit_flash", 0.0)) - delta)
 
 		if distance > 48.0 + radius * 0.35:
 			pos += to_hearth.normalized() * speed * delta
@@ -872,18 +1000,24 @@ func _update_enemies(delta: float) -> void:
 			hearth_hp -= float(enemy.get("damage", 7.0))
 			hit_cd = 0.88
 			flash_timer = 0.08
-			_float_text(HEARTH_POS + Vector2(0, -72), "-%d очаг" % int(enemy.get("damage", 0)), Color(1.0, 0.48, 0.38))
+			camera_shake = maxf(camera_shake, 2.2)
+			hearth_pulse = maxf(hearth_pulse, 0.35)
+			_float_text(HEARTH_POS + Vector2(0, -72), "-%d ОЧАГ" % int(enemy.get("damage", 0)), Color(1.0, 0.48, 0.38))
 
 		enemy["pos"] = pos
 		enemy["hit_cd"] = hit_cd
+		enemy["hit_flash"] = hit_flash
 		enemies[i] = enemy
 
 
 func _on_enemy_killed(enemy: Dictionary) -> void:
 	var pos: Vector2 = enemy["pos"]
 	var kind := String(enemy.get("kind", "basic"))
-	shots.clear()
-	_burst(pos, 10 if kind != "boss" else 28)
+	_burst(pos, 10 if kind != "boss" else 34)
+	if kind == "elite":
+		camera_shake = maxf(camera_shake, 3.0)
+	elif kind == "boss":
+		camera_shake = 6.0
 
 	if kind == "elite":
 		_float_text(pos + Vector2(0, -25), "ЭЛИТА ПОВЕРЖЕНА", Color(1.0, 0.72, 0.38))
@@ -909,8 +1043,10 @@ func _update_core_return() -> void:
 	if core_carried and hero_pos.distance_to(HEARTH_POS) < 68.0:
 		core_carried = false
 		hearth_level = 5
-		light_radius = 360.0
-		flash_timer = 1.0
+		light_radius = 380.0
+		flash_timer = 1.25
+		hearth_pulse = 1.0
+		camera_shake = 6.0
 		_finish_run(true)
 
 
@@ -1055,6 +1191,12 @@ func _update_joystick(screen_pos: Vector2) -> void:
 
 
 func _draw() -> void:
+	var shake_offset := Vector2.ZERO
+	if camera_shake > 0.0:
+		var now := float(Time.get_ticks_msec())
+		shake_offset = Vector2(sin(now * 0.071), cos(now * 0.093)) * camera_shake
+	draw_set_transform(shake_offset, 0.0, Vector2.ONE)
+
 	if mode == Mode.HUB:
 		_draw_hub()
 	else:
@@ -1062,6 +1204,8 @@ func _draw() -> void:
 
 	_draw_particles()
 	_draw_floaters()
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
 	_draw_hud()
 	_draw_banner()
 	_draw_joystick()
@@ -1072,62 +1216,137 @@ func _draw() -> void:
 
 
 func _draw_hub() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color("#142019"))
-	_draw_ground_texture(Color("#1b2b21"), 56)
-	_draw_light_field(HEARTH_POS, 235.0)
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color("#111c17"))
+	_draw_ground_texture(Color("#1a2a21"), 58)
+	_draw_light_field(HEARTH_POS, 250.0)
+
+	# The hub is a place, not a menu: every upgrade has a physical object.
+	_draw_hub_building(Vector2(92, 226), "home", "ДОМ ОХОТНИКА", "")
+	_draw_hub_building(HUB_CARRY_POS, "store", "СКЛАД", "перенос")
+	_draw_hub_building(HUB_DAMAGE_POS, "forge", "КУЗНИЦА", "урон")
+	_draw_hub_building(Vector2(390, 620), "watch", "ДОЗОР", "")
+	_draw_map_table(HUB_MAP_POS)
 	_draw_hearth(HEARTH_POS, maxi(2, int(meta.get("hearth_rank", 1)) + 1))
+	_draw_hearth_altar(HUB_HEARTH_UPGRADE_POS)
 
-	_draw_world_marker(HUB_MAP_POS, Color("#6d8b72"), "КАРТА")
-	_draw_world_marker(HUB_CARRY_POS, Color("#856e4d"), "РЮКЗАК")
-	_draw_world_marker(HUB_DAMAGE_POS, Color("#8d5148"), "ОРУЖИЕ")
-
-	_draw_small_building(Vector2(72, 225), "дом")
-	_draw_small_building(Vector2(390, 235), "кузня")
-	_draw_small_building(Vector2(70, 585), "склад")
-	_draw_small_building(Vector2(395, 590), "дозор")
-
+	var resident_roles: Array[String] = ["hunter", "worker", "guard"]
 	var resident_count := 3 if bool(meta.get("forest_cleared", false)) else 2
 	for i in range(resident_count):
-		var angle := float(i) * TAU / float(maxi(1, resident_count)) + 0.5
+		var angle := 0.4 + float(i) * 2.25
 		var p := HEARTH_POS + Vector2(cos(angle), sin(angle)) * 105.0
-		_draw_person(p, Color("#c7c2ae"), 0.0)
+		_draw_humanoid(p, Color("#8a8c72") if i == 0 else Color("#9b7856"), float(i), resident_roles[i], 1.0)
 
 	_draw_hero(hero_pos)
 
-	draw_string(font, Vector2(18, 128), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 250, 22, Color("#f4ead4"))
-	if bool(meta.get("forest_cleared", false)):
-		draw_string(font, Vector2(18, 151), "Забытый лес очищен · Мёртвые поля впереди", HORIZONTAL_ALIGNMENT_LEFT, 430, 13, Color("#b8c8b8"))
-	else:
-		draw_string(font, Vector2(18, 151), "Подойди к карте, чтобы начать новую вылазку", HORIZONTAL_ALIGNMENT_LEFT, 430, 13, Color("#b8c8b8"))
+	draw_string(font, Vector2(18, 116), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 300, 22, Color("#f4ead4"))
+	var subtitle := "Забытый лес очищен · новый путь открыт" if bool(meta.get("forest_cleared", false)) else "Соберись у карты и отправляйся в лес"
+	draw_string(font, Vector2(18, 139), subtitle, HORIZONTAL_ALIGNMENT_LEFT, 440, 12, Color("#9eafa2"))
 
-	var carry_cost := 3 + int(meta.get("carry_level", 0)) * 2
-	var damage_cost := 4 + int(meta.get("damage_level", 0)) * 3
-	draw_string(font, HUB_CARRY_POS + Vector2(-68, 58), "ур.%d · %d угля" % [int(meta.get("carry_level", 0)), carry_cost], HORIZONTAL_ALIGNMENT_CENTER, 136, 12, Color("#d8c7a4"))
-	draw_string(font, HUB_DAMAGE_POS + Vector2(-68, 58), "ур.%d · %d угля" % [int(meta.get("damage_level", 0)), damage_cost], HORIZONTAL_ALIGNMENT_CENTER, 136, 12, Color("#d8c7a4"))
+	var carry_level := int(meta.get("carry_level", 0))
+	var damage_level := int(meta.get("damage_level", 0))
+	var hearth_bonus := int(meta.get("hearth_bonus", 0))
+	var carry_cost := 3 + carry_level * 2
+	var damage_cost := 4 + damage_level * 3
+	var hearth_cost := 5 + hearth_bonus * 4
+
+	draw_string(font, HUB_CARRY_POS + Vector2(-63, 62), "ур.%d · %d углей" % [carry_level, carry_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 11, Color("#d7c7a8"))
+	draw_string(font, HUB_DAMAGE_POS + Vector2(-63, 62), "ур.%d · %d углей" % [damage_level, damage_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 11, Color("#d7c7a8"))
+	var hearth_label := "максимум" if hearth_bonus >= 3 else "ур.%d · %d углей" % [hearth_bonus, hearth_cost]
+	draw_string(font, HUB_HEARTH_UPGRADE_POS + Vector2(-72, 49), hearth_label, HORIZONTAL_ALIGNMENT_CENTER, 144, 11, Color("#e6c583"))
+
+	# Strongest call-to-action is always the next expedition.
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006) * 0.08
+	draw_arc(HUB_MAP_POS, 46.0 * pulse, 0.0, TAU, 44, Color(0.78, 0.88, 0.70, 0.55), 2.0)
+	draw_string(font, HUB_MAP_POS + Vector2(-90, 69), "НОВАЯ ВЫЛАЗКА", HORIZONTAL_ALIGNMENT_CENTER, 180, 13, Color("#f3e4c8"))
+
+
+func _draw_hub_building(pos: Vector2, kind: String, label: String, subtitle: String) -> void:
+	_draw_ellipse_custom(pos + Vector2(0, 25), Vector2(38, 11), Color(0.01, 0.02, 0.015, 0.28))
+	var wall := Color("#5d4e3b")
+	var roof := Color("#7b6243")
+	if kind == "forge":
+		wall = Color("#594642")
+		roof = Color("#7b5148")
+	elif kind == "store":
+		wall = Color("#5d513d")
+		roof = Color("#7d6945")
+	elif kind == "watch":
+		wall = Color("#4e4b3b")
+		roof = Color("#6f6846")
+	draw_rect(Rect2(pos + Vector2(-28, -12), Vector2(56, 40)), wall)
+	var roof_pts := PackedVector2Array([
+		pos + Vector2(-34, -12), pos + Vector2(0, -39), pos + Vector2(34, -12)
+	])
+	draw_colored_polygon(roof_pts, roof)
+	draw_rect(Rect2(pos + Vector2(-6, 7), Vector2(12, 21)), Color("#292821"))
+	if kind == "forge":
+		draw_rect(Rect2(pos + Vector2(18, -33), Vector2(8, 27)), Color("#443c34"))
+		draw_circle(pos + Vector2(22, -38), 6.0, Color(0.72, 0.45, 0.30, 0.16))
+	elif kind == "store":
+		for i in range(3):
+			draw_line(pos + Vector2(-20, 14 - i * 8), pos + Vector2(-2, 14 - i * 8), Color("#a87b48"), 5.0, true)
+	draw_string(font, pos + Vector2(-70, 47), label, HORIZONTAL_ALIGNMENT_CENTER, 140, 11, Color("#e6dcc6"))
+	if subtitle != "":
+		draw_string(font, pos + Vector2(-70, 60), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 140, 10, Color("#9aa79a"))
+
+
+func _draw_map_table(pos: Vector2) -> void:
+	draw_rect(Rect2(pos + Vector2(-34, -13), Vector2(68, 30)), Color("#67533b"))
+	draw_line(pos + Vector2(-25, 17), pos + Vector2(-30, 36), Color("#514231"), 6.0)
+	draw_line(pos + Vector2(25, 17), pos + Vector2(30, 36), Color("#514231"), 6.0)
+	var map_pts := PackedVector2Array([
+		pos + Vector2(-25, -8), pos + Vector2(22, -10), pos + Vector2(28, 7), pos + Vector2(-20, 10)
+	])
+	draw_colored_polygon(map_pts, Color("#c8b48b"))
+	draw_line(pos + Vector2(-12, 0), pos + Vector2(10, -3), Color("#74866c"), 2.0)
+	draw_circle(pos + Vector2(14, 2), 3.0, Color("#9c5b43"))
+	draw_string(font, pos + Vector2(-50, 52), "КАРТА", HORIZONTAL_ALIGNMENT_CENTER, 100, 11, Color("#d9d0ba"))
+
+
+func _draw_hearth_altar(pos: Vector2) -> void:
+	var pulse := 1.0 + hearth_pulse * 0.14
+	draw_circle(pos, 26.0 * pulse, Color(0.92, 0.62, 0.25, 0.10 + hearth_pulse * 0.10))
+	for i in range(5):
+		var a := TAU * float(i) / 5.0
+		draw_circle(pos + Vector2(cos(a), sin(a)) * 19.0, 4.0, Color("#6c6656"))
+	var crystal := PackedVector2Array([
+		pos + Vector2(0, -16), pos + Vector2(10, 0), pos + Vector2(0, 17), pos + Vector2(-10, 0)
+	])
+	draw_colored_polygon(crystal, Color("#d89145"))
+	draw_string(font, pos + Vector2(-70, 36), "УСИЛИТЬ ОЧАГ", HORIZONTAL_ALIGNMENT_CENTER, 140, 11, Color("#ead7b0"))
 
 
 func _draw_expedition() -> void:
-	var night := stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]
-	var bg := Color("#101813") if night else Color("#19251d")
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), bg)
-	_draw_ground_texture(Color("#1d3023") if not night else Color("#162119"), 64)
+	var night_stage := stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]
+	var night_mix := 0.0
+	if night_stage:
+		night_mix = 1.0 - clampf(twilight_timer / TWILIGHT_DURATION, 0.0, 1.0)
+
+	var day_bg := Color("#1a2a21")
+	var night_bg := Color("#0a1211")
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), day_bg.lerp(night_bg, night_mix))
+	_draw_ground_texture(Color("#213529").lerp(Color("#13201a"), night_mix), 64)
+	_draw_environment_decor()
 	_draw_light_field(HEARTH_POS, light_radius)
 
 	for node: Dictionary in resource_nodes:
 		_draw_resource(node)
 	for pickup: Dictionary in resource_pickups:
 		_draw_resource_pickup(pickup)
+	_draw_resource_flights()
+
+	_draw_revealed_landmarks()
 
 	if stage == Stage.DAY1_RESCUE and not survivor_one_found:
 		_draw_survivor(survivor_one_pos, "?")
 	if stage == Stage.DAY2_RESCUE and not survivor_two_found:
 		_draw_survivor(survivor_two_pos, "!")
 	if stage == Stage.WORKSHOP_CHOICE:
-		_draw_choice_shrine(left_choice_pos, "ОРУЖИЕ", Color("#a85949"))
-		_draw_choice_shrine(right_choice_pos, "ЛЕС", Color("#567e58"))
+		_draw_choice_shrine(left_choice_pos, "ОРУЖЕЙНАЯ · +28% УРОН", Color("#a85949"))
+		_draw_choice_shrine(right_choice_pos, "ЛЕСОПИЛКА · +2 ГРУЗ", Color("#567e58"))
 	if stage == Stage.EXPEDITION_CHOICE:
-		_draw_choice_shrine(left_choice_pos, "+2 БОЙЦА", Color("#6688a0"))
-		_draw_choice_shrine(right_choice_pos, "+60% УРОН", Color("#b75e45"))
+		_draw_choice_shrine(left_choice_pos, "ДВА БОЙЦА", Color("#6688a0"))
+		_draw_choice_shrine(right_choice_pos, "ОГНЕННЫЕ СТРЕЛЫ", Color("#b75e45"))
 
 	if workshop_built:
 		_draw_workshop()
@@ -1142,14 +1361,62 @@ func _draw_expedition() -> void:
 	if core_active:
 		_draw_core(core_pos)
 	if core_carried:
-		_draw_core(hero_pos + Vector2(0, -38))
+		_draw_core(hero_pos + Vector2(0, -46))
 
 	_draw_hearth(HEARTH_POS, hearth_level)
+	_draw_world_progress()
 	_draw_companions()
 	_draw_hero(hero_pos)
+	_draw_guidance_marker()
 
-	if night:
-		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.02, 0.035, 0.05, 0.15))
+	if night_mix > 0.0:
+		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.015, 0.03, 0.035, 0.10 * night_mix))
+		_draw_night_edge_eyes(night_mix)
+
+
+func _draw_environment_decor() -> void:
+	for item: Dictionary in decor_points:
+		var pos: Vector2 = item["pos"]
+		var kind := String(item.get("kind", "grass"))
+		var scale := float(item.get("scale", 1.0))
+		var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 18.0
+		var alpha := 0.62 if in_light else 0.18
+		if kind == "grass":
+			draw_line(pos, pos + Vector2(-3 * scale, -7 * scale), Color(0.27, 0.43, 0.29, alpha), 1.4)
+			draw_line(pos, pos + Vector2(2 * scale, -8 * scale), Color(0.29, 0.46, 0.31, alpha), 1.4)
+			draw_line(pos, pos + Vector2(5 * scale, -5 * scale), Color(0.24, 0.39, 0.27, alpha), 1.2)
+		elif kind == "pebble":
+			draw_circle(pos, 2.7 * scale, Color(0.35, 0.39, 0.36, alpha))
+		else:
+			draw_line(pos + Vector2(-6, 2), pos + Vector2(7, -2), Color(0.34, 0.25, 0.17, alpha), 2.2)
+
+
+func _draw_revealed_landmarks() -> void:
+	# The rescued people live in actual places revealed by the firelight.
+	if survivor_one_pos.distance_to(HEARTH_POS) <= light_radius + 28.0:
+		_draw_ruined_shelter(survivor_one_pos + Vector2(-18, 20), Color("#5f543f"))
+	if survivor_two_pos.distance_to(HEARTH_POS) <= light_radius + 28.0:
+		_draw_ruined_shelter(survivor_two_pos + Vector2(22, 18), Color("#5a4c3d"))
+	if light_radius >= 245.0:
+		_draw_ruined_shelter(HEARTH_POS + Vector2(-112, -44), Color("#574c3c"))
+
+
+func _draw_ruined_shelter(pos: Vector2, color: Color) -> void:
+	draw_rect(Rect2(pos + Vector2(-17, -4), Vector2(34, 22)), Color(color.r, color.g, color.b, 0.75))
+	draw_line(pos + Vector2(-22, -4), pos + Vector2(-4, -22), Color("#76634a"), 4.0)
+	draw_line(pos + Vector2(-4, -22), pos + Vector2(20, -5), Color("#76634a"), 4.0)
+	draw_line(pos + Vector2(4, -18), pos + Vector2(22, -10), Color("#4c4438"), 3.0)
+
+
+func _draw_night_edge_eyes(alpha: float) -> void:
+	if twilight_timer > 0.0:
+		return
+	var positions := [Vector2(34, 210), Vector2(445, 300), Vector2(52, 690), Vector2(432, 650)]
+	for i in range(positions.size()):
+		var p: Vector2 = positions[i]
+		var pulse := 0.35 + 0.25 * sin(Time.get_ticks_msec() * 0.004 + float(i))
+		draw_circle(p + Vector2(-4, 0), 1.7, Color(0.94, 0.60, 0.24, alpha * pulse))
+		draw_circle(p + Vector2(4, 0), 1.7, Color(0.94, 0.60, 0.24, alpha * pulse))
 
 
 func _draw_ground_texture(color: Color, spacing: int) -> void:
@@ -1160,11 +1427,13 @@ func _draw_ground_texture(color: Color, spacing: int) -> void:
 
 
 func _draw_light_field(center: Vector2, radius: float) -> void:
-	for i in range(9, 0, -1):
-		var t := float(i) / 9.0
+	for i in range(12, 0, -1):
+		var t := float(i) / 12.0
 		var r := radius * t
-		var alpha := 0.018 + (1.0 - t) * 0.018
-		draw_circle(center, r, Color(0.96, 0.67, 0.30, alpha))
+		var alpha := 0.012 + (1.0 - t) * 0.032
+		draw_circle(center, r, Color(0.98, 0.68, 0.29, alpha))
+	var boundary_alpha := 0.10 + hearth_pulse * 0.16
+	draw_arc(center, radius, 0.0, TAU, 80, Color(0.96, 0.68, 0.30, boundary_alpha), 2.0 + hearth_pulse * 2.0)
 
 
 func _draw_resource(node: Dictionary) -> void:
@@ -1172,7 +1441,7 @@ func _draw_resource(node: Dictionary) -> void:
 	var alive := bool(node.get("alive", false))
 	var kind := String(node.get("kind", "tree"))
 	var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 35.0
-	var alpha := 1.0 if in_light else 0.32
+	var alpha := 1.0 if in_light else 0.12
 
 	if kind == "tree":
 		if alive:
@@ -1220,47 +1489,138 @@ func _draw_resource_pickup(pickup: Dictionary) -> void:
 		draw_colored_polygon(pts, Color("#8d9694"))
 
 
-func _draw_hearth(pos: Vector2, level: int) -> void:
-	draw_circle(pos + Vector2(0, 12), 48.0 + float(level) * 2.0, Color(0.03, 0.04, 0.03, 0.34))
-	for i in range(8):
-		var angle := TAU * float(i) / 8.0
-		var stone := pos + Vector2(cos(angle), sin(angle)) * (34.0 + float(level))
-		draw_circle(stone, 8.0, Color("#55524a"))
+func _draw_resource_flights() -> void:
+	for flight: Dictionary in resource_flights:
+		var t := clampf(float(flight.get("t", 0.0)), 0.0, 1.0)
+		var from: Vector2 = flight["from"]
+		var to: Vector2 = hero_pos + Vector2(0, -22) if String(flight.get("mode", "pickup")) == "pickup" else flight["to"]
+		var mid := (from + to) * 0.5 + Vector2(0, -30.0)
+		var inv := 1.0 - t
+		var p := from * inv * inv + mid * 2.0 * inv * t + to * t * t
+		var kind := String(flight.get("kind", "wood"))
+		if kind == "wood":
+			draw_line(p + Vector2(-8, 0), p + Vector2(8, 0), Color("#a87342"), 6.0, true)
+			draw_circle(p + Vector2(-8, 0), 2.8, Color("#d09a61"))
+			draw_circle(p + Vector2(8, 0), 2.8, Color("#d09a61"))
+		else:
+			draw_circle(p, 5.5, Color("#929b98"))
 
-	var flame_h := 27.0 + float(level) * 5.5
-	var flame_w := 18.0 + float(level) * 2.0
+
+func _draw_hearth(pos: Vector2, level: int) -> void:
+	var pulse := 1.0 + hearth_pulse * 0.10 + sin(Time.get_ticks_msec() * 0.007) * 0.025
+	var ring_radius := 34.0 + float(level) * 3.5
+	draw_circle(pos + Vector2(0, 15), 50.0 + float(level) * 3.0, Color(0.02, 0.025, 0.02, 0.34))
+	draw_circle(pos, (44.0 + float(level) * 4.0) * pulse, Color(0.95, 0.58, 0.18, 0.035 + hearth_pulse * 0.035))
+
+	# Heavy stone ring and burning logs make the hearth feel built, not icon-like.
+	for i in range(9):
+		var angle := TAU * float(i) / 9.0
+		var stone := pos + Vector2(cos(angle), sin(angle)) * ring_radius
+		draw_circle(stone, 7.5 + float(level) * 0.4, Color("#5b5950"))
+		draw_circle(stone + Vector2(-2, -2), 2.0, Color(0.45, 0.44, 0.39, 0.45))
+	for a in [-0.45, 0.45]:
+		var axis := Vector2(cos(a), sin(a))
+		draw_line(pos - axis * 20.0, pos + axis * 20.0, Color("#704326"), 8.0, true)
+
+	var flame_h := (29.0 + float(level) * 7.0) * pulse
+	var flame_w := 17.0 + float(level) * 2.4
 	var outer := PackedVector2Array([
 		pos + Vector2(0, -flame_h),
-		pos + Vector2(flame_w, 9),
-		pos + Vector2(0, 22),
-		pos + Vector2(-flame_w, 9)
+		pos + Vector2(flame_w, 8),
+		pos + Vector2(8, 22),
+		pos + Vector2(-8, 22),
+		pos + Vector2(-flame_w, 8)
 	])
-	draw_colored_polygon(outer, Color("#f0a53f"))
+	draw_colored_polygon(outer, Color("#ee8e32"))
+	var middle := PackedVector2Array([
+		pos + Vector2(2, -flame_h * 0.72),
+		pos + Vector2(flame_w * 0.62, 9),
+		pos + Vector2(0, 20),
+		pos + Vector2(-flame_w * 0.62, 8)
+	])
+	draw_colored_polygon(middle, Color("#ffc45e"))
 	var inner := PackedVector2Array([
-		pos + Vector2(0, -flame_h * 0.55),
-		pos + Vector2(9, 8),
+		pos + Vector2(0, -flame_h * 0.42),
+		pos + Vector2(7, 8),
 		pos + Vector2(0, 16),
-		pos + Vector2(-9, 8)
+		pos + Vector2(-7, 8)
 	])
-	draw_colored_polygon(inner, Color("#ffe6a0"))
-	draw_string(font, pos + Vector2(-45, 66), "ОЧАГ %d" % level, HORIZONTAL_ALIGNMENT_CENTER, 90, 12, Color("#e8dec8"))
+	draw_colored_polygon(inner, Color("#fff0b1"))
+
+	if level >= 3:
+		draw_line(pos + Vector2(-52, 30), pos + Vector2(-52, -28), Color("#6a5135"), 6.0)
+		draw_line(pos + Vector2(52, 30), pos + Vector2(52, -28), Color("#6a5135"), 6.0)
+		draw_line(pos + Vector2(-52, -25), pos + Vector2(52, -25), Color("#7a5b39"), 5.0)
+	if level >= 4:
+		draw_line(pos + Vector2(-68, 35), pos + Vector2(-68, -10), Color("#75583a"), 5.0)
+		draw_line(pos + Vector2(68, 35), pos + Vector2(68, -10), Color("#75583a"), 5.0)
+		draw_circle(pos + Vector2(-68, -15), 6.0, Color("#e6963c"))
+		draw_circle(pos + Vector2(68, -15), 6.0, Color("#e6963c"))
+	if level >= 5:
+		draw_arc(pos, ring_radius + 22.0, -2.8, -0.35, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
+		draw_arc(pos, ring_radius + 22.0, 0.35, 2.8, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
+
+	draw_string(font, pos + Vector2(-55, 70), "ОЧАГ %d" % level, HORIZONTAL_ALIGNMENT_CENTER, 110, 12, Color("#eadfc8"))
 
 
 func _draw_hero(pos: Vector2) -> void:
-	var bob := sin(hero_walk_phase) * 2.0
-	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(18, 7), Color(0, 0, 0, 0.28))
-	draw_circle(pos + Vector2(0, bob), 15.0, Color("#d6cfb8"))
-	draw_circle(pos + Vector2(0, -10 + bob), 8.0, Color("#c9a48a"))
-	draw_line(pos + Vector2(10, -1 + bob), pos + Vector2(23, -13 + bob), Color("#d8d2c0"), 3.0)
+	var bob := sin(hero_walk_phase) * 1.8
+	_draw_back_cargo(pos + Vector2(0, bob))
+	_draw_humanoid(pos, Color("#c4ad79"), hero_walk_phase, "hero", 1.0 if hero_facing.x >= 0.0 else -1.0)
 
-	var carried := carried_wood + carried_stone
-	if carried > 0:
-		for i in range(mini(carried, 6)):
-			var p := pos + Vector2(-14 + float(i % 3) * 14.0, -30.0 - float(i / 3) * 10.0)
-			if i < carried_wood:
-				draw_rect(Rect2(p + Vector2(-6, -3), Vector2(12, 6)), Color("#b7824e"))
-			else:
-				draw_circle(p, 5.0, Color("#8e9999"))
+	var work_kind := _nearby_resource_kind()
+	var hand := pos + Vector2((12.0 if hero_facing.x >= 0.0 else -12.0), -3.0 + bob)
+	var direction := 1.0 if hero_facing.x >= 0.0 else -1.0
+	if work_kind != "":
+		var swing_phase := 1.0 - clampf(gather_cd / maxf(0.01, gather_interval), 0.0, 1.0)
+		var swing := sin(swing_phase * PI) * 0.95
+		var angle := -1.15 + swing * direction
+		var tip := hand + Vector2(cos(angle) * direction, sin(angle)) * 29.0
+		draw_line(hand, tip, Color("#b98b5b"), 3.0, true)
+		if work_kind == "tree":
+			draw_line(tip + Vector2(-6, -4), tip + Vector2(6, 4), Color("#bcc1bb"), 5.0, true)
+		else:
+			draw_line(tip + Vector2(-7, 1), tip + Vector2(7, -1), Color("#aeb5b1"), 4.0, true)
+	else:
+		# Compact crossbow-like weapon: readable, but does not clutter movement.
+		draw_line(hand, hand + Vector2(20.0 * direction, -7.0), Color("#c9b58b"), 3.0, true)
+		draw_line(hand + Vector2(10.0 * direction, -8.0), hand + Vector2(10.0 * direction, 3.0), Color("#8c6d47"), 2.0, true)
+
+
+func _nearby_resource_kind() -> String:
+	for node: Dictionary in resource_nodes:
+		if not bool(node.get("alive", false)):
+			continue
+		var kind := String(node.get("kind", "tree"))
+		if stage in [Stage.DAY1_GATHER, Stage.DAY1_RESCUE] and kind != "tree":
+			continue
+		if hero_pos.distance_to(node["pos"]) <= HERO_INTERACT_RADIUS + 2.0:
+			return kind
+	return ""
+
+
+func _draw_back_cargo(pos: Vector2) -> void:
+	# The load must be readable from the character itself, not only from HUD.
+	var visible_logs := mini(carried_wood, 7)
+	for i in range(visible_logs):
+		var row := i / 2
+		var side := -1.0 if i % 2 == 0 else 1.0
+		var center := pos + Vector2(side * 5.0, -12.0 - float(row) * 6.5)
+		var tilt := 0.10 * side
+		var axis := Vector2(cos(tilt), sin(tilt))
+		draw_line(center - axis * 15.0, center + axis * 15.0, Color("#8f5d33"), 6.5, true)
+		draw_circle(center - axis * 15.0, 3.1, Color("#c28a54"))
+		draw_circle(center + axis * 15.0, 3.1, Color("#c28a54"))
+	if visible_logs > 0:
+		draw_line(pos + Vector2(-12, -6), pos + Vector2(11, -30), Color(0.72, 0.58, 0.36, 0.8), 2.0)
+
+	if carried_stone > 0:
+		var sack := pos + Vector2(-18, 5)
+		draw_circle(sack, 9.0, Color("#766f60"))
+		draw_line(sack + Vector2(-5, -5), sack + Vector2(5, -5), Color("#a6977e"), 2.0)
+		for i in range(mini(carried_stone, 4)):
+			var p := sack + Vector2(-4 + float(i % 2) * 8.0, -2 + float(i / 2) * 6.0)
+			draw_circle(p, 2.6, Color("#a4aaa7"))
 
 
 func _draw_companions() -> void:
@@ -1268,64 +1628,129 @@ func _draw_companions() -> void:
 		var role := String(agent.get("role", "guard"))
 		var pos: Vector2 = agent["pos"]
 		var phase := float(agent.get("phase", 0.0))
-		var body_color := Color("#758d68")
+		var body_color := Color("#6f8663")
 		if role == "worker":
-			body_color = Color("#a27a52")
+			body_color = Color("#a07149")
 		elif role == "guard":
-			body_color = Color("#6c8196")
+			body_color = Color("#667d91")
+		_draw_humanoid(pos, body_color, phase, role, 1.0)
 
-		_draw_person(pos, body_color, phase)
 
-		if role == "hunter":
-			draw_line(pos + Vector2(8, -3), pos + Vector2(18, -12), Color("#d5c39d"), 2.0)
-			draw_arc(pos + Vector2(17, -8), 7.0, -1.6, 1.4, 10, Color("#d5c39d"), 1.5)
-		elif role == "worker":
-			draw_line(pos + Vector2(7, 0), pos + Vector2(18, -8), Color("#c8b086"), 3.0)
-			draw_rect(Rect2(pos + Vector2(15, -12), Vector2(8, 7)), Color("#8f7657"))
-		else:
-			draw_line(pos + Vector2(8, -2), pos + Vector2(20, -11), Color("#c6ccd0"), 2.0)
+func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facing: float = 1.0) -> void:
+	var moving_stride: float = sin(phase) * 4.0
+	var bob: float = absf(sin(phase * 0.5)) * 1.4
+	var base: Vector2 = pos + Vector2(0, -bob)
+	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(14, 5), Color(0.01, 0.02, 0.015, 0.30))
+
+	# Legs and boots.
+	draw_line(base + Vector2(-5, 8), base + Vector2(-7 + moving_stride, 19), Color("#403c34"), 4.0, true)
+	draw_line(base + Vector2(5, 8), base + Vector2(7 - moving_stride, 19), Color("#403c34"), 4.0, true)
+	draw_line(base + Vector2(-10 + moving_stride, 19), base + Vector2(-4 + moving_stride, 19), Color("#272824"), 4.0, true)
+	draw_line(base + Vector2(4 - moving_stride, 19), base + Vector2(10 - moving_stride, 19), Color("#272824"), 4.0, true)
+
+	# Torso / coat.
+	var torso := PackedVector2Array([
+		base + Vector2(-10, -10), base + Vector2(10, -10),
+		base + Vector2(12, 9), base + Vector2(-12, 9)
+	])
+	draw_colored_polygon(torso, coat)
+	draw_rect(Rect2(base + Vector2(-11, 4), Vector2(22, 3)), Color(0.30, 0.24, 0.17, 0.85))
+
+	# Arms.
+	var arm_sway := sin(phase + 1.2) * 3.0
+	draw_line(base + Vector2(-9, -5), base + Vector2(-14 - arm_sway, 6), coat.lightened(0.08), 4.0, true)
+	draw_line(base + Vector2(9, -5), base + Vector2(14 + arm_sway, 5), coat.lightened(0.08), 4.0, true)
+
+	# Head, hair/hood and a tiny face mark: these make units read as people at phone scale.
+	draw_circle(base + Vector2(0, -17), 7.2, Color("#c69c7d"))
+	draw_arc(base + Vector2(0, -18), 7.0, PI, TAU, 16, Color("#5b4737"), 4.0)
+	draw_circle(base + Vector2(2.5 * facing, -17), 0.9, Color("#342f28"))
+
+	if role == "hunter":
+		var hand := base + Vector2(13, 0)
+		draw_arc(hand + Vector2(7, -2), 9.0, -1.55, 1.55, 12, Color("#d1b989"), 2.0)
+		draw_line(hand + Vector2(7, -11), hand + Vector2(7, 7), Color("#b69a6c"), 1.5)
+	elif role == "worker":
+		var work := 0.25 + sin(phase) * 0.45
+		var hand := base + Vector2(13, 0)
+		var tip := hand + Vector2(cos(-0.8 + work), sin(-0.8 + work)) * 20.0
+		draw_line(hand, tip, Color("#b2875b"), 3.0)
+		draw_rect(Rect2(tip + Vector2(-4, -4), Vector2(8, 6)), Color("#8d8c83"))
+	elif role == "guard":
+		draw_line(base + Vector2(11, -1), base + Vector2(24, -13), Color("#c5c9c4"), 2.5)
+		draw_line(base + Vector2(19, -14), base + Vector2(26, -9), Color("#c5c9c4"), 2.0)
 
 
 func _draw_person(pos: Vector2, color: Color, phase: float) -> void:
-	var bob := sin(phase) * 1.4
-	_draw_ellipse_custom(pos + Vector2(0, 14), Vector2(12, 5), Color(0, 0, 0, 0.22))
-	draw_circle(pos + Vector2(0, bob), 10.0, color)
-	draw_circle(pos + Vector2(0, -8 + bob), 5.0, Color("#b9947c"))
+	_draw_humanoid(pos, color, phase, "civilian", 1.0)
 
 
 func _draw_survivor(pos: Vector2, mark: String) -> void:
-	draw_circle(pos, 25.0, Color(0.75, 0.80, 0.69, 0.08))
-	_draw_person(pos, Color("#b9bbaa"), 0.0)
-	draw_string(font, pos + Vector2(-12, -28), mark, HORIZONTAL_ALIGNMENT_CENTER, 24, 18, Color("#f4ead4"))
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.007) * 0.06
+	draw_circle(pos, 26.0 * pulse, Color(0.77, 0.83, 0.70, 0.07))
+	_draw_humanoid(pos, Color("#8c8974"), Time.get_ticks_msec() * 0.002, "civilian", 1.0)
+	draw_string(font, pos + Vector2(-12, -40), mark, HORIZONTAL_ALIGNMENT_CENTER, 24, 16, Color("#f4ead4"))
 
 
 func _draw_enemy(enemy: Dictionary) -> void:
 	var pos: Vector2 = enemy["pos"]
 	var kind := String(enemy.get("kind", "basic"))
 	var radius := float(enemy.get("radius", 14.0))
-	var color := Color("#96534b")
+	var flash := float(enemy.get("hit_flash", 0.0)) > 0.0
+	var body := Color("#70484a")
 	if kind == "fast":
-		color = Color("#ad6a4b")
+		body = Color("#83513f")
 	elif kind == "elite":
-		color = Color("#814c68")
+		body = Color("#60425d")
 	elif kind == "boss":
-		color = Color("#594060")
+		body = Color("#413443")
 	elif kind == "guard":
-		color = Color("#725451")
+		body = Color("#5e4945")
+	if flash:
+		body = body.lightened(0.55)
 
-	_draw_ellipse_custom(pos + Vector2(0, radius * 0.9), Vector2(radius, radius * 0.35), Color(0, 0, 0, 0.32))
-	draw_circle(pos, radius, color)
-	draw_circle(pos + Vector2(-radius * 0.35, -radius * 0.18), maxf(2.0, radius * 0.13), Color("#efc36d"))
-	draw_circle(pos + Vector2(radius * 0.35, -radius * 0.18), maxf(2.0, radius * 0.13), Color("#efc36d"))
+	_draw_ellipse_custom(pos + Vector2(0, radius * 0.75), Vector2(radius * 1.15, radius * 0.38), Color(0.01, 0.015, 0.012, 0.38))
+
+	if kind == "fast":
+		# Low, animal-like silhouette.
+		_draw_ellipse_custom(pos + Vector2(0, 1), Vector2(radius * 1.35, radius * 0.70), body)
+		draw_circle(pos + Vector2(radius * 0.85, -4), radius * 0.46, body)
+		draw_line(pos + Vector2(-7, 6), pos + Vector2(-14, 15), body.darkened(0.15), 4.0)
+		draw_line(pos + Vector2(7, 6), pos + Vector2(15, 15), body.darkened(0.15), 4.0)
+	elif kind == "boss":
+		# The Forest Guardian needs a silhouette you can recognise before reading a label.
+		_draw_ellipse_custom(pos + Vector2(0, 3), Vector2(radius * 1.05, radius * 1.15), body)
+		draw_circle(pos + Vector2(0, -radius * 0.75), radius * 0.62, body.darkened(0.08))
+		draw_line(pos + Vector2(-18, -23), pos + Vector2(-34, -43), Color("#5e4b38"), 6.0)
+		draw_line(pos + Vector2(-34, -43), pos + Vector2(-42, -55), Color("#5e4b38"), 4.0)
+		draw_line(pos + Vector2(18, -23), pos + Vector2(34, -43), Color("#5e4b38"), 6.0)
+		draw_line(pos + Vector2(34, -43), pos + Vector2(44, -54), Color("#5e4b38"), 4.0)
+		draw_line(pos + Vector2(-17, 24), pos + Vector2(-25, 42), body.darkened(0.15), 8.0)
+		draw_line(pos + Vector2(17, 24), pos + Vector2(25, 42), body.darkened(0.15), 8.0)
+	else:
+		# Upright shadow-creatures instead of coloured circles.
+		_draw_ellipse_custom(pos + Vector2(0, 3), Vector2(radius * 0.78, radius * 1.05), body)
+		draw_circle(pos + Vector2(0, -radius * 0.72), radius * 0.55, body.darkened(0.05))
+		draw_line(pos + Vector2(-6, 10), pos + Vector2(-9, radius + 8), body.darkened(0.18), 5.0)
+		draw_line(pos + Vector2(6, 10), pos + Vector2(9, radius + 8), body.darkened(0.18), 5.0)
+		if kind == "elite":
+			draw_line(pos + Vector2(-8, -17), pos + Vector2(-17, -28), Color("#6c5542"), 4.0)
+			draw_line(pos + Vector2(8, -17), pos + Vector2(17, -28), Color("#6c5542"), 4.0)
+
+	var eye_sep := radius * 0.28
+	var eye_y := -radius * 0.58
+	draw_circle(pos + Vector2(-eye_sep, eye_y), maxf(1.6, radius * 0.09), Color("#efad51"))
+	draw_circle(pos + Vector2(eye_sep, eye_y), maxf(1.6, radius * 0.09), Color("#efad51"))
 
 	var hp := float(enemy.get("hp", 1.0))
 	var max_hp := float(enemy.get("max_hp", 1.0))
-	var bar_w := radius * 2.2
-	draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 12), Vector2(bar_w, 4)), Color(0, 0, 0, 0.45))
-	draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 12), Vector2(bar_w * clampf(hp / max_hp, 0.0, 1.0), 4)), Color("#e8d6a1"))
+	if kind in ["elite", "boss"] or hp < max_hp:
+		var bar_w := radius * 2.4
+		draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 18), Vector2(bar_w, 5)), Color(0, 0, 0, 0.48))
+		draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 18), Vector2(bar_w * clampf(hp / max_hp, 0.0, 1.0), 5)), Color("#d7b872"))
 
 	if kind == "boss":
-		draw_string(font, pos + Vector2(-60, -radius - 22), "ХРАНИТЕЛЬ ЛЕСА", HORIZONTAL_ALIGNMENT_CENTER, 120, 11, Color("#e9d8cf"))
+		draw_string(font, pos + Vector2(-80, -radius - 28), "ХРАНИТЕЛЬ ЛЕСА", HORIZONTAL_ALIGNMENT_CENTER, 160, 11, Color("#ead7c7"))
 
 
 func _draw_shot(shot: Dictionary) -> void:
@@ -1335,25 +1760,39 @@ func _draw_shot(shot: Dictionary) -> void:
 
 
 func _draw_workshop() -> void:
-	var pos := HEARTH_POS + Vector2(-105, -42)
-	draw_rect(Rect2(pos + Vector2(-25, -18), Vector2(50, 36)), Color("#5e4c38"))
-	draw_line(pos + Vector2(-30, -18), pos + Vector2(0, -38), Color("#8a6d49"), 5.0)
-	draw_line(pos + Vector2(0, -38), pos + Vector2(30, -18), Color("#8a6d49"), 5.0)
-	draw_string(font, pos + Vector2(-38, 34), "мастерская", HORIZONTAL_ALIGNMENT_CENTER, 76, 10, Color("#d7c9ad"))
+	var pos := HEARTH_POS + Vector2(-112, -48)
+	_draw_ellipse_custom(pos + Vector2(0, 23), Vector2(38, 10), Color(0.01, 0.02, 0.015, 0.26))
+	draw_rect(Rect2(pos + Vector2(-31, -14), Vector2(62, 42)), Color("#5c4935"))
+	var roof := PackedVector2Array([
+		pos + Vector2(-38, -14), pos + Vector2(0, -43), pos + Vector2(38, -14)
+	])
+	draw_colored_polygon(roof, Color("#7b5f3c"))
+	draw_rect(Rect2(pos + Vector2(-20, 4), Vector2(17, 13)), Color("#302d27"))
+	draw_line(pos + Vector2(12, 5), pos + Vector2(28, -7), Color("#c0a574"), 3.0)
+	draw_rect(Rect2(pos + Vector2(25, -11), Vector2(8, 7)), Color("#8f8c81"))
+	draw_string(font, pos + Vector2(-52, 45), "МАСТЕРСКАЯ", HORIZONTAL_ALIGNMENT_CENTER, 104, 10, Color("#ded1b7"))
 
 
 func _draw_tower() -> void:
-	var pos := HEARTH_POS + Vector2(92, -35)
-	draw_rect(Rect2(pos + Vector2(-10, -40), Vector2(20, 55)), Color("#6a543b"))
-	draw_rect(Rect2(pos + Vector2(-20, -50), Vector2(40, 14)), Color("#7b6041"))
-	draw_line(pos + Vector2(0, -45), pos + Vector2(20, -56), Color("#d4cbaa"), 3.0)
+	var pos := HEARTH_POS + Vector2(104, -39)
+	_draw_ellipse_custom(pos + Vector2(0, 22), Vector2(30, 9), Color(0.01, 0.02, 0.015, 0.25))
+	draw_line(pos + Vector2(-13, 25), pos + Vector2(-8, -38), Color("#604a31"), 7.0)
+	draw_line(pos + Vector2(13, 25), pos + Vector2(8, -38), Color("#604a31"), 7.0)
+	draw_rect(Rect2(pos + Vector2(-24, -48), Vector2(48, 17)), Color("#765939"))
+	draw_line(pos + Vector2(-18, -33), pos + Vector2(18, -33), Color("#8f7048"), 4.0)
+	draw_line(pos + Vector2(0, -44), pos + Vector2(25, -56), Color("#d5c49d"), 3.0)
+	draw_string(font, pos + Vector2(-48, 42), "ДОЗОР", HORIZONTAL_ALIGNMENT_CENTER, 96, 10, Color("#ded1b7"))
 
 
 func _draw_choice_shrine(pos: Vector2, label: String, color: Color) -> void:
-	draw_circle(pos, 42.0, Color(color.r, color.g, color.b, 0.10))
-	draw_circle(pos, 28.0, Color(color.r, color.g, color.b, 0.22))
-	draw_arc(pos, 31.0, 0.0, TAU, 36, color, 2.0)
-	draw_string(font, pos + Vector2(-70, 60), label, HORIZONTAL_ALIGNMENT_CENTER, 140, 12, Color("#f0e4cf"))
+	# A choice is represented as a build site in the world, not as a menu button.
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006 + pos.x) * 0.05
+	draw_rect(Rect2(pos + Vector2(-34, -17), Vector2(68, 42)), Color(color.r, color.g, color.b, 0.13))
+	draw_line(pos + Vector2(-33, 24), pos + Vector2(-33, -25), Color("#7b684a"), 4.0)
+	draw_line(pos + Vector2(33, 24), pos + Vector2(33, -25), Color("#7b684a"), 4.0)
+	draw_line(pos + Vector2(-35, -22), pos + Vector2(35, -22), Color("#9d8052"), 4.0)
+	draw_arc(pos, 42.0 * pulse, 0.0, TAU, 36, Color(color.r, color.g, color.b, 0.42), 2.0)
+	draw_string(font, pos + Vector2(-86, 54), label, HORIZONTAL_ALIGNMENT_CENTER, 172, 11, Color("#f0e4cf"))
 
 
 func _draw_core(pos: Vector2) -> void:
@@ -1379,6 +1818,73 @@ func _draw_small_building(pos: Vector2, _kind: String) -> void:
 	draw_rect(Rect2(pos + Vector2(-5, 1), Vector2(10, 14)), Color("#2b2923"))
 
 
+func _draw_world_progress() -> void:
+	if stage == Stage.DAY1_GATHER:
+		var need := 5
+		draw_string(font, HEARTH_POS + Vector2(-72, -78), "БРЁВНА %d/%d" % [mini(camp_wood, need), need], HORIZONTAL_ALIGNMENT_CENTER, 144, 12, Color("#f1d79f"))
+	elif stage == Stage.DAY2_BUILD:
+		var pos := HEARTH_POS + Vector2(-112, -48)
+		draw_string(font, pos + Vector2(-78, -55), "МАСТЕРСКАЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
+		draw_string(font, pos + Vector2(-78, -40), "дерево %d/8  ·  камень %d/5" % [mini(camp_wood, 8), mini(camp_stone, 5)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
+	elif stage == Stage.DAY3_TOWER:
+		var pos := HEARTH_POS + Vector2(104, -39)
+		draw_string(font, pos + Vector2(-78, -62), "ДОЗОРНАЯ БАШНЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
+		draw_string(font, pos + Vector2(-78, -47), "дерево %d/6  ·  камень %d/6" % [mini(camp_wood, 6), mini(camp_stone, 6)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
+
+
+func _guidance_info() -> Dictionary:
+	if stage == Stage.DAY1_GATHER:
+		if carried_wood + carried_stone > 0:
+			return {"pos": HEARTH_POS, "text": "ОТНЕСИ К ОЧАГУ"}
+		if resource_pickups.size() > 0:
+			var best := resource_pickups[0]
+			var best_d := hero_pos.distance_to(best["pos"])
+			for pickup: Dictionary in resource_pickups:
+				var d := hero_pos.distance_to(pickup["pos"])
+				if d < best_d:
+					best = pickup
+					best_d = d
+			return {"pos": best["pos"], "text": "ПОДБЕРИ"}
+		var found := false
+		var best_pos := HEARTH_POS
+		var best_d := INF
+		for node: Dictionary in resource_nodes:
+			if not bool(node.get("alive", false)) or String(node.get("kind", "")) != "tree":
+				continue
+			var d := hero_pos.distance_to(node["pos"])
+			if d < best_d:
+				best_pos = node["pos"]
+				best_d = d
+				found = true
+		if found:
+			return {"pos": best_pos, "text": "СРУБИ ДЕРЕВО"}
+	elif stage == Stage.DAY1_RESCUE and not survivor_one_found:
+		return {"pos": survivor_one_pos, "text": "ВЫЖИВШИЙ"}
+	elif stage == Stage.DAY2_RESCUE and not survivor_two_found:
+		return {"pos": survivor_two_pos, "text": "ОСВОБОДИ"}
+	elif stage == Stage.CORE_RETURN:
+		if core_carried:
+			return {"pos": HEARTH_POS, "text": "НЕСИ ЯДРО"}
+		if core_active:
+			return {"pos": core_pos, "text": "ЗАБЕРИ ЯДРО"}
+	return {}
+
+
+func _draw_guidance_marker() -> void:
+	var info := _guidance_info()
+	if info.is_empty():
+		return
+	var pos: Vector2 = info["pos"]
+	var label := String(info["text"])
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.008) * 0.09
+	var marker_y := pos.y - 46.0 - 4.0 * pulse
+	var tri := PackedVector2Array([
+		Vector2(pos.x, marker_y + 10), Vector2(pos.x - 7, marker_y), Vector2(pos.x + 7, marker_y)
+	])
+	draw_colored_polygon(tri, Color("#f1c979"))
+	draw_string(font, Vector2(pos.x - 70, marker_y - 8), label, HORIZONTAL_ALIGNMENT_CENTER, 140, 10, Color("#f0dfbd"))
+
+
 func _draw_particles() -> void:
 	for p: Dictionary in particles:
 		var pos: Vector2 = p["pos"]
@@ -1396,31 +1902,47 @@ func _draw_floaters() -> void:
 
 
 func _draw_hud() -> void:
-	draw_rect(Rect2(Vector2(0, 0), Vector2(480, 108)), Color(0.035, 0.05, 0.04, 0.93))
+	draw_rect(Rect2(Vector2(0, 0), Vector2(480, 82)), Color(0.025, 0.04, 0.032, 0.90))
 
 	if mode == Mode.HUB:
-		draw_string(font, Vector2(16, 30), "УГЛИ %d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 120, 15, Color("#f0d298"))
-		draw_string(font, Vector2(145, 30), "РЮКЗАК +%d" % int(meta.get("carry_level", 0)), HORIZONTAL_ALIGNMENT_LEFT, 115, 14, Color("#d7cab0"))
-		draw_string(font, Vector2(275, 30), "УРОН +%d%%" % (int(meta.get("damage_level", 0)) * 10), HORIZONTAL_ALIGNMENT_LEFT, 120, 14, Color("#d7cab0"))
-		draw_string(font, Vector2(414, 30), "v0.4", HORIZONTAL_ALIGNMENT_LEFT, 50, 12, Color("#87968a"))
-		draw_string(font, Vector2(16, 70), "Хаб живёт между вылазками. Всё здесь сохраняется.", HORIZONTAL_ALIGNMENT_LEFT, 448, 13, Color("#a9b5a8"))
+		draw_string(font, Vector2(14, 28), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 235, 17, Color("#f0e4cd"))
+		draw_string(font, Vector2(310, 28), "УГЛИ  %d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_RIGHT, 150, 14, Color("#e6c57e"))
+		draw_string(font, Vector2(14, 55), "Подойди к зданию — действие произойдёт в мире", HORIZONTAL_ALIGNMENT_LEFT, 410, 11, Color("#98a89c"))
+		draw_string(font, Vector2(430, 55), "v0.5", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
 		return
 
 	var stage_title := _stage_title()
-	var objective := _objective_text()
-	draw_string(font, Vector2(14, 25), stage_title, HORIZONTAL_ALIGNMENT_LEFT, 278, 15, Color("#f1e7d2"))
-	draw_string(font, Vector2(304, 25), "ЛЮДИ %d" % survivors, HORIZONTAL_ALIGNMENT_LEFT, 86, 13, Color("#d8cfba"))
-	draw_string(font, Vector2(396, 25), "УГЛИ %d" % run_embers, HORIZONTAL_ALIGNMENT_LEFT, 70, 12, Color("#efc071"))
+	var short_goal := _short_objective_text()
+	draw_string(font, Vector2(14, 27), stage_title, HORIZONTAL_ALIGNMENT_LEFT, 292, 15, Color("#f1e7d2"))
+	draw_string(font, Vector2(328, 27), "ЛЮДИ %d" % survivors, HORIZONTAL_ALIGNMENT_LEFT, 72, 12, Color("#d8cfba"))
+	draw_string(font, Vector2(408, 27), "УГЛИ %d" % run_embers, HORIZONTAL_ALIGNMENT_LEFT, 58, 11, Color("#efc071"))
 
-	draw_string(font, Vector2(14, 50), "ДЕРЕВО %d   КАМЕНЬ %d   ГРУЗ %d/%d" % [camp_wood, camp_stone, carried_wood + carried_stone, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 450, 12, Color("#c7baa1"))
-	draw_string(font, Vector2(14, 78), objective, HORIZONTAL_ALIGNMENT_LEFT, 448, 12, Color("#bac7b9"))
+	var cargo := carried_wood + carried_stone
+	draw_string(font, Vector2(14, 56), short_goal, HORIZONTAL_ALIGNMENT_LEFT, 320, 11, Color("#aebcaf"))
+	draw_string(font, Vector2(351, 56), "ГРУЗ %d/%d" % [cargo, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 112, 11, Color("#d9c39a"))
 
 	if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]:
-		draw_rect(Rect2(Vector2(14, 90), Vector2(452, 6)), Color("#2d312c"))
-		draw_rect(Rect2(Vector2(14, 90), Vector2(452.0 * clampf(hearth_hp / hearth_max_hp, 0.0, 1.0), 6)), Color("#d49154"))
+		draw_rect(Rect2(Vector2(14, 70), Vector2(450, 5)), Color("#2b302b"))
+		draw_rect(Rect2(Vector2(14, 70), Vector2(450.0 * clampf(hearth_hp / hearth_max_hp, 0.0, 1.0), 5)), Color("#d18c51"))
+
+
+func _short_objective_text() -> String:
+	match stage:
+		Stage.DAY1_GATHER: return "Сруби дерево → подбери брёвна → вернись к огню"
+		Stage.DAY1_RESCUE: return "Свет открыл выжившего"
+		Stage.NIGHT1: return "Держись у света"
+		Stage.DAY2_BUILD: return "Восстанови мастерскую"
+		Stage.WORKSHOP_CHOICE: return "Выбери одну постройку"
+		Stage.DAY2_RESCUE: return "Освободи рабочего"
+		Stage.NIGHT2: return "Береги Очаг от быстрых"
+		Stage.DAY3_TOWER: return "Построй дозорную башню"
+		Stage.EXPEDITION_CHOICE: return "Выбери силу перед последней ночью"
+		Stage.NIGHT3: return "Хранитель уже близко"
+		Stage.CORE_RETURN: return "Верни ядро в Очаг"
+	return ""
 
 
 func _stage_title() -> String:
@@ -1492,21 +2014,27 @@ func _draw_flash() -> void:
 
 
 func _draw_result_overlay() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.01, 0.02, 0.015, 0.80))
-	var panel := Rect2(Vector2(34, 245), Vector2(412, 285))
-	draw_rect(panel, Color("#1b261f"))
-	draw_rect(Rect2(panel.position + Vector2(0, 0), Vector2(panel.size.x, 5)), Color("#c9874e") if result_win else Color("#884f49"))
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.84))
+	var panel := Rect2(Vector2(30, 224), Vector2(420, 330))
+	draw_rect(panel, Color("#16231c"))
+	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#d29550") if result_win else Color("#824842"))
 
-	draw_string(font, Vector2(55, 305), result_title, HORIZONTAL_ALIGNMENT_CENTER, 370, 22, Color("#f3e5ce"))
-	draw_string(font, Vector2(64, 350), result_subtitle, HORIZONTAL_ALIGNMENT_CENTER, 352, 14, Color("#bcc8bb"))
-	draw_string(font, Vector2(64, 407), "Получено углей: +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 352, 16, Color("#efc06f"))
+	draw_string(font, Vector2(50, 286), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 22, Color("#f4e6ce"))
+	if result_win:
+		draw_string(font, Vector2(62, 329), "Ядро усилило Последний Очаг.", HORIZONTAL_ALIGNMENT_CENTER, 356, 13, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 349), "За тьмой уже видны Мёртвые поля.", HORIZONTAL_ALIGNMENT_CENTER, 356, 13, Color("#b8c7bb"))
+	else:
+		draw_string(font, Vector2(62, 329), "Огонь погас, но поселение помнит этот поход.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 349), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
+	draw_string(font, Vector2(62, 392), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 15, Color("#ecc178"))
 
 	if result_win:
-		draw_string(font, Vector2(64, 447), "Следующий регион открыт сюжетно. В прототипе пока можно повторить лес.", HORIZONTAL_ALIGNMENT_CENTER, 352, 12, Color("#91a293"))
+		draw_string(font, Vector2(62, 434), "Лес отступил. Поселение стало сильнее.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#9eb09f"))
 	else:
-		draw_string(font, Vector2(64, 447), "Следующая попытка получит другую расстановку ресурсов и спасённых.", HORIZONTAL_ALIGNMENT_CENTER, 352, 12, Color("#91a293"))
+		draw_string(font, Vector2(62, 434), "Новая попытка получит другую расстановку леса и угроз.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
 
-	draw_string(font, Vector2(64, 500), "КОСНИСЬ ЭКРАНА · ВЕРНУТЬСЯ В ХАБ", HORIZONTAL_ALIGNMENT_CENTER, 352, 13, Color("#f0d7a1"))
+	draw_rect(Rect2(Vector2(93, 480), Vector2(294, 44)), Color("#2a382e"))
+	draw_string(font, Vector2(105, 507), "КОСНИСЬ · ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 12, Color("#f0d7a1"))
 
 
 func _draw_ellipse_custom(center: Vector2, radii: Vector2, color: Color) -> void:
