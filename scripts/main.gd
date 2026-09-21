@@ -5,12 +5,15 @@ const HEARTH_POS := Vector2(240.0, 410.0)
 const HUB_MAP_POS := Vector2(240.0, 160.0)
 const HUB_CARRY_POS := Vector2(115.0, 430.0)
 const HUB_DAMAGE_POS := Vector2(365.0, 430.0)
+const HUB_HEARTH_UPGRADE_POS := Vector2(240.0, 590.0)
 
 const HERO_SPEED := 178.0
 const HERO_INTERACT_RADIUS := 46.0
 const HERO_PICKUP_RADIUS := 34.0
 const JOYSTICK_RADIUS := 64.0
 const JOYSTICK_DEADZONE := 0.10
+const TWILIGHT_DURATION := 3.4
+const UNLOAD_INTERVAL := 0.16
 const SAVE_PATH := "user://hearth_meta.json"
 
 enum Mode {
@@ -45,6 +48,7 @@ var meta: Dictionary = {
 	"embers": 0,
 	"carry_level": 0,
 	"damage_level": 0,
+	"hearth_bonus": 0,
 	"attempts": 0,
 	"forest_cleared": false,
 	"hearth_rank": 1
@@ -53,6 +57,7 @@ var meta: Dictionary = {
 var hero_pos := Vector2(240.0, 650.0)
 var hero_target := Vector2(240.0, 650.0)
 var hero_walk_phase := 0.0
+var hero_facing := Vector2(1.0, 0.0)
 var hero_damage := 22.0
 var hero_fire_rate := 0.52
 var hero_shot_cd := 0.0
@@ -81,13 +86,20 @@ var run_seed := 0
 
 var resource_nodes: Array[Dictionary] = []
 var resource_pickups: Array[Dictionary] = []
+var resource_flights: Array[Dictionary] = []
 var pickup_cd := 0.0
+var unload_cd := 0.0
+var unload_active := false
 var enemies: Array[Dictionary] = []
 var shots: Array[Dictionary] = []
 var floaters: Array[Dictionary] = []
 var particles: Array[Dictionary] = []
 var night_queue: Array[String] = []
 var night_spawn_cd := 0.0
+var twilight_timer := 0.0
+var camera_shake := 0.0
+var hearth_pulse := 0.0
+var decor_points: Array[Dictionary] = []
 
 var survivor_one_pos := Vector2.ZERO
 var survivor_two_pos := Vector2.ZERO
@@ -135,7 +147,11 @@ func _process(delta: float) -> void:
 	hero_shot_cd = maxf(0.0, hero_shot_cd - delta)
 	gather_cd = maxf(0.0, gather_cd - delta)
 	pickup_cd = maxf(0.0, pickup_cd - delta)
+	unload_cd = maxf(0.0, unload_cd - delta)
 	tower_cd = maxf(0.0, tower_cd - delta)
+	camera_shake = maxf(0.0, camera_shake - delta * 8.0)
+	hearth_pulse = maxf(0.0, hearth_pulse - delta * 2.5)
+	_update_resource_flights(delta)
 
 	if mode == Mode.HUB:
 		_update_movement(delta)
@@ -177,6 +193,8 @@ func _enter_hub(message: String = "") -> void:
 	shots.clear()
 	resource_nodes.clear()
 	resource_pickups.clear()
+	resource_flights.clear()
+	decor_points.clear()
 	core_active = false
 	core_carried = false
 	hub_zone_lock = ""
@@ -196,6 +214,7 @@ func _start_expedition() -> void:
 	hero_pos = Vector2(rng.randf_range(175.0, 305.0), rng.randf_range(640.0, 700.0))
 	hero_target = hero_pos
 	hero_walk_phase = 0.0
+	hero_facing = Vector2(1.0, 0.0)
 	hero_damage = 22.0 * (1.0 + 0.10 * float(int(meta.get("damage_level", 0))))
 	hero_fire_rate = 0.52
 	hero_shot_cd = 0.0
@@ -210,9 +229,10 @@ func _start_expedition() -> void:
 	survivors = 1
 	survivor_agents.clear()
 	hearth_level = 1
-	hearth_max_hp = 150.0
+	var permanent_hearth := int(meta.get("hearth_bonus", 0))
+	hearth_max_hp = 150.0 + float(permanent_hearth) * 18.0
 	hearth_hp = hearth_max_hp
-	light_radius = 165.0
+	light_radius = 165.0 + float(permanent_hearth) * 8.0
 	workshop_built = false
 	workshop_choice = ""
 	tower_built = false
@@ -226,8 +246,14 @@ func _start_expedition() -> void:
 	floaters.clear()
 	particles.clear()
 	resource_pickups.clear()
+	resource_flights.clear()
 	pickup_cd = 0.0
+	unload_cd = 0.0
+	unload_active = false
 	night_queue.clear()
+	twilight_timer = 0.0
+	camera_shake = 0.0
+	hearth_pulse = 0.0
 	core_active = false
 	core_carried = false
 	survivor_one_found = false
@@ -280,6 +306,23 @@ func _generate_layout() -> void:
 			"drop_spawned": false
 		})
 
+	decor_points.clear()
+	for i in range(46):
+		var dpos := Vector2(rng.randf_range(28.0, 452.0), rng.randf_range(128.0, 770.0))
+		if dpos.distance_to(HEARTH_POS) < 82.0:
+			continue
+		var roll := rng.randf()
+		var kind := "grass"
+		if roll > 0.72:
+			kind = "pebble"
+		if roll > 0.90:
+			kind = "branch"
+		decor_points.append({
+			"pos": dpos,
+			"kind": kind,
+			"scale": rng.randf_range(0.75, 1.25)
+		})
+
 	var rescue_slots: Array[Vector2] = [
 		Vector2(95, 180), Vector2(380, 185), Vector2(80, 520), Vector2(400, 525)
 	]
@@ -310,6 +353,7 @@ func _update_movement(delta: float) -> void:
 			movement = to_target.normalized() * HERO_SPEED
 
 	if movement.length() > 0.0:
+		hero_facing = movement.normalized()
 		hero_pos += movement * delta
 		hero_pos.x = clampf(hero_pos.x, 22.0, VIEW_SIZE.x - 22.0)
 		hero_pos.y = clampf(hero_pos.y, 118.0, VIEW_SIZE.y - 24.0)
@@ -317,11 +361,12 @@ func _update_movement(delta: float) -> void:
 
 
 func _update_hub_interactions() -> void:
-	var near_map := hero_pos.distance_to(HUB_MAP_POS) < 58.0
-	var near_carry := hero_pos.distance_to(HUB_CARRY_POS) < 52.0
-	var near_damage := hero_pos.distance_to(HUB_DAMAGE_POS) < 52.0
+	var near_map := hero_pos.distance_to(HUB_MAP_POS) < 54.0
+	var near_carry := hero_pos.distance_to(HUB_CARRY_POS) < 48.0
+	var near_damage := hero_pos.distance_to(HUB_DAMAGE_POS) < 48.0
+	var near_hearth := hero_pos.distance_to(HUB_HEARTH_UPGRADE_POS) < 46.0
 
-	if not near_map and not near_carry and not near_damage:
+	if not near_map and not near_carry and not near_damage and not near_hearth:
 		hub_zone_lock = ""
 
 	if near_map and hub_zone_lock != "map":
@@ -337,9 +382,9 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["carry_level"] = level + 1
 			_save_meta()
-			_banner("Рюкзак улучшен · вместимость +1", 2.0)
+			_banner("Склад улучшен · перенос +1", 2.0)
 		else:
-			_banner("Нужно %d углей" % cost, 1.6)
+			_banner("Для склада нужно %d углей" % cost, 1.7)
 
 	if near_damage and hub_zone_lock != "damage":
 		hub_zone_lock = "damage"
@@ -349,13 +394,29 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["damage_level"] = level + 1
 			_save_meta()
-			_banner("Оружие усилено · урон +10%", 2.0)
+			_banner("Кузница усилена · урон +10%", 2.0)
 		else:
-			_banner("Нужно %d углей" % cost, 1.6)
+			_banner("Для кузницы нужно %d углей" % cost, 1.7)
+
+	if near_hearth and hub_zone_lock != "hearth":
+		hub_zone_lock = "hearth"
+		var level := int(meta.get("hearth_bonus", 0))
+		var cost := 5 + level * 4
+		if level >= 3:
+			_banner("Очаг уже усилен до предела этой главы", 1.9)
+		elif int(meta.get("embers", 0)) >= cost:
+			meta["embers"] = int(meta.get("embers", 0)) - cost
+			meta["hearth_bonus"] = level + 1
+			_save_meta()
+			hearth_pulse = 1.0
+			camera_shake = 2.0
+			_banner("Сердце Очагa усилено · больше света и прочности", 2.3)
+		else:
+			_banner("Для Очагa нужно %d углей" % cost, 1.7)
 
 
 func _update_expedition(delta: float) -> void:
-	_deposit_resources_if_close()
+	_deposit_resources_if_close(delta)
 	_update_resource_gathering()
 	_update_resource_pickups(delta)
 	_update_survivor_agents(delta)
@@ -472,14 +533,31 @@ func _update_resource_pickups(delta: float) -> void:
 	var pickup_pos: Vector2 = pickup["pos"]
 	if kind == "wood":
 		carried_wood += 1
-		_float_text(hero_pos + Vector2(0, -34), "+1 БРЕВНО", Color(0.95, 0.76, 0.42))
 	else:
 		carried_stone += 1
-		_float_text(hero_pos + Vector2(0, -34), "+1 КАМЕНЬ", Color(0.75, 0.80, 0.84))
 
-	_burst(pickup_pos, 5)
+	resource_flights.append({
+		"kind": kind,
+		"mode": "pickup",
+		"from": pickup_pos,
+		"to": hero_pos,
+		"t": 0.0,
+		"duration": 0.24
+	})
+	_burst(pickup_pos, 4)
 	resource_pickups.remove_at(nearest_index)
-	pickup_cd = 0.12
+	pickup_cd = 0.11
+
+
+func _update_resource_flights(delta: float) -> void:
+	for i in range(resource_flights.size() - 1, -1, -1):
+		var flight: Dictionary = resource_flights[i]
+		var duration := maxf(0.01, float(flight.get("duration", 0.24)))
+		var t := float(flight.get("t", 0.0)) + delta / duration
+		flight["t"] = t
+		resource_flights[i] = flight
+		if t >= 1.0:
+			resource_flights.remove_at(i)
 
 
 func _spawn_resource_drops(source_kind: String, source_pos: Vector2) -> void:
@@ -495,22 +573,41 @@ func _spawn_resource_drops(source_kind: String, source_pos: Vector2) -> void:
 		})
 
 
-func _deposit_resources_if_close() -> void:
-	if hero_pos.distance_to(HEARTH_POS) > 66.0:
+func _deposit_resources_if_close(delta: float) -> void:
+	var near_hearth := hero_pos.distance_to(HEARTH_POS) <= 70.0
+	if not near_hearth:
+		unload_active = false
+		unload_cd = 0.0
 		return
+
 	if carried_wood <= 0 and carried_stone <= 0:
+		unload_active = false
 		return
 
-	if carried_wood > 0:
-		camp_wood += carried_wood
-		_float_text(HEARTH_POS + Vector2(-25, -55), "+%d дерева" % carried_wood, Color(0.95, 0.76, 0.42))
-	if carried_stone > 0:
-		camp_stone += carried_stone
-		_float_text(HEARTH_POS + Vector2(25, -42), "+%d камня" % carried_stone, Color(0.76, 0.82, 0.86))
+	unload_active = true
+	unload_cd -= delta
+	if unload_cd > 0.0:
+		return
 
-	carried_wood = 0
-	carried_stone = 0
-	_burst(HEARTH_POS, 10)
+	var kind := "wood" if carried_wood > 0 else "stone"
+	if kind == "wood":
+		carried_wood -= 1
+		camp_wood += 1
+	else:
+		carried_stone -= 1
+		camp_stone += 1
+
+	resource_flights.append({
+		"kind": kind,
+		"mode": "unload",
+		"from": hero_pos + Vector2(0, -16),
+		"to": HEARTH_POS + Vector2(rng.randf_range(-18.0, 18.0), rng.randf_range(-10.0, 12.0)),
+		"t": 0.0,
+		"duration": 0.22
+	})
+	hearth_pulse = minf(1.0, hearth_pulse + 0.18)
+	_burst(HEARTH_POS + Vector2(rng.randf_range(-12.0, 12.0), 4), 3)
+	unload_cd = UNLOAD_INTERVAL
 	_check_day_progress()
 
 
@@ -522,8 +619,10 @@ func _check_day_progress() -> void:
 		hearth_hp = hearth_max_hp
 		light_radius = 225.0
 		stage = Stage.DAY1_RESCUE
-		flash_timer = 0.55
-		_banner("Очаг II · тьма отступила", 2.0)
+		flash_timer = 0.75
+		hearth_pulse = 1.0
+		camera_shake = 4.0
+		_banner("ОЧАГ II · свет открыл новую часть леса", 2.4)
 
 	elif stage == Stage.DAY2_BUILD and camp_wood >= 8 and camp_stone >= 5:
 		camp_wood -= 8
@@ -531,8 +630,9 @@ func _check_day_progress() -> void:
 		workshop_built = true
 		stage = Stage.WORKSHOP_CHOICE
 		light_radius = 255.0
-		flash_timer = 0.45
-		_banner("Мастерская восстановлена", 1.8)
+		flash_timer = 0.55
+		camera_shake = 2.0
+		_banner("Мастерская восстановлена · выбери специализацию", 2.1)
 
 	elif stage == Stage.DAY3_TOWER and camp_wood >= 6 and camp_stone >= 6:
 		camp_wood -= 6
@@ -540,8 +640,9 @@ func _check_day_progress() -> void:
 		tower_built = true
 		stage = Stage.EXPEDITION_CHOICE
 		light_radius = 300.0
-		flash_timer = 0.45
-		_banner("Сторожевая башня готова", 1.8)
+		flash_timer = 0.55
+		camera_shake = 2.2
+		_banner("Башня готова · лагерь защищён лучше", 2.1)
 
 
 func _update_workshop_choice() -> void:
@@ -582,32 +683,41 @@ func _update_expedition_choice() -> void:
 func _start_night(number: int) -> void:
 	current_night = number
 	night_queue.clear()
-	night_spawn_cd = 0.45
+	night_spawn_cd = 0.55
+	twilight_timer = TWILIGHT_DURATION
 	hearth_hp = hearth_max_hp
 
 	if number == 1:
 		stage = Stage.NIGHT1
 		for i in range(8):
 			night_queue.append("basic")
-		_banner("НОЧЬ 1 · держись у огня", 2.0)
+		night_queue.append("guard")
+		_banner("СУМЕРКИ · охотник занимает позицию", 2.5)
 	elif number == 2:
 		stage = Stage.NIGHT2
-		for i in range(8):
+		for i in range(9):
 			night_queue.append("fast" if i % 3 == 2 else "basic")
 		night_queue.append("elite")
-		_banner("НОЧЬ 2 · быстрые идут первыми", 2.0)
+		_banner("СУМЕРКИ · вернись к свету", 2.5)
 	else:
 		stage = Stage.NIGHT3
-		for i in range(11):
+		for i in range(12):
 			if i % 4 == 2:
 				night_queue.append("fast")
 			else:
 				night_queue.append("basic")
 		night_queue.append("boss")
-		_banner("НОЧЬ 3 · что-то большое приближается", 2.4)
+		_banner("СУМЕРКИ · лес вокруг Очагa замолчал", 2.8)
 
 
 func _update_night_spawner(delta: float) -> void:
+	if twilight_timer > 0.0:
+		twilight_timer = maxf(0.0, twilight_timer - delta)
+		if twilight_timer <= 0.0:
+			_banner("НОЧЬ %d · защити Последний Очаг" % current_night, 2.0)
+			camera_shake = 1.5
+		return
+
 	night_spawn_cd -= delta
 	if night_queue.size() > 0 and night_spawn_cd <= 0.0:
 		var kind: String = night_queue.pop_front()
@@ -696,7 +806,8 @@ func _spawn_enemy_at(kind: String, pos: Vector2) -> void:
 		"speed": speed,
 		"damage": damage,
 		"radius": radius,
-		"hit_cd": 0.0
+		"hit_cd": 0.0,
+		"hit_flash": 0.0
 	})
 
 
@@ -740,10 +851,12 @@ func _update_survivor_agents(delta: float) -> void:
 		var target := _survivor_defense_target(i) if night else _survivor_day_target(i, role)
 		var to_target := target - pos
 
-		if to_target.length() > 5.0:
+		var moving := to_target.length() > 5.0
+		if moving:
 			var move_speed := 100.0 if night else 68.0
 			pos += to_target.normalized() * minf(to_target.length(), move_speed * delta)
-			agent["phase"] = float(agent.get("phase", 0.0)) + delta * 6.0
+		var phase_speed := 6.0 if moving else (4.2 if role == "worker" and not night else 1.8)
+		agent["phase"] = float(agent.get("phase", 0.0)) + delta * phase_speed
 
 		var cd := maxf(0.0, float(agent.get("shot_cd", 0.0)) - delta)
 		var can_fight := enemies.size() > 0 and (night or role == "hunter" or role == "guard")
@@ -841,8 +954,12 @@ func _update_shots(delta: float) -> void:
 
 		if distance < 17.0:
 			enemy["hp"] = float(enemy["hp"]) - float(shot.get("damage", 10.0))
+			enemy["hit_flash"] = 0.11
+			if distance > 0.001:
+				enemy["pos"] = enemy_pos + to_enemy.normalized() * 3.5
 			enemies[target_index] = enemy
-			_float_text(enemy_pos + Vector2(0, -20), "-%d" % int(shot.get("damage", 0)), Color(1.0, 0.86, 0.62))
+			if String(enemy.get("kind", "basic")) in ["elite", "boss"]:
+				camera_shake = maxf(camera_shake, 1.2)
 			shots.remove_at(i)
 		else:
 			shot_pos += to_enemy.normalized() * minf(distance, speed * delta)
@@ -865,6 +982,7 @@ func _update_enemies(delta: float) -> void:
 		var radius := float(enemy.get("radius", 14.0))
 		var speed := float(enemy.get("speed", 35.0))
 		var hit_cd := maxf(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
+		var hit_flash := maxf(0.0, float(enemy.get("hit_flash", 0.0)) - delta)
 
 		if distance > 48.0 + radius * 0.35:
 			pos += to_hearth.normalized() * speed * delta
@@ -872,18 +990,24 @@ func _update_enemies(delta: float) -> void:
 			hearth_hp -= float(enemy.get("damage", 7.0))
 			hit_cd = 0.88
 			flash_timer = 0.08
-			_float_text(HEARTH_POS + Vector2(0, -72), "-%d очаг" % int(enemy.get("damage", 0)), Color(1.0, 0.48, 0.38))
+			camera_shake = maxf(camera_shake, 2.2)
+			hearth_pulse = maxf(hearth_pulse, 0.35)
+			_float_text(HEARTH_POS + Vector2(0, -72), "-%d ОЧАГ" % int(enemy.get("damage", 0)), Color(1.0, 0.48, 0.38))
 
 		enemy["pos"] = pos
 		enemy["hit_cd"] = hit_cd
+		enemy["hit_flash"] = hit_flash
 		enemies[i] = enemy
 
 
 func _on_enemy_killed(enemy: Dictionary) -> void:
 	var pos: Vector2 = enemy["pos"]
 	var kind := String(enemy.get("kind", "basic"))
-	shots.clear()
-	_burst(pos, 10 if kind != "boss" else 28)
+	_burst(pos, 10 if kind != "boss" else 34)
+	if kind == "elite":
+		camera_shake = maxf(camera_shake, 3.0)
+	elif kind == "boss":
+		camera_shake = 6.0
 
 	if kind == "elite":
 		_float_text(pos + Vector2(0, -25), "ЭЛИТА ПОВЕРЖЕНА", Color(1.0, 0.72, 0.38))
@@ -909,8 +1033,10 @@ func _update_core_return() -> void:
 	if core_carried and hero_pos.distance_to(HEARTH_POS) < 68.0:
 		core_carried = false
 		hearth_level = 5
-		light_radius = 360.0
-		flash_timer = 1.0
+		light_radius = 380.0
+		flash_timer = 1.25
+		hearth_pulse = 1.0
+		camera_shake = 6.0
 		_finish_run(true)
 
 
@@ -1402,7 +1528,7 @@ func _draw_hud() -> void:
 		draw_string(font, Vector2(16, 30), "УГЛИ %d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 120, 15, Color("#f0d298"))
 		draw_string(font, Vector2(145, 30), "РЮКЗАК +%d" % int(meta.get("carry_level", 0)), HORIZONTAL_ALIGNMENT_LEFT, 115, 14, Color("#d7cab0"))
 		draw_string(font, Vector2(275, 30), "УРОН +%d%%" % (int(meta.get("damage_level", 0)) * 10), HORIZONTAL_ALIGNMENT_LEFT, 120, 14, Color("#d7cab0"))
-		draw_string(font, Vector2(414, 30), "v0.4", HORIZONTAL_ALIGNMENT_LEFT, 50, 12, Color("#87968a"))
+		draw_string(font, Vector2(414, 30), "v0.5", HORIZONTAL_ALIGNMENT_LEFT, 50, 12, Color("#87968a"))
 		draw_string(font, Vector2(16, 70), "Хаб живёт между вылазками. Всё здесь сохраняется.", HORIZONTAL_ALIGNMENT_LEFT, 448, 13, Color("#a9b5a8"))
 		return
 
