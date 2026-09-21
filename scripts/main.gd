@@ -8,6 +8,7 @@ const HUB_DAMAGE_POS := Vector2(365.0, 430.0)
 
 const HERO_SPEED := 178.0
 const HERO_INTERACT_RADIUS := 46.0
+const HERO_PICKUP_RADIUS := 34.0
 const JOYSTICK_RADIUS := 64.0
 const JOYSTICK_DEADZONE := 0.10
 const SAVE_PATH := "user://hearth_meta.json"
@@ -79,6 +80,8 @@ var current_night := 0
 var run_seed := 0
 
 var resource_nodes: Array[Dictionary] = []
+var resource_pickups: Array[Dictionary] = []
+var pickup_cd := 0.0
 var enemies: Array[Dictionary] = []
 var shots: Array[Dictionary] = []
 var floaters: Array[Dictionary] = []
@@ -131,6 +134,7 @@ func _process(delta: float) -> void:
 	flash_timer = maxf(0.0, flash_timer - delta)
 	hero_shot_cd = maxf(0.0, hero_shot_cd - delta)
 	gather_cd = maxf(0.0, gather_cd - delta)
+	pickup_cd = maxf(0.0, pickup_cd - delta)
 	tower_cd = maxf(0.0, tower_cd - delta)
 
 	if mode == Mode.HUB:
@@ -172,6 +176,7 @@ func _enter_hub(message: String = "") -> void:
 	enemies.clear()
 	shots.clear()
 	resource_nodes.clear()
+	resource_pickups.clear()
 	core_active = false
 	core_carried = false
 	hub_zone_lock = ""
@@ -220,6 +225,8 @@ func _start_expedition() -> void:
 	shots.clear()
 	floaters.clear()
 	particles.clear()
+	resource_pickups.clear()
+	pickup_cd = 0.0
 	night_queue.clear()
 	core_active = false
 	core_carried = false
@@ -253,7 +260,9 @@ func _generate_layout() -> void:
 			"pos": pos,
 			"hits": 3,
 			"max_hits": 3,
-			"alive": true
+			"alive": true,
+			"fall_timer": 0.0,
+			"drop_spawned": false
 		})
 
 	for i in range(5):
@@ -266,7 +275,9 @@ func _generate_layout() -> void:
 			"pos": pos,
 			"hits": 4,
 			"max_hits": 4,
-			"alive": true
+			"alive": true,
+			"fall_timer": 0.0,
+			"drop_spawned": false
 		})
 
 	var rescue_slots: Array[Vector2] = [
@@ -346,6 +357,7 @@ func _update_hub_interactions() -> void:
 func _update_expedition(delta: float) -> void:
 	_deposit_resources_if_close()
 	_update_resource_gathering()
+	_update_resource_pickups(delta)
 	_update_survivor_agents(delta)
 
 	if enemies.size() > 0:
@@ -386,8 +398,6 @@ func _update_resource_gathering() -> void:
 		return
 	if gather_cd > 0.0:
 		return
-	if carried_wood + carried_stone >= carry_limit:
-		return
 
 	for i in range(resource_nodes.size()):
 		var node: Dictionary = resource_nodes[i]
@@ -404,20 +414,85 @@ func _update_resource_gathering() -> void:
 		var hits := int(node.get("hits", 1)) - 1
 		node["hits"] = hits
 		gather_cd = gather_interval
-		_burst(node_pos, 6)
+		_burst(node_pos, 5)
 
-		if kind == "tree":
-			carried_wood += 1
-			_float_text(node_pos + Vector2(0, -22), "+1 дерево", Color(0.95, 0.76, 0.42))
+		if hits > 0:
+			var action_text := "РУБИМ" if kind == "tree" else "ДОБЫВАЕМ"
+			_float_text(node_pos + Vector2(0, -24), action_text, Color(0.86, 0.78, 0.62))
 		else:
-			carried_stone += 1
-			_float_text(node_pos + Vector2(0, -18), "+1 камень", Color(0.75, 0.80, 0.84))
-
-		if hits <= 0:
 			node["alive"] = false
-			_burst(node_pos, 12)
+			node["fall_timer"] = 0.34 if kind == "tree" else 0.16
+			node["drop_spawned"] = false
+			_burst(node_pos, 14)
+			_float_text(
+				node_pos + Vector2(0, -25),
+				"ДЕРЕВО ПАДАЕТ" if kind == "tree" else "КАМЕНЬ РАСКОЛОТ",
+				Color(0.95, 0.76, 0.42) if kind == "tree" else Color(0.75, 0.80, 0.84)
+			)
+
 		resource_nodes[i] = node
 		break
+
+
+func _update_resource_pickups(delta: float) -> void:
+	for i in range(resource_nodes.size()):
+		var node: Dictionary = resource_nodes[i]
+		if bool(node.get("alive", true)):
+			continue
+		if bool(node.get("drop_spawned", true)):
+			continue
+
+		var timer := maxf(0.0, float(node.get("fall_timer", 0.0)) - delta)
+		node["fall_timer"] = timer
+		if timer <= 0.0:
+			node["drop_spawned"] = true
+			_spawn_resource_drops(String(node.get("kind", "tree")), node["pos"])
+		resource_nodes[i] = node
+
+	if pickup_cd > 0.0:
+		return
+	if carried_wood + carried_stone >= carry_limit:
+		return
+
+	var nearest_index := -1
+	var nearest_distance := INF
+	for i in range(resource_pickups.size()):
+		var pickup: Dictionary = resource_pickups[i]
+		var pickup_pos: Vector2 = pickup["pos"]
+		var distance := hero_pos.distance_to(pickup_pos)
+		if distance <= HERO_PICKUP_RADIUS and distance < nearest_distance:
+			nearest_distance = distance
+			nearest_index = i
+
+	if nearest_index < 0:
+		return
+
+	var pickup: Dictionary = resource_pickups[nearest_index]
+	var kind := String(pickup.get("kind", "wood"))
+	var pickup_pos: Vector2 = pickup["pos"]
+	if kind == "wood":
+		carried_wood += 1
+		_float_text(hero_pos + Vector2(0, -34), "+1 БРЕВНО", Color(0.95, 0.76, 0.42))
+	else:
+		carried_stone += 1
+		_float_text(hero_pos + Vector2(0, -34), "+1 КАМЕНЬ", Color(0.75, 0.80, 0.84))
+
+	_burst(pickup_pos, 5)
+	resource_pickups.remove_at(nearest_index)
+	pickup_cd = 0.12
+
+
+func _spawn_resource_drops(source_kind: String, source_pos: Vector2) -> void:
+	var drop_kind := "wood" if source_kind == "tree" else "stone"
+	var count := 3
+	for i in range(count):
+		var angle := -0.95 + float(i) * 0.95 + rng.randf_range(-0.16, 0.16)
+		var distance := rng.randf_range(22.0, 36.0)
+		resource_pickups.append({
+			"kind": drop_kind,
+			"pos": source_pos + Vector2(cos(angle), sin(angle)) * distance,
+			"spin": rng.randf_range(-0.22, 0.22)
+		})
 
 
 func _deposit_resources_if_close() -> void:
@@ -1040,6 +1115,8 @@ func _draw_expedition() -> void:
 
 	for node: Dictionary in resource_nodes:
 		_draw_resource(node)
+	for pickup: Dictionary in resource_pickups:
+		_draw_resource_pickup(pickup)
 
 	if stage == Stage.DAY1_RESCUE and not survivor_one_found:
 		_draw_survivor(survivor_one_pos, "?")
@@ -1103,6 +1180,11 @@ func _draw_resource(node: Dictionary) -> void:
 			draw_circle(pos, 22.0, Color(0.16, 0.34, 0.20, alpha))
 			draw_circle(pos + Vector2(-14, 4), 14.0, Color(0.18, 0.39, 0.23, alpha))
 			draw_circle(pos + Vector2(14, 4), 14.0, Color(0.18, 0.39, 0.23, alpha))
+		elif not bool(node.get("drop_spawned", true)):
+			var progress := 1.0 - clampf(float(node.get("fall_timer", 0.0)) / 0.34, 0.0, 1.0)
+			var fall_x := 14.0 + progress * 34.0
+			draw_line(pos + Vector2(0, 16), pos + Vector2(fall_x, -4 + progress * 18.0), Color(0.33, 0.22, 0.14, alpha), 9.0)
+			draw_circle(pos + Vector2(fall_x, -8 + progress * 18.0), 19.0, Color(0.16, 0.34, 0.20, alpha))
 		else:
 			draw_circle(pos + Vector2(0, 14), 8.0, Color(0.30, 0.22, 0.16, alpha))
 	else:
@@ -1112,8 +1194,30 @@ func _draw_resource(node: Dictionary) -> void:
 				pos + Vector2(19, 2), pos + Vector2(11, 15), pos + Vector2(-7, 17)
 			])
 			draw_colored_polygon(pts, Color(0.42, 0.46, 0.45, alpha))
+		elif not bool(node.get("drop_spawned", true)):
+			draw_circle(pos + Vector2(-9, 2), 11.0, Color(0.42, 0.46, 0.45, alpha))
+			draw_circle(pos + Vector2(11, 6), 9.0, Color(0.38, 0.42, 0.41, alpha))
 		else:
 			draw_circle(pos, 7.0, Color(0.33, 0.36, 0.35, alpha))
+
+
+func _draw_resource_pickup(pickup: Dictionary) -> void:
+	var pos: Vector2 = pickup["pos"]
+	var kind := String(pickup.get("kind", "wood"))
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006 + pos.x * 0.04) * 0.06
+	draw_circle(pos + Vector2(0, 5), 11.0, Color(0.02, 0.03, 0.02, 0.20))
+	if kind == "wood":
+		var spin := float(pickup.get("spin", 0.0))
+		var axis := Vector2(cos(spin), sin(spin))
+		draw_line(pos - axis * 10.0, pos + axis * 10.0, Color("#9b6a3d"), 7.0 * pulse, true)
+		draw_circle(pos - axis * 10.0, 3.5, Color("#c18b54"))
+		draw_circle(pos + axis * 10.0, 3.5, Color("#c18b54"))
+	else:
+		var pts := PackedVector2Array([
+			pos + Vector2(-7, 4), pos + Vector2(-4, -7), pos + Vector2(6, -6),
+			pos + Vector2(9, 2), pos + Vector2(3, 8), pos + Vector2(-5, 7)
+		])
+		draw_colored_polygon(pts, Color("#8d9694"))
 
 
 func _draw_hearth(pos: Vector2, level: int) -> void:
@@ -1338,7 +1442,7 @@ func _stage_title() -> String:
 func _objective_text() -> String:
 	match stage:
 		Stage.DAY1_GATHER:
-			return "Нужно 5 дерева. Руби → неси → складывай в очаг."
+			return "Сруби дерево, подбери брёвна с земли и отнеси 5 к очагу."
 		Stage.DAY1_RESCUE:
 			return "Подойди к найденному выжившему."
 		Stage.NIGHT1:
