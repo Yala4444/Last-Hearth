@@ -5,7 +5,7 @@ config_version=5
 
 [application]
 
-config/name="Last Hearth"
+config/name="Last Hearth v0.5"
 run/main_scene="res://main.tscn"
 
 [display]
