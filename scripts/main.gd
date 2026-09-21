@@ -1627,9 +1627,9 @@ func _draw_companions() -> void:
 
 
 func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facing: float = 1.0) -> void:
-	var moving_stride := sin(phase) * 4.0
-	var bob := abs(sin(phase * 0.5)) * 1.4
-	var base := pos + Vector2(0, -bob)
+	var moving_stride: float = sin(phase) * 4.0
+	var bob: float = absf(sin(phase * 0.5)) * 1.4
+	var base: Vector2 = pos + Vector2(0, -bob)
 	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(14, 5), Color(0.01, 0.02, 0.015, 0.30))
 
 	# Legs and boots.
