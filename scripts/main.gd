@@ -331,14 +331,16 @@ func _generate_layout() -> void:
 			"scale": rng.randf_range(0.75, 1.25)
 		})
 
-	var rescue_slots: Array[Vector2] = [
-		Vector2(95, 180), Vector2(380, 185), Vector2(80, 520), Vector2(400, 525)
+	var first_rescue_slots: Array[Vector2] = [
+		Vector2(92, 520), Vector2(392, 525), Vector2(108, 325), Vector2(372, 330)
 	]
-	var first_index: int = rng.randi_range(0, rescue_slots.size() - 1)
-	survivor_one_pos = rescue_slots[first_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
-	rescue_slots.remove_at(first_index)
-	var second_index: int = rng.randi_range(0, rescue_slots.size() - 1)
-	survivor_two_pos = rescue_slots[second_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
+	var second_rescue_slots: Array[Vector2] = [
+		Vector2(92, 184), Vector2(388, 188), Vector2(72, 655), Vector2(408, 650)
+	]
+	var first_index: int = rng.randi_range(0, first_rescue_slots.size() - 1)
+	survivor_one_pos = first_rescue_slots[first_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
+	var second_index: int = rng.randi_range(0, second_rescue_slots.size() - 1)
+	survivor_two_pos = second_rescue_slots[second_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
 
 	if rng.randf() < 0.5:
 		left_choice_pos = Vector2(130.0, 285.0)
@@ -1439,7 +1441,7 @@ func _draw_resource(node: Dictionary) -> void:
 	var alive := bool(node.get("alive", false))
 	var kind := String(node.get("kind", "tree"))
 	var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 35.0
-	var alpha := 1.0 if in_light else 0.32
+	var alpha := 1.0 if in_light else 0.12
 
 	if kind == "tree":
 		if alive:
