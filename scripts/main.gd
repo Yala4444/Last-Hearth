@@ -44,6 +44,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
+	"build_version": 5,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -176,6 +177,13 @@ func _load_meta() -> void:
 		var saved: Dictionary = parsed
 		for key: Variant in saved.keys():
 			meta[key] = saved[key]
+
+	# v0.5 changes the opening flow and readability substantially.
+	# Existing testers get one fresh expedition without losing permanent upgrades.
+	var loaded_version := int(meta.get("build_version", 0))
+	if loaded_version < 5:
+		meta["build_version"] = 5
+		meta["first_run"] = true
 
 
 func _save_meta() -> void:
@@ -2010,13 +2018,18 @@ func _draw_result_overlay() -> void:
 	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#d29550") if result_win else Color("#824842"))
 
 	draw_string(font, Vector2(50, 286), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 22, Color("#f4e6ce"))
-	draw_string(font, Vector2(62, 333), result_subtitle, HORIZONTAL_ALIGNMENT_CENTER, 356, 13, Color("#b8c7bb"))
+	if result_win:
+		draw_string(font, Vector2(62, 329), "Ядро усилило Последний Очаг.", HORIZONTAL_ALIGNMENT_CENTER, 356, 13, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 349), "За тьмой уже видны Мёртвые поля.", HORIZONTAL_ALIGNMENT_CENTER, 356, 13, Color("#b8c7bb"))
+	else:
+		draw_string(font, Vector2(62, 329), "Огонь погас, но поселение помнит этот поход.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 349), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
 	draw_string(font, Vector2(62, 392), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 15, Color("#ecc178"))
 
 	if result_win:
 		draw_string(font, Vector2(62, 434), "Лес отступил. Поселение стало сильнее.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#9eb09f"))
 	else:
-		draw_string(font, Vector2(62, 434), "Постоянные улучшения сохранены. Лес изменится в новой попытке.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
+		draw_string(font, Vector2(62, 434), "Новая попытка получит другую расстановку леса и угроз.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
 
 	draw_rect(Rect2(Vector2(93, 480), Vector2(294, 44)), Color("#2a382e"))
 	draw_string(font, Vector2(105, 507), "КОСНИСЬ · ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 12, Color("#f0d7a1"))
