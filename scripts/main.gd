@@ -879,7 +879,10 @@ func _return_from_day3_route() -> void:
 	if day3_route == "watch":
 		_story("Рабочий остаётся у механизма башни. Что-то огромное движется за деревьями.", 3.0)
 	else:
-		_story("Охотник молча смотрит на горящие стрелы. Лес вокруг Очагa внезапно стих.", 3.0)
+		if day1_route == "hunter":
+			_story("Охотник молча смотрит на горящие стрелы. Лес вокруг Очагa внезапно стих.", 3.0)
+		else:
+			_story("Рабочий отступает от горящих стрел. Лес вокруг Очагa внезапно стих.", 3.0)
 	_start_night(3)
 
 
@@ -1143,7 +1146,8 @@ func _update_expedition(delta: float) -> void:
 
 
 func _gathering_enabled() -> bool:
-	return stage in [Stage.DAY1_GATHER, Stage.DAY2_BUILD, Stage.DAY3_TOWER]
+	# v0.9 deliberately removes the old Day 3 resource grind.
+	return stage in [Stage.DAY1_GATHER, Stage.DAY2_BUILD]
 
 
 func _resource_kind_needed(kind: String) -> bool:
@@ -1392,7 +1396,7 @@ func _check_day_progress() -> void:
 		_banner("Мастерская восстановлена | выбери специализацию", 2.2)
 		stage_transition_lock = false
 
-	elif stage == Stage.DAY3_TOWER and camp_wood >= current_stage_wood_start + 6 and camp_stone >= current_stage_stone_start + 6:
+	elif stage == Stage.DAY3_TOWER and day3_route == "legacy_build" and camp_wood >= current_stage_wood_start + 6 and camp_stone >= current_stage_stone_start + 6:
 		stage_transition_lock = true
 		camp_wood -= 6
 		camp_stone -= 6
@@ -1653,6 +1657,12 @@ func _tower_pos() -> Vector2:
 
 
 func _survivor_day_target(index: int, role: String) -> Vector2:
+	if area != Area.CAMP:
+		var travel_slots: Array[Vector2] = [
+			Vector2(-34, 24), Vector2(34, 26), Vector2(-46, 54),
+			Vector2(46, 56), Vector2(0, 68)
+		]
+		return hero_pos + travel_slots[index % travel_slots.size()]
 	var camp_scale := 1.0 + float(maxi(0, hearth_level - 2)) * 0.08
 	var time := float(Time.get_ticks_msec()) * 0.001
 	if role == "hunter":
@@ -3202,12 +3212,8 @@ func _draw_world_progress() -> void:
 		var stone_progress := clampi(camp_stone - current_stage_stone_start, 0, 5)
 		draw_string(font, pos + Vector2(-78, -58), "МАСТЕРСКАЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
 		draw_string(font, pos + Vector2(-82, -42), "дерево %d/8 | камень %d/5" % [wood_progress, stone_progress], HORIZONTAL_ALIGNMENT_CENTER, 164, 10, Color("#d4ba88"))
-	elif stage == Stage.DAY3_TOWER:
-		var pos := _tower_pos()
-		var wood_progress := clampi(camp_wood - current_stage_wood_start, 0, 6)
-		var stone_progress := clampi(camp_stone - current_stage_stone_start, 0, 6)
-		draw_string(font, pos + Vector2(-78, -68), "ДОЗОРНАЯ БАШНЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
-		draw_string(font, pos + Vector2(-82, -52), "дерево %d/6 | камень %d/6" % [wood_progress, stone_progress], HORIZONTAL_ALIGNMENT_CENTER, 164, 10, Color("#d4ba88"))
+	elif stage == Stage.DAY3_TOWER and area == Area.CAMP and day3_route == "":
+		draw_string(font, HEARTH_POS + Vector2(-96, -92), "ДО РАССВЕТА — ОДИН ПУТЬ", HORIZONTAL_ALIGNMENT_CENTER, 192, 10, Color("#d4ba88"))
 
 
 func _nearest_resource_pos(kind: String) -> Vector2:
