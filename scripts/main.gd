@@ -526,49 +526,40 @@ func _update_world_events(delta: float) -> void:
 					camp_wood += 2
 					camp_stone += 1
 					event["outcome"] = "loot"
-					_story("БРОШЕННАЯ ТЕЛЕГА
-Под досками нашлись дерево и камень.", 3.0)
+					_story("БРОШЕННАЯ ТЕЛЕГА\nПод досками нашлись дерево и камень.", 3.0)
 				else:
 					event["outcome"] = "ambush"
 					_spawn_enemy_at("guard", pos + Vector2(-34, 12))
 					_spawn_enemy_at("guard", pos + Vector2(34, -10))
-					_story("БРОШЕННАЯ ТЕЛЕГА
-Следы были слишком свежими. Засада.", 3.0)
+					_story("БРОШЕННАЯ ТЕЛЕГА\nСледы были слишком свежими. Засада.", 3.0)
 			"wounded":
 				run_embers += 1
 				event["outcome"] = "helped"
-				_story("РАНЕНЫЙ СТРАННИК
-«Они идут за светом... Береги огонь.»", 3.2)
+				_story("РАНЕНЫЙ СТРАННИК\n«Они идут за светом... Береги огонь.»", 3.2)
 			"altar":
 				if rng.randf() < 0.5:
 					hero_damage *= 1.12
 					event["outcome"] = "damage"
-					_story("СТАРЫЙ АЛТАРЬ
-Пламя коснулось оружия. Урон выше.", 3.0)
+					_story("СТАРЫЙ АЛТАРЬ\nПламя коснулось оружия. Урон выше.", 3.0)
 				else:
 					carry_limit += 1
 					event["outcome"] = "carry"
-					_story("СТАРЫЙ АЛТАРЬ
-Ноша кажется легче. Перенос +1.", 3.0)
+					_story("СТАРЫЙ АЛТАРЬ\nНоша кажется легче. Перенос +1.", 3.0)
 			"dead_camp":
 				run_embers += 1
 				event["outcome"] = "memory"
-				_story("ПОТУХШИЙ КОСТЁР
-На камне вырезан знак нашего Очагa.", 3.2)
+				_story("ПОТУХШИЙ КОСТЁР\nНа камне вырезан знак нашего Очагa.", 3.2)
 			"tracks":
 				event["outcome"] = "trail"
-				_story("СЛЕДЫ В ГРЯЗИ
-Они ведут глубже в лес — и не похожи на человеческие.", 3.1)
+				_story("СЛЕДЫ В ГРЯЗИ\nОни ведут глубже в лес — и не похожи на человеческие.", 3.1)
 			"broken_watch":
 				hero_damage *= 1.08
 				event["outcome"] = "arrows"
-				_story("СЛОМАННЫЙ ДОЗОР
-В ящике сохранилась связка хороших стрел.", 3.0)
+				_story("СЛОМАННЫЙ ДОЗОР\nВ ящике сохранилась связка хороших стрел.", 3.0)
 			"whisper":
 				_add_survivor("guard", pos)
 				event["outcome"] = "rescued"
-				_story("ШЁПОТ ИЗ ТЬМЫ
-Ещё один человек успел добежать до света.", 3.0)
+				_story("ШЁПОТ ИЗ ТЬМЫ\nЕщё один человек успел добежать до света.", 3.0)
 
 		events[i] = event
 		_check_day_progress()
@@ -597,8 +588,7 @@ func _complete_black_tree_event(index: int) -> void:
 	_spawn_enemy_at("fast", pos + Vector2(-38, 16))
 	_spawn_enemy_at("fast", pos + Vector2(38, -14))
 	camera_shake = 3.2
-	_story("ЧЁРНОЕ ДЕРЕВО
-Ствол раскололся. Шум разбудил тварей.", 3.0)
+	_story("ЧЁРНОЕ ДЕРЕВО\nСтвол раскололся. Шум разбудил тварей.", 3.0)
 
 
 func _update_movement(delta: float) -> void:
@@ -995,55 +985,88 @@ func _update_expedition_choice() -> void:
 func _start_night(number: int) -> void:
 	current_night = number
 	night_queue.clear()
-	night_spawn_cd = 0.55
-	twilight_timer = TWILIGHT_DURATION
+	night_spawn_cd = 0.65
+	twilight_timer = TWILIGHT_DURATION + 0.8
+	dawn_timer = 0.0
+	dawn_pending = 0
+	boss_delay_timer = 0.0
+	boss_announced = false
+	active_night_sides.clear()
 	hearth_hp = hearth_max_hp
 
 	if number == 1:
 		stage = Stage.NIGHT1
-		for i in range(8):
-			night_queue.append("basic")
-		night_queue.append("guard")
-		_banner("СУМЕРКИ | охотник занимает позицию", 2.5)
+		active_night_sides = [2, 3]
+		for i in range(10):
+			night_queue.append("fast" if i == 7 else "basic")
+		_banner("СУМЕРКИ", 1.8)
+		_story("Охотник занимает край света. Вернись к Очагу.", 2.7)
 	elif number == 2:
 		stage = Stage.NIGHT2
-		for i in range(9):
+		active_night_sides = [0, 1]
+		for i in range(12):
 			night_queue.append("fast" if i % 3 == 2 else "basic")
 		night_queue.append("elite")
-		_banner("СУМЕРКИ | вернись к свету", 2.5)
+		_banner("СУМЕРКИ", 1.8)
+		_story("Две стороны леса ожили одновременно.", 2.7)
 	else:
 		stage = Stage.NIGHT3
-		for i in range(12):
+		active_night_sides = [0, 1, 3]
+		for i in range(14):
 			if i % 4 == 2:
 				night_queue.append("fast")
 			else:
 				night_queue.append("basic")
 		night_queue.append("boss")
-		_story("Охотник: Слышишь?.. Лес затих. Он идёт за огнём.", 3.2)
+		_banner("СУМЕРКИ", 1.8)
+		_story("Охотник: «Слышишь?.. Лес затих. Он идёт за огнём.»", 3.2)
 
 
 func _update_night_spawner(delta: float) -> void:
 	if twilight_timer > 0.0:
 		twilight_timer = maxf(0.0, twilight_timer - delta)
 		if twilight_timer <= 0.0:
-			_banner("НОЧЬ %d | защити Последний Очаг" % current_night, 2.0)
-			camera_shake = 1.5
+			_banner("НОЧЬ %d" % current_night, 1.6)
+			camera_shake = 1.4
+		return
+
+	if dawn_pending > 0:
+		dawn_timer = maxf(0.0, dawn_timer - delta)
+		if dawn_timer <= 0.0:
+			var finished := dawn_pending
+			dawn_pending = 0
+			if finished == 1:
+				_complete_night_one()
+			elif finished == 2:
+				_complete_night_two()
+		return
+
+	if boss_delay_timer > 0.0:
+		boss_delay_timer = maxf(0.0, boss_delay_timer - delta)
 		return
 
 	night_spawn_cd -= delta
 	if night_queue.size() > 0 and night_spawn_cd <= 0.0:
+		var next_kind := String(night_queue[0])
+		if next_kind == "boss" and not boss_announced:
+			boss_announced = true
+			boss_delay_timer = 2.6
+			_story("Тишина. Даже твари отступили от края света.", 2.5)
+			return
+
 		var kind: String = night_queue.pop_front()
 		_spawn_enemy(kind)
 		if kind == "boss":
-			night_spawn_cd = 2.0
+			night_spawn_cd = 2.2
+			_banner("ХРАНИТЕЛЬ ЛЕСА", 2.2)
+			camera_shake = 3.0
 		else:
-			night_spawn_cd = 0.72 if current_night >= 2 else 0.95
+			night_spawn_cd = 0.92 if current_night >= 2 else 1.12
 
-	if night_queue.is_empty() and enemies.is_empty():
-		if current_night == 1:
-			_complete_night_one()
-		elif current_night == 2:
-			_complete_night_two()
+	if night_queue.is_empty() and enemies.is_empty() and current_night < 3 and dawn_pending == 0:
+		dawn_pending = current_night
+		dawn_timer = 1.8
+		_banner("РАССВЕТ", 1.7)
 
 
 func _complete_night_one() -> void:
@@ -1073,16 +1096,23 @@ func _complete_night_two() -> void:
 
 
 func _spawn_enemy(kind: String) -> void:
-	var side := rng.randi_range(0, 3)
+	var side := 0
+	if kind == "boss":
+		side = 0
+	elif active_night_sides.size() > 0:
+		side = active_night_sides[rng.randi_range(0, active_night_sides.size() - 1)]
+	else:
+		side = rng.randi_range(0, 3)
+
 	var pos := Vector2.ZERO
 	if side == 0:
-		pos = Vector2(rng.randf_range(20.0, 460.0), 105.0)
+		pos = Vector2(rng.randf_range(90.0, 390.0), 104.0)
 	elif side == 1:
-		pos = Vector2(465.0, rng.randf_range(145.0, 735.0))
+		pos = Vector2(466.0, rng.randf_range(205.0, 700.0))
 	elif side == 2:
-		pos = Vector2(rng.randf_range(20.0, 460.0), 755.0)
+		pos = Vector2(rng.randf_range(75.0, 405.0), 756.0)
 	else:
-		pos = Vector2(15.0, rng.randf_range(145.0, 735.0))
+		pos = Vector2(14.0, rng.randf_range(205.0, 700.0))
 	_spawn_enemy_at(kind, pos)
 
 
@@ -1123,7 +1153,8 @@ func _spawn_enemy_at(kind: String, pos: Vector2) -> void:
 		"damage": damage,
 		"radius": radius,
 		"hit_cd": 0.0,
-		"hit_flash": 0.0
+		"hit_flash": 0.0,
+		"move_phase": rng.randf_range(0.0, TAU)
 	})
 
 
@@ -1310,8 +1341,15 @@ func _update_enemies(delta: float) -> void:
 		var hit_cd := maxf(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
 		var hit_flash := maxf(0.0, float(enemy.get("hit_flash", 0.0)) - delta)
 
+		var move_phase := float(enemy.get("move_phase", 0.0)) + delta * (8.5 if String(enemy.get("kind", "basic")) == "fast" else 3.5)
+		var speed_scale := 1.0
+		var enemy_kind := String(enemy.get("kind", "basic"))
+		if enemy_kind == "fast":
+			speed_scale = 0.78 + maxf(0.0, sin(move_phase)) * 0.52
+		elif enemy_kind == "boss":
+			speed_scale = 0.80 + maxf(0.0, sin(move_phase)) * 0.28
 		if distance > 48.0 + radius * 0.35:
-			pos += to_hearth.normalized() * speed * delta
+			pos += to_hearth.normalized() * speed * speed_scale * delta
 		elif hit_cd <= 0.0:
 			hearth_hp -= float(enemy.get("damage", 7.0))
 			hit_cd = 0.88
@@ -1323,6 +1361,7 @@ func _update_enemies(delta: float) -> void:
 		enemy["pos"] = pos
 		enemy["hit_cd"] = hit_cd
 		enemy["hit_flash"] = hit_flash
+		enemy["move_phase"] = move_phase
 		enemies[i] = enemy
 
 
