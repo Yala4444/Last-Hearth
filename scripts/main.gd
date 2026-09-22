@@ -1517,6 +1517,7 @@ func _draw_expedition() -> void:
 		_draw_core(hero_pos + Vector2(0, -46))
 
 	_draw_hearth(HEARTH_POS, hearth_level)
+	_draw_stockpile()
 	_draw_world_progress()
 	_draw_companions()
 	_draw_hero(hero_pos)
@@ -2075,6 +2076,30 @@ func _draw_small_building(pos: Vector2, _kind: String) -> void:
 	])
 	draw_colored_polygon(roof, Color("#6a563d"))
 	draw_rect(Rect2(pos + Vector2(-5, 1), Vector2(10, 14)), Color("#2b2923"))
+
+
+func _draw_stockpile() -> void:
+	if camp_wood > 0:
+		var wood_pos := HEARTH_POS + Vector2(-76, 47)
+		var shown := mini(camp_wood, 6)
+		for i in range(shown):
+			var row := i / 3
+			var col := i % 3
+			var p := wood_pos + Vector2(float(col) * 11.0 - 11.0, -float(row) * 7.0)
+			draw_line(p + Vector2(-6, 0), p + Vector2(6, 0), Color("#8f5d33"), 5.0, true)
+			draw_circle(p + Vector2(-6, 0), 2.3, Color("#c58b54"))
+			draw_circle(p + Vector2(6, 0), 2.3, Color("#c58b54"))
+		draw_string(font, wood_pos + Vector2(-24, 19), "%d" % camp_wood, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#d9bf91"))
+
+	if camp_stone > 0:
+		var stone_pos := HEARTH_POS + Vector2(76, 48)
+		var shown := mini(camp_stone, 6)
+		for i in range(shown):
+			var row := i / 3
+			var col := i % 3
+			var p := stone_pos + Vector2(float(col) * 10.0 - 10.0, -float(row) * 7.0)
+			draw_circle(p, 4.2, Color("#858f8c"))
+		draw_string(font, stone_pos + Vector2(-24, 19), "%d" % camp_stone, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#c5ccc8"))
 
 
 func _draw_world_progress() -> void:
