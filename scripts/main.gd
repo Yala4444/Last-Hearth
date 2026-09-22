@@ -3630,10 +3630,16 @@ func _draw_flash() -> void:
 
 func _run_choice_line(day: int) -> String:
 	if day == 1:
-		return "ДЕНЬ 1  •  Охотник спасён" if day1_route == "hunter" else "ДЕНЬ 1  •  Лесопилка укреплена"
+		if day1_route == "hunter": return "ДЕНЬ 1  •  Охотник спасён"
+		if day1_route == "sawmill": return "ДЕНЬ 1  •  Лесопилка укреплена"
+		return "ДЕНЬ 1  •  путь не завершён"
 	if day == 2:
-		return "ДЕНЬ 2  •  Оружейная" if workshop_choice == "armory" else "ДЕНЬ 2  •  Лесопилка"
-	return "ДЕНЬ 3  •  Дозор восстановлен" if day3_route == "watch" else "ДЕНЬ 3  •  Огненные стрелы"
+		if workshop_choice == "armory": return "ДЕНЬ 2  •  Оружейная"
+		if workshop_choice == "lumber": return "ДЕНЬ 2  •  Лесопилка"
+		return "ДЕНЬ 2  •  мастерская не выбрана"
+	if day3_route == "watch": return "ДЕНЬ 3  •  Дозор восстановлен"
+	if day3_route == "altar": return "ДЕНЬ 3  •  Огненные стрелы"
+	return "ДЕНЬ 3  •  путь не завершён"
 
 
 func _draw_result_overlay() -> void:
