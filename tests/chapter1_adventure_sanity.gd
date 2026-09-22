@@ -107,8 +107,33 @@ func _init() -> void:
 		fail("Worker ruins lack the rescue encounter")
 		return
 
+	# Route enemies must fight the explorer, never an invisible Hearth in the middle of the map.
+	var guidance: Dictionary = game._guidance_info()
+	if String(guidance.get("text", "")) != "СТРАЖИ":
+		fail("Worker ruins guidance does not prioritize the active guards")
+		return
+	var hearth_before_route_hit := float(game.hearth_hp)
+	var hero_before_route_hit := float(game.hero_hp)
+	game.route_grace_timer = 0.0
+	game.enemies[0]["pos"] = game.hero_pos + Vector2(8.0, 0.0)
+	game.enemies[0]["hit_cd"] = 0.0
+	game._update_enemies(0.1)
+	if float(game.hearth_hp) != hearth_before_route_hit:
+		fail("Route enemy damaged the invisible camp Hearth")
+		return
+	if float(game.hero_hp) >= hero_before_route_hit:
+		fail("Route enemy failed to damage the explorer")
+		return
+
 	game.enemies.clear()
 	game.hero_pos = game.survivor_two_pos
+	game._update_worker_route()
+	if not bool(game.worker_clear_announced):
+		fail("Worker ruins did not announce that the encounter was cleared")
+		return
+	if bool(game.worker_route_complete):
+		fail("Worker rescue completed before the reveal beat")
+		return
 	game._update_worker_route()
 	if not bool(game.worker_route_complete):
 		fail("Worker rescue did not complete")
