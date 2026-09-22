@@ -126,5 +126,46 @@ func _init() -> void:
 		fail("Worker return did not restore the workshop")
 		return
 
+
+	# Day 3 is now another consequential route choice instead of a 6/6 gather gate.
+	game.stage = game.Stage.NIGHT2
+	game._complete_night_two()
+	if int(game.stage) != int(game.Stage.DAY3_TOWER):
+		fail("Night 2 did not advance to final preparation")
+		return
+	if game.day3_route != "":
+		fail("Final preparation route was preselected")
+		return
+
+	game._enter_day3_route("watch")
+	if int(game.area) != int(game.Area.WATCH_RIDGE):
+		fail("Watch route did not load")
+		return
+	game.watch_repair_started = true
+	game.enemies.clear()
+	game._update_day3_route()
+	if not bool(game.day3_route_complete) or not bool(game.tower_built):
+		fail("Watch route did not rebuild the tower")
+		return
+	game.hero_pos = game.ROUTE_RETURN_GATE
+	game._update_area_transitions()
+	if int(game.area) != int(game.Area.CAMP) or int(game.stage) != int(game.Stage.NIGHT3):
+		fail("Watch route did not return into Night 3")
+		return
+
+	game._start_expedition()
+	game.stage = game.Stage.DAY3_TOWER
+	game._enter_day3_route("altar")
+	if int(game.area) != int(game.Area.ALTAR_GLADE):
+		fail("Altar route did not load")
+		return
+	var damage_before := float(game.hero_damage)
+	game.final_altar_claimed = true
+	game.enemies.clear()
+	game._update_day3_route()
+	if not bool(game.day3_route_complete) or float(game.hero_damage) <= damage_before:
+		fail("Altar route did not grant the offensive payoff")
+		return
+
 	print("CHAPTER1_ADVENTURE_SANITY_OK")
 	quit(0)
