@@ -612,6 +612,9 @@ func _update_movement(delta: float) -> void:
 
 
 func _update_hub_interactions() -> void:
+	if region_map_open:
+		return
+
 	var near_map := hero_pos.distance_to(HUB_MAP_POS) < 54.0
 	var near_carry := hero_pos.distance_to(HUB_CARRY_POS) < 48.0
 	var near_damage := hero_pos.distance_to(HUB_DAMAGE_POS) < 48.0
@@ -622,7 +625,11 @@ func _update_hub_interactions() -> void:
 
 	if near_map and hub_zone_lock != "map":
 		hub_zone_lock = "map"
-		_start_expedition()
+		if bool(meta.get("forest_cleared", false)):
+			region_map_open = true
+			_stop_joystick()
+		else:
+			_start_expedition()
 		return
 
 	if near_carry and hub_zone_lock != "carry":
@@ -633,9 +640,9 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["carry_level"] = level + 1
 			_save_meta()
-			_banner("Склад улучшен | перенос +1", 2.0)
+			_hub_feedback("ПЕРЕНОС +1", HUB_CARRY_POS, 2.0)
 		else:
-			_banner("Для склада нужно %d углей" % cost, 1.7)
+			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_CARRY_POS, 1.8)
 
 	if near_damage and hub_zone_lock != "damage":
 		hub_zone_lock = "damage"
@@ -645,25 +652,25 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["damage_level"] = level + 1
 			_save_meta()
-			_banner("Кузница усилена | урон +10%", 2.0)
+			_hub_feedback("УРОН +10%", HUB_DAMAGE_POS, 2.0)
 		else:
-			_banner("Для кузницы нужно %d углей" % cost, 1.7)
+			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_DAMAGE_POS, 1.8)
 
 	if near_hearth and hub_zone_lock != "hearth":
 		hub_zone_lock = "hearth"
 		var level := int(meta.get("hearth_bonus", 0))
 		var cost := 5 + level * 4
 		if level >= 3:
-			_banner("Очаг уже усилен до предела этой главы", 1.9)
+			_hub_feedback("ПРЕДЕЛ ЭТОЙ ГЛАВЫ", HUB_HEARTH_UPGRADE_POS, 1.9)
 		elif int(meta.get("embers", 0)) >= cost:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["hearth_bonus"] = level + 1
 			_save_meta()
 			hearth_pulse = 1.0
 			camera_shake = 2.0
-			_banner("Сердце Очагa усилено | больше света и прочности", 2.3)
+			_hub_feedback("СВЕТ И ПРОЧНОСТЬ +", HUB_HEARTH_UPGRADE_POS, 2.2)
 		else:
-			_banner("Для Очагa нужно %d углей" % cost, 1.7)
+			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_HEARTH_UPGRADE_POS, 1.8)
 
 
 func _update_expedition(delta: float) -> void:
@@ -1518,6 +1525,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_enter_hub("Ты вернулся к Последнему Очагу.")
 		return
 
+	if mode == Mode.HUB and region_map_open:
+		if event is InputEventScreenTouch and event.pressed:
+			_handle_region_map_press(event.position)
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			_handle_region_map_press(event.position)
+		return
+
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if not joystick_active:
@@ -1555,6 +1569,18 @@ func _unhandled_input(event: InputEvent) -> void:
 			hero_target.y = clampf(hero_target.y, 118.0, VIEW_SIZE.y - 24.0)
 
 
+func _handle_region_map_press(pos: Vector2) -> void:
+	var forest_rect := Rect2(Vector2(50, 292), Vector2(172, 150))
+	var dead_rect := Rect2(Vector2(258, 292), Vector2(172, 150))
+	if forest_rect.has_point(pos):
+		region_map_open = false
+		_start_expedition()
+	elif dead_rect.has_point(pos):
+		_hub_feedback("МЁРТВЫЕ ПОЛЯ | СЛЕДУЮЩАЯ ГЛАВА", HUB_MAP_POS + Vector2(0, 120), 2.4)
+	elif pos.y < 180.0 or pos.y > 560.0:
+		region_map_open = false
+
+
 func _start_joystick(screen_pos: Vector2) -> void:
 	joystick_active = true
 	joystick_origin = screen_pos
@@ -1585,15 +1611,20 @@ func _draw() -> void:
 	else:
 		_draw_expedition()
 
+	_draw_enemy_deaths()
 	_draw_particles()
 	_draw_floaters()
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	_draw_hud()
 	_draw_banner()
+	_draw_story_card()
+	_draw_hub_feedback()
 	_draw_joystick()
 	_draw_flash()
 
+	if mode == Mode.HUB and region_map_open:
+		_draw_region_map_overlay()
 	if mode == Mode.RESULT:
 		_draw_result_overlay()
 
@@ -2597,6 +2628,95 @@ func _draw_banner() -> void:
 	var alpha := clampf(banner_timer * 1.5, 0.0, 1.0)
 	draw_rect(Rect2(Vector2(56, 120), Vector2(368, 54)), Color(0.02, 0.03, 0.025, 0.82 * alpha))
 	draw_string(font, Vector2(70, 153), banner_text, HORIZONTAL_ALIGNMENT_CENTER, 340, 15, Color(0.96, 0.91, 0.80, alpha))
+
+
+func _wrap_story_lines(text: String, max_chars: int = 42) -> Array[String]:
+	var explicit := text.split("\n")
+	var result: Array[String] = []
+	for part_variant: Variant in explicit:
+		var part := String(part_variant)
+		if part.length() <= max_chars:
+			result.append(part)
+			continue
+		var words := part.split(" ")
+		var line := ""
+		for word_variant: Variant in words:
+			var word := String(word_variant)
+			var candidate := word if line == "" else line + " " + word
+			if candidate.length() > max_chars and line != "":
+				result.append(line)
+				line = word
+			else:
+				line = candidate
+		if line != "":
+			result.append(line)
+	return result
+
+
+func _draw_story_card() -> void:
+	if story_hint_timer <= 0.0 or story_hint == "":
+		return
+	var lines := _wrap_story_lines(story_hint, 44)
+	var count := mini(lines.size(), 3)
+	var height := 30.0 + float(count) * 18.0
+	var y := 94.0
+	draw_rect(Rect2(Vector2(48, y), Vector2(384, height)), Color(0.015, 0.025, 0.020, 0.88))
+	draw_rect(Rect2(Vector2(48, y), Vector2(4, height)), Color("#c18d50"))
+	for i in range(count):
+		var color := Color("#ead7ae") if i == 0 else Color("#c8d1c8")
+		var size := 12 if i == 0 else 11
+		draw_string(font, Vector2(64, y + 25.0 + float(i) * 18.0), lines[i], HORIZONTAL_ALIGNMENT_LEFT, 350, size, color)
+
+
+func _draw_hub_feedback() -> void:
+	if mode != Mode.HUB or hub_feedback_timer <= 0.0 or hub_feedback_text == "":
+		return
+	var pos := hub_feedback_pos
+	var box := Rect2(pos + Vector2(-78, -77), Vector2(156, 30))
+	draw_rect(box, Color(0.02, 0.03, 0.025, 0.90))
+	draw_string(font, box.position + Vector2(6, 20), hub_feedback_text, HORIZONTAL_ALIGNMENT_CENTER, 144, 10, Color("#f0d7a1"))
+
+
+func _draw_region_map_overlay() -> void:
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.76))
+	draw_rect(Rect2(Vector2(28, 176), Vector2(424, 390)), Color("#15231c"))
+	draw_string(font, Vector2(50, 220), "КАРТА ОКРЕСТНОСТЕЙ", HORIZONTAL_ALIGNMENT_CENTER, 380, 20, Color("#f2e5cf"))
+	draw_string(font, Vector2(60, 250), "Выбери путь", HORIZONTAL_ALIGNMENT_CENTER, 360, 11, Color("#9eafa3"))
+
+	var forest_rect := Rect2(Vector2(50, 292), Vector2(172, 150))
+	var dead_rect := Rect2(Vector2(258, 292), Vector2(172, 150))
+	draw_rect(forest_rect, Color("#21352a"))
+	draw_rect(dead_rect, Color("#1c2723"))
+	draw_rect(Rect2(forest_rect.position, Vector2(forest_rect.size.x, 4)), Color("#83a070"))
+	draw_rect(Rect2(dead_rect.position, Vector2(dead_rect.size.x, 4)), Color("#665a51"))
+
+	draw_circle(Vector2(136, 345), 28.0, Color(0.23, 0.43, 0.27, 0.85))
+	for i in range(5):
+		var a := TAU * float(i) / 5.0
+		draw_circle(Vector2(136, 345) + Vector2(cos(a), sin(a)) * 20.0, 7.0, Color("#34593a"))
+	draw_string(font, Vector2(61, 391), "ЗАБЫТЫЙ ЛЕС", HORIZONTAL_ALIGNMENT_CENTER, 150, 12, Color("#e6dbc6"))
+	draw_string(font, Vector2(61, 411), "ОЧИЩЕН | ПОВТОРИТЬ", HORIZONTAL_ALIGNMENT_CENTER, 150, 9, Color("#9fbea2"))
+
+	draw_circle(Vector2(344, 345), 30.0, Color(0.18, 0.17, 0.15, 0.88))
+	draw_line(Vector2(322, 355), Vector2(365, 330), Color("#55483d"), 5.0)
+	draw_circle(Vector2(356, 336), 5.0, Color("#b87845"))
+	draw_string(font, Vector2(269, 391), "МЁРТВЫЕ ПОЛЯ", HORIZONTAL_ALIGNMENT_CENTER, 150, 12, Color("#d7ccbc"))
+	draw_string(font, Vector2(269, 411), "СЛЕДУЮЩАЯ ГЛАВА", HORIZONTAL_ALIGNMENT_CENTER, 150, 9, Color("#897e74"))
+	draw_string(font, Vector2(68, 518), "Коснись вне карты, чтобы закрыть", HORIZONTAL_ALIGNMENT_CENTER, 344, 10, Color("#839187"))
+
+
+func _draw_enemy_deaths() -> void:
+	for death: Dictionary in enemy_deaths:
+		var life := float(death.get("life", 0.0))
+		var max_life := maxf(0.01, float(death.get("max_life", 0.34)))
+		var alpha := clampf(life / max_life, 0.0, 1.0)
+		var pos: Vector2 = death["pos"]
+		var radius := float(death.get("radius", 14.0))
+		draw_circle(pos, radius * (1.0 + (1.0 - alpha) * 0.25), Color(0.18, 0.14, 0.17, 0.28 * alpha))
+		for i in range(5):
+			var a := TAU * float(i) / 5.0 + (1.0 - alpha)
+			var p := pos + Vector2(cos(a), sin(a)) * radius * (1.0 + (1.0 - alpha))
+			draw_circle(p, 2.5, Color(0.32, 0.23, 0.28, 0.45 * alpha))
 
 
 func _draw_joystick() -> void:
