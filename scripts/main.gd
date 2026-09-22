@@ -2218,6 +2218,7 @@ func _draw_resource_flights() -> void:
 func _draw_hearth(pos: Vector2, level: int) -> void:
 	var pulse := 1.0 + hearth_pulse * 0.08 + sin(Time.get_ticks_msec() * 0.0065) * 0.018
 	var glow_alpha := 0.045 + hearth_pulse * 0.040
+	var ring_radius := 34.0 + float(level) * 3.5
 	draw_circle(pos, 58.0 * pulse + float(level) * 5.0, Color(1.0, 0.50, 0.12, glow_alpha))
 	draw_circle(pos, 35.0 * pulse + float(level) * 3.0, Color(1.0, 0.68, 0.22, 0.055 + hearth_pulse * 0.05))
 
@@ -2227,7 +2228,6 @@ func _draw_hearth(pos: Vector2, level: int) -> void:
 		_draw_centered_texture(TEX_HEARTH_2, pos + Vector2(0, -2), Vector2(104, 104) * pulse, Color.WHITE)
 	else:
 		# Higher levels retain the existing built structure until Sprint 3 replaces them with dedicated assets.
-		var ring_radius := 34.0 + float(level) * 3.5
 		draw_circle(pos + Vector2(0, 15), 50.0 + float(level) * 3.0, Color(0.02, 0.025, 0.02, 0.34))
 		for i in range(9):
 			var angle := TAU * float(i) / 9.0
