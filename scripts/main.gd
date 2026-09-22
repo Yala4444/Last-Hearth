@@ -291,7 +291,7 @@ func _generate_layout() -> void:
 	events.clear()
 	decor_points.clear()
 
-	map_variant = rng.randi_range(0, 3)
+	map_variant = 0 if int(meta.get("attempts", 1)) <= 1 else rng.randi_range(0, 3)
 	var tree_slots: Array[Vector2] = []
 	var rock_slots: Array[Vector2] = []
 
