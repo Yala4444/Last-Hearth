@@ -44,7 +44,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 5,
+	"build_version": 6,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -84,6 +84,12 @@ var expedition_choice := ""
 var run_embers := 0
 var current_night := 0
 var run_seed := 0
+var map_variant := 0
+var map_variant_name := "Тихая поляна"
+var events: Array[Dictionary] = []
+var story_hint := ""
+var story_hint_timer := 0.0
+var stage_transition_lock := false
 
 var resource_nodes: Array[Dictionary] = []
 var resource_pickups: Array[Dictionary] = []
@@ -144,6 +150,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	banner_timer = maxf(0.0, banner_timer - delta)
+	story_hint_timer = maxf(0.0, story_hint_timer - delta)
 	flash_timer = maxf(0.0, flash_timer - delta)
 	hero_shot_cd = maxf(0.0, hero_shot_cd - delta)
 	gather_cd = maxf(0.0, gather_cd - delta)
@@ -160,6 +167,7 @@ func _process(delta: float) -> void:
 	elif mode == Mode.EXPEDITION:
 		_update_movement(delta)
 		_update_expedition(delta)
+		_check_day_progress()
 
 	_update_particles(delta)
 	_update_floaters(delta)
@@ -178,11 +186,11 @@ func _load_meta() -> void:
 		for key: Variant in saved.keys():
 			meta[key] = saved[key]
 
-	# v0.5 changes the opening flow and readability substantially.
+	# v0.6 changes progression, layouts and onboarding substantially.
 	# Existing testers get one fresh expedition without losing permanent upgrades.
 	var loaded_version := int(meta.get("build_version", 0))
-	if loaded_version < 5:
-		meta["build_version"] = 5
+	if loaded_version < 6:
+		meta["build_version"] = 6
 		meta["first_run"] = true
 
 
@@ -248,6 +256,12 @@ func _start_expedition() -> void:
 	expedition_choice = ""
 	run_embers = 0
 	current_night = 0
+	map_variant = 0
+	map_variant_name = "Тихая поляна"
+	events.clear()
+	story_hint = ""
+	story_hint_timer = 0.0
+	stage_transition_lock = false
 
 	enemies.clear()
 	shots.clear()
@@ -269,7 +283,7 @@ func _start_expedition() -> void:
 	_stop_joystick()
 
 	_generate_layout()
-	_banner("Вылазка #%d · Забытый лес" % int(meta.get("attempts", 1)), 2.2)
+	_banner("Вылазка #%d | %s" % [int(meta.get("attempts", 1)), map_variant_name], 2.4)
 
 
 func _generate_layout() -> void:
@@ -429,6 +443,7 @@ func _update_expedition(delta: float) -> void:
 	_deposit_resources_if_close(delta)
 	_update_resource_gathering()
 	_update_resource_pickups(delta)
+	_update_world_events()
 	_update_survivor_agents(delta)
 
 	if enemies.size() > 0:
@@ -443,7 +458,7 @@ func _update_expedition(delta: float) -> void:
 			if hero_pos.distance_to(survivor_one_pos) < 42.0:
 				survivor_one_found = true
 				_add_survivor("hunter", survivor_one_pos)
-				_banner("Охотник присоединился и идёт к огню", 2.0)
+				_story("Охотник: Я видел другой огонь на севере. Потом он погас.", 3.4)
 				_start_night(1)
 		Stage.WORKSHOP_CHOICE:
 			_update_workshop_choice()
@@ -451,7 +466,7 @@ func _update_expedition(delta: float) -> void:
 			if enemies.is_empty() and hero_pos.distance_to(survivor_two_pos) < 44.0:
 				survivor_two_found = true
 				_add_survivor("worker", survivor_two_pos)
-				_banner("Рабочий спасён и возвращается в лагерь", 2.0)
+				_story("Рабочий: Этот знак на руинах... такие Очаги были и раньше.", 3.5)
 				_start_night(2)
 		Stage.EXPEDITION_CHOICE:
 			_update_expedition_choice()
@@ -488,18 +503,13 @@ func _update_resource_gathering() -> void:
 		_burst(node_pos, 5)
 
 		if hits > 0:
-			var action_text := "РУБИМ" if kind == "tree" else "ДОБЫВАЕМ"
-			_float_text(node_pos + Vector2(0, -24), action_text, Color(0.86, 0.78, 0.62))
+			camera_shake = maxf(camera_shake, 0.7)
 		else:
 			node["alive"] = false
 			node["fall_timer"] = 0.34 if kind == "tree" else 0.16
 			node["drop_spawned"] = false
 			_burst(node_pos, 14)
-			_float_text(
-				node_pos + Vector2(0, -25),
-				"ДЕРЕВО ПАДАЕТ" if kind == "tree" else "КАМЕНЬ РАСКОЛОТ",
-				Color(0.95, 0.76, 0.42) if kind == "tree" else Color(0.75, 0.80, 0.84)
-			)
+			camera_shake = maxf(camera_shake, 2.2 if kind == "tree" else 1.6)
 
 		resource_nodes[i] = node
 		break
@@ -622,7 +632,11 @@ func _deposit_resources_if_close(delta: float) -> void:
 
 
 func _check_day_progress() -> void:
+	if stage_transition_lock:
+		return
+
 	if stage == Stage.DAY1_GATHER and camp_wood >= 5:
+		stage_transition_lock = true
 		camp_wood -= 5
 		hearth_level = 2
 		hearth_max_hp = 170.0
@@ -632,9 +646,11 @@ func _check_day_progress() -> void:
 		flash_timer = 0.75
 		hearth_pulse = 1.0
 		camera_shake = 4.0
-		_banner("ОЧАГ II · свет открыл новую часть леса", 2.4)
+		_banner("ОЧАГ II | свет открыл новую часть леса", 2.4)
+		stage_transition_lock = false
 
 	elif stage == Stage.DAY2_BUILD and camp_wood >= 8 and camp_stone >= 5:
+		stage_transition_lock = true
 		camp_wood -= 8
 		camp_stone -= 5
 		workshop_built = true
@@ -642,17 +658,20 @@ func _check_day_progress() -> void:
 		light_radius = 255.0
 		flash_timer = 0.55
 		camera_shake = 2.0
-		_banner("Мастерская восстановлена · выбери специализацию", 2.1)
+		_banner("Мастерская восстановлена | выбери специализацию", 2.2)
+		stage_transition_lock = false
 
 	elif stage == Stage.DAY3_TOWER and camp_wood >= 6 and camp_stone >= 6:
+		stage_transition_lock = true
 		camp_wood -= 6
 		camp_stone -= 6
 		tower_built = true
 		stage = Stage.EXPEDITION_CHOICE
 		light_radius = 300.0
-		flash_timer = 0.55
-		camera_shake = 2.2
-		_banner("Башня готова · лагерь защищён лучше", 2.1)
+		flash_timer = 0.65
+		camera_shake = 2.8
+		_banner("Дозорная башня готова | выбери силу перед ночью", 2.4)
+		stage_transition_lock = false
 
 
 func _update_workshop_choice() -> void:
@@ -717,7 +736,7 @@ func _start_night(number: int) -> void:
 			else:
 				night_queue.append("basic")
 		night_queue.append("boss")
-		_banner("СУМЕРКИ · лес вокруг Очагa замолчал", 2.8)
+		_story("Охотник: Слышишь?.. Лес затих. Он идёт за огнём.", 3.2)
 
 
 func _update_night_spawner(delta: float) -> void:
@@ -752,7 +771,7 @@ func _complete_night_one() -> void:
 	light_radius = 250.0
 	stage = Stage.DAY2_BUILD
 	flash_timer = 0.45
-	_banner("Утро · найден камень и руины мастерской", 2.4)
+	_story("Охотник: Ночью их будет больше. Днём восстановим мастерскую.", 3.4)
 
 
 func _complete_night_two() -> void:
@@ -763,7 +782,7 @@ func _complete_night_two() -> void:
 	light_radius = 285.0
 	stage = Stage.DAY3_TOWER
 	flash_timer = 0.45
-	_banner("Утро · восстанови сторожевую башню", 2.4)
+	_story("Рабочий: Башня ещё стоит. Если укрепим её, она переживёт ночь.", 3.5)
 
 
 func _spawn_enemy(kind: String) -> void:
@@ -1112,6 +1131,12 @@ func _burst(pos: Vector2, count: int) -> void:
 			"vel": Vector2(cos(angle), sin(angle)) * speed,
 			"life": rng.randf_range(0.3, 0.7)
 		})
+
+
+func _story(text: String, duration: float = 3.0) -> void:
+	story_hint = text
+	story_hint_timer = duration
+	_banner(text, duration)
 
 
 func _banner(text: String, duration: float = 1.8) -> void:
