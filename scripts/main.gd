@@ -18,6 +18,8 @@ const SAVE_PATH := "user://hearth_meta.json"
 const ROUTE_HUNTER_GATE := Vector2(42.0, 350.0)
 const ROUTE_SAWMILL_GATE := Vector2(438.0, 285.0)
 const ROUTE_WORKER_GATE := Vector2(438.0, 345.0)
+const ROUTE_WATCH_GATE := Vector2(42.0, 330.0)
+const ROUTE_ALTAR_GATE := Vector2(438.0, 330.0)
 const ROUTE_RETURN_GATE := Vector2(240.0, 748.0)
 
 const TEX_HERO_IDLE: Texture2D = preload("res://assets/v08/sprint1/hero_idle.svg")
@@ -47,7 +49,9 @@ enum Area {
 	CAMP,
 	HUNTER_TRAIL,
 	SAWMILL,
-	WORKER_RUINS
+	WORKER_RUINS,
+	WATCH_RIDGE,
+	ALTAR_GLADE
 }
 
 enum Stage {
@@ -119,6 +123,10 @@ var day1_route := ""
 var day1_route_complete := false
 var sawmill_claimed := false
 var worker_route_complete := false
+var day3_route := ""
+var day3_route_complete := false
+var watch_repair_started := false
+var final_altar_claimed := false
 var camp_resource_backup: Array = []
 var camp_event_backup: Array = []
 var camp_decor_backup: Array = []
@@ -325,6 +333,10 @@ func _start_expedition() -> void:
 	day1_route_complete = false
 	sawmill_claimed = false
 	worker_route_complete = false
+	day3_route = ""
+	day3_route_complete = false
+	watch_repair_started = false
+	final_altar_claimed = false
 	camp_resource_backup.clear()
 	camp_event_backup.clear()
 	camp_decor_backup.clear()
@@ -538,6 +550,10 @@ func _add_event(kind: String, pos: Vector2) -> void:
 		required = 1.10
 	elif kind == "sawmill":
 		required = 1.85
+	elif kind == "watch_repair":
+		required = 1.90
+	elif kind == "final_altar":
+		required = 1.70
 	events.append({
 		"kind": kind,
 		"pos": pos,
@@ -718,6 +734,16 @@ func _update_area_transitions() -> void:
 			_enter_worker_ruins()
 		elif area == Area.WORKER_RUINS and worker_route_complete and hero_pos.distance_to(ROUTE_RETURN_GATE) < 50.0:
 			_return_from_worker_ruins()
+		return
+
+	if stage == Stage.DAY3_TOWER:
+		if area == Area.CAMP and day3_route == "":
+			if hero_pos.distance_to(ROUTE_WATCH_GATE) < 46.0:
+				_enter_day3_route("watch")
+			elif hero_pos.distance_to(ROUTE_ALTAR_GATE) < 46.0:
+				_enter_day3_route("altar")
+		elif area in [Area.WATCH_RIDGE, Area.ALTAR_GLADE] and day3_route_complete and hero_pos.distance_to(ROUTE_RETURN_GATE) < 50.0:
+			_return_from_day3_route()
 
 
 
@@ -782,6 +808,79 @@ func _return_from_worker_ruins() -> void:
 	flash_timer = 0.45
 	_story("Рабочий вернул мастерскую к жизни. Теперь реши, чем станет это место.", 3.6)
 	_banner("МАСТЕРСКАЯ ВОССТАНОВЛЕНА", 2.0)
+
+
+func _enter_day3_route(route_name: String) -> void:
+	if area != Area.CAMP or stage != Stage.DAY3_TOWER or day3_route != "":
+		return
+	_stash_camp_area()
+	day3_route = route_name
+	resource_nodes.clear()
+	resource_pickups.clear()
+	resource_flights.clear()
+	events.clear()
+	decor_points.clear()
+	enemies.clear()
+	shots.clear()
+	hero_pos = Vector2(240.0, 690.0)
+	hero_target = hero_pos
+	_stop_joystick()
+
+	if route_name == "watch":
+		area = Area.WATCH_RIDGE
+		for p: Vector2 in [Vector2(75, 190), Vector2(405, 195), Vector2(92, 400), Vector2(388, 405), Vector2(105, 610), Vector2(382, 625)]:
+			_route_add_tree(p, rng.randi_range(0, 2))
+		for p: Vector2 in [Vector2(145, 285), Vector2(340, 305), Vector2(305, 565)]:
+			_route_add_rock(p)
+		for i in range(38):
+			decor_points.append({
+				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
+				"kind": "pebble" if i % 3 == 0 else "grass",
+				"scale": rng.randf_range(0.75, 1.25)
+			})
+		_add_event("watch_repair", Vector2(240.0, 205.0))
+		_story("СЛОМАННЫЙ ДОЗОР\nЕсли поднять башню, она прикроет Очаг в последнюю ночь.", 3.6)
+	else:
+		area = Area.ALTAR_GLADE
+		for p: Vector2 in [Vector2(80, 190), Vector2(400, 190), Vector2(82, 410), Vector2(398, 415), Vector2(115, 625), Vector2(365, 625)]:
+			_route_add_tree(p, rng.randi_range(0, 2))
+		for p: Vector2 in [Vector2(135, 300), Vector2(345, 300), Vector2(240, 570)]:
+			_route_add_rock(p)
+		for i in range(40):
+			decor_points.append({
+				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
+				"kind": "ash" if i % 5 == 0 else "grass",
+				"scale": rng.randf_range(0.72, 1.20)
+			})
+		_add_event("final_altar", Vector2(240.0, 210.0))
+		_story("ДРЕВНИЙ АЛТАРЬ\nПламя здесь старше нашего Очагa. Оно может изменить оружие.", 3.6)
+
+
+func _update_day3_route() -> void:
+	if stage != Stage.DAY3_TOWER or day3_route_complete:
+		return
+	if day3_route == "watch" and watch_repair_started and enemies.is_empty():
+		tower_built = true
+		day3_route_complete = true
+		run_embers += 1
+		_story("ДОЗОР ПОДНЯТ\nБашня снова смотрит в темноту. Ночью она будет стрелять сама.", 3.5)
+	elif day3_route == "altar" and final_altar_claimed and enemies.is_empty():
+		expedition_choice = "damage"
+		hero_damage *= 1.55
+		day3_route_complete = true
+		run_embers += 1
+		_story("ОГОНЬ ПРИНЯТ\nСтрелы вспыхивают от прикосновения. Урон значительно выше.", 3.5)
+
+
+func _return_from_day3_route() -> void:
+	if area == Area.CAMP or not day3_route_complete:
+		return
+	_restore_camp_area()
+	if day3_route == "watch":
+		_story("Рабочий остаётся у механизма башни. Что-то огромное движется за деревьями.", 3.0)
+	else:
+		_story("Охотник молча смотрит на горящие стрелы. Лес вокруг Очагa внезапно стих.", 3.0)
+	_start_night(3)
 
 
 func _event_is_visible(pos: Vector2) -> bool:
@@ -876,6 +975,22 @@ func _update_world_events(delta: float) -> void:
 				_spawn_enemy_at("fast", pos + Vector2(0, 82))
 				camera_shake = 2.2
 				_story("МЕХАНИЗМ ЗАРАБОТАЛ\nСкрип пилы разбудил тех, кто прятался рядом.", 3.2)
+			"watch_repair":
+				watch_repair_started = true
+				event["outcome"] = "repairing"
+				_spawn_enemy_at("elite", pos + Vector2(0, 92))
+				_spawn_enemy_at("guard", pos + Vector2(-72, 64))
+				_spawn_enemy_at("guard", pos + Vector2(72, 64))
+				camera_shake = 2.6
+				_story("ДОЗОР ЗАСКРИПЕЛ\nШум поднял старую тварь из оврага. Сначала переживи нападение.", 3.3)
+			"final_altar":
+				final_altar_claimed = true
+				event["outcome"] = "fire"
+				_spawn_enemy_at("fast", pos + Vector2(-62, 70))
+				_spawn_enemy_at("fast", pos + Vector2(62, 70))
+				_spawn_enemy_at("elite", pos + Vector2(0, 96))
+				camera_shake = 2.8
+				_story("АЛТАРЬ ВСПЫХНУЛ\nОгонь ответил — и вместе с ним проснулось то, что лежало под камнями.", 3.3)
 
 		events[i] = event
 		_check_day_progress()
@@ -997,6 +1112,7 @@ func _update_expedition(delta: float) -> void:
 	_update_survivor_agents(delta)
 	_update_day1_route()
 	_update_worker_route()
+	_update_day3_route()
 	_update_area_transitions()
 	if area == Area.CAMP:
 		_keep_hero_out_of_hearth()
