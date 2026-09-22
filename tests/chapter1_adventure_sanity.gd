@@ -87,5 +87,44 @@ func _init() -> void:
 		fail("Sawmill route did not fortify the hearth")
 		return
 
+
+	# After Night 1, normal play now points toward the worker ruins instead of another resource grind.
+	game._start_expedition()
+	game.stage = game.Stage.DAY1_RESCUE
+	game.day1_route = "hunter"
+	game.day1_route_complete = true
+	game.area = game.Area.CAMP
+	game._complete_night_one()
+	if int(game.stage) != int(game.Stage.DAY2_RESCUE):
+		fail("Night 1 did not advance to worker rescue")
+		return
+
+	game._enter_worker_ruins()
+	if int(game.area) != int(game.Area.WORKER_RUINS):
+		fail("Worker ruins did not load")
+		return
+	if game.enemies.size() < 4:
+		fail("Worker ruins lack the rescue encounter")
+		return
+
+	game.enemies.clear()
+	game.hero_pos = game.survivor_two_pos
+	game._update_worker_route()
+	if not bool(game.worker_route_complete):
+		fail("Worker rescue did not complete")
+		return
+	if int(game.survivors) < 2:
+		fail("Worker did not join the group")
+		return
+
+	game.hero_pos = game.ROUTE_RETURN_GATE
+	game._update_area_transitions()
+	if int(game.area) != int(game.Area.CAMP):
+		fail("Worker route did not return to camp")
+		return
+	if int(game.stage) != int(game.Stage.WORKSHOP_CHOICE) or not bool(game.workshop_built):
+		fail("Worker return did not restore the workshop")
+		return
+
 	print("CHAPTER1_ADVENTURE_SANITY_OK")
 	quit(0)
