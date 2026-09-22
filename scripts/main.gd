@@ -76,7 +76,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 9,
+	"build_version": 10,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -94,6 +94,9 @@ var hero_facing := Vector2(1.0, 0.0)
 var hero_damage := 22.0
 var hero_fire_rate := 0.52
 var hero_shot_cd := 0.0
+var hero_max_hp := 100.0
+var hero_hp := 100.0
+var route_grace_timer := 0.0
 var gather_cd := 0.0
 var gather_interval := 0.42
 var carry_limit := 5
@@ -123,6 +126,7 @@ var day1_route := ""
 var day1_route_complete := false
 var sawmill_claimed := false
 var worker_route_complete := false
+var worker_clear_announced := false
 var day3_route := ""
 var day3_route_complete := false
 var watch_repair_started := false
@@ -211,6 +215,7 @@ func _process(delta: float) -> void:
 	story_hint_timer = maxf(0.0, story_hint_timer - delta)
 	hub_feedback_timer = maxf(0.0, hub_feedback_timer - delta)
 	flash_timer = maxf(0.0, flash_timer - delta)
+	route_grace_timer = maxf(0.0, route_grace_timer - delta)
 	_update_enemy_deaths(delta)
 	hero_shot_cd = maxf(0.0, hero_shot_cd - delta)
 	gather_cd = maxf(0.0, gather_cd - delta)
@@ -302,6 +307,9 @@ func _start_expedition() -> void:
 	hero_damage = 22.0 * (1.0 + 0.10 * float(int(meta.get("damage_level", 0))))
 	hero_fire_rate = 0.52
 	hero_shot_cd = 0.0
+	hero_max_hp = 100.0
+	hero_hp = hero_max_hp
+	route_grace_timer = 0.0
 	gather_interval = 0.42
 	gather_cd = 0.0
 	carry_limit = 5 + int(meta.get("carry_level", 0))
@@ -333,6 +341,7 @@ func _start_expedition() -> void:
 	day1_route_complete = false
 	sawmill_claimed = false
 	worker_route_complete = false
+	worker_clear_announced = false
 	day3_route = ""
 	day3_route_complete = false
 	watch_repair_started = false
@@ -603,6 +612,8 @@ func _restore_camp_area() -> void:
 	area = Area.CAMP
 	hero_pos = Vector2(240.0, 690.0)
 	hero_target = hero_pos
+	hero_hp = hero_max_hp
+	route_grace_timer = 0.0
 	_stop_joystick()
 
 
@@ -647,6 +658,8 @@ func _enter_day1_route(route_name: String) -> void:
 	shots.clear()
 	hero_pos = Vector2(240.0, 690.0)
 	hero_target = hero_pos
+	hero_hp = hero_max_hp
+	route_grace_timer = 3.0
 	_stop_joystick()
 
 	if route_name == "hunter":
@@ -762,6 +775,9 @@ func _enter_worker_ruins() -> void:
 	shots.clear()
 	hero_pos = Vector2(240.0, 690.0)
 	hero_target = hero_pos
+	hero_hp = hero_max_hp
+	route_grace_timer = 3.2
+	worker_clear_announced = false
 	survivor_two_pos = Vector2(250.0, 185.0)
 	_stop_joystick()
 
@@ -785,6 +801,11 @@ func _enter_worker_ruins() -> void:
 
 func _update_worker_route() -> void:
 	if stage != Stage.DAY2_RESCUE or area != Area.WORKER_RUINS or worker_route_complete:
+		return
+	if enemies.is_empty() and not worker_clear_announced:
+		worker_clear_announced = true
+		_banner("РУИНЫ ОЧИЩЕНЫ", 1.5)
+		_story("Твари стихли. За завалом снова слышен стук — рабочий ещё жив.", 2.8)
 		return
 	if enemies.is_empty() and hero_pos.distance_to(survivor_two_pos) < 48.0:
 		survivor_two_found = true
@@ -824,6 +845,8 @@ func _enter_day3_route(route_name: String) -> void:
 	shots.clear()
 	hero_pos = Vector2(240.0, 690.0)
 	hero_target = hero_pos
+	hero_hp = hero_max_hp
+	route_grace_timer = 2.4
 	_stop_joystick()
 
 	if route_name == "watch":
@@ -976,6 +999,7 @@ func _update_world_events(delta: float) -> void:
 				_spawn_enemy_at("guard", pos + Vector2(-68, 55))
 				_spawn_enemy_at("guard", pos + Vector2(66, 48))
 				_spawn_enemy_at("fast", pos + Vector2(0, 82))
+				route_grace_timer = 0.9
 				camera_shake = 2.2
 				_story("МЕХАНИЗМ ЗАРАБОТАЛ\nСкрип пилы разбудил тех, кто прятался рядом.", 3.2)
 			"watch_repair":
@@ -984,6 +1008,7 @@ func _update_world_events(delta: float) -> void:
 				_spawn_enemy_at("elite", pos + Vector2(0, 92))
 				_spawn_enemy_at("guard", pos + Vector2(-72, 64))
 				_spawn_enemy_at("guard", pos + Vector2(72, 64))
+				route_grace_timer = 1.0
 				camera_shake = 2.6
 				_story("ДОЗОР ЗАСКРИПЕЛ\nШум поднял старую тварь из оврага. Сначала переживи нападение.", 3.3)
 			"final_altar":
@@ -992,6 +1017,7 @@ func _update_world_events(delta: float) -> void:
 				_spawn_enemy_at("fast", pos + Vector2(-62, 70))
 				_spawn_enemy_at("fast", pos + Vector2(62, 70))
 				_spawn_enemy_at("elite", pos + Vector2(0, 96))
+				route_grace_timer = 1.0
 				camera_shake = 2.8
 				_story("АЛТАРЬ ВСПЫХНУЛ\nОгонь ответил — и вместе с ним проснулось то, что лежало под камнями.", 3.3)
 
@@ -1021,6 +1047,7 @@ func _complete_black_tree_event(index: int) -> void:
 		})
 	_spawn_enemy_at("fast", pos + Vector2(-38, 16))
 	_spawn_enemy_at("fast", pos + Vector2(38, -14))
+	route_grace_timer = 0.8
 	camera_shake = 3.2
 	_story("ЧЁРНОЕ ДЕРЕВО\nСтвол раскололся. Шум разбудил тварей.", 3.0)
 
@@ -1124,6 +1151,8 @@ func _update_expedition(delta: float) -> void:
 		_update_combat()
 		_update_shots(delta)
 		_update_enemies(delta)
+		if mode != Mode.EXPEDITION:
+			return
 		if tower_built:
 			_update_tower()
 
@@ -1759,7 +1788,8 @@ func _keep_hero_out_of_hearth() -> void:
 
 func _update_combat() -> void:
 	if hero_shot_cd <= 0.0:
-		var targets: Array[int] = _nearest_enemy_indices(hero_pos, 285.0, 1)
+		var combat_range := 185.0 if area != Area.CAMP else 285.0
+		var targets: Array[int] = _nearest_enemy_indices(hero_pos, combat_range, 1)
 		for j in range(targets.size()):
 			var index: int = targets[j]
 			if index < 0 or index >= enemies.size():
@@ -1852,8 +1882,10 @@ func _update_enemies(delta: float) -> void:
 			continue
 
 		var pos: Vector2 = enemy["pos"]
-		var to_hearth := HEARTH_POS - pos
-		var distance := to_hearth.length()
+		var route_combat := area != Area.CAMP
+		var target_pos := hero_pos if route_combat else HEARTH_POS
+		var to_target := target_pos - pos
+		var distance := to_target.length()
 		var radius := float(enemy.get("radius", 14.0))
 		var speed := float(enemy.get("speed", 35.0))
 		var hit_cd := maxf(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
@@ -1866,15 +1898,33 @@ func _update_enemies(delta: float) -> void:
 			speed_scale = 0.78 + maxf(0.0, sin(move_phase)) * 0.52
 		elif enemy_kind == "boss":
 			speed_scale = 0.80 + maxf(0.0, sin(move_phase)) * 0.28
-		if distance > 48.0 + radius * 0.35:
-			pos += to_hearth.normalized() * speed * speed_scale * delta
+
+		if route_combat and route_grace_timer > 0.0:
+			enemy["hit_cd"] = hit_cd
+			enemy["hit_flash"] = hit_flash
+			enemy["move_phase"] = move_phase
+			enemies[i] = enemy
+			continue
+
+		if distance > 39.0 + radius * 0.35:
+			pos += to_target.normalized() * speed * speed_scale * delta
 		elif hit_cd <= 0.0:
-			hearth_hp -= float(enemy.get("damage", 7.0))
+			var damage := float(enemy.get("damage", 7.0))
 			hit_cd = 0.88
 			flash_timer = 0.08
 			camera_shake = maxf(camera_shake, 2.2)
-			hearth_pulse = maxf(hearth_pulse, 0.35)
-			_float_text(HEARTH_POS + Vector2(0, -72), "-%d ОЧАГ" % int(enemy.get("damage", 0)), Color(1.0, 0.48, 0.38))
+			if route_combat:
+				hero_hp -= damage
+				_float_text(hero_pos + Vector2(0, -48), "-%d" % int(damage), Color(1.0, 0.48, 0.38))
+				var knock := hero_pos - pos
+				if knock.length() > 0.001:
+					hero_pos += knock.normalized() * 18.0
+					hero_pos.x = clampf(hero_pos.x, 22.0, VIEW_SIZE.x - 22.0)
+					hero_pos.y = clampf(hero_pos.y, 118.0, VIEW_SIZE.y - 24.0)
+			else:
+				hearth_hp -= damage
+				hearth_pulse = maxf(hearth_pulse, 0.35)
+				_float_text(HEARTH_POS + Vector2(0, -72), "-%d ОЧАГ" % int(damage), Color(1.0, 0.48, 0.38))
 
 		enemy["pos"] = pos
 		enemy["hit_cd"] = hit_cd
@@ -1882,6 +1932,9 @@ func _update_enemies(delta: float) -> void:
 		enemy["move_phase"] = move_phase
 		enemies[i] = enemy
 
+		if route_combat and hero_hp <= 0.0 and mode == Mode.EXPEDITION:
+			_finish_run(false, "hero")
+			return
 
 func _on_enemy_killed(enemy: Dictionary) -> void:
 	var pos: Vector2 = enemy["pos"]
@@ -1930,7 +1983,7 @@ func _update_core_return() -> void:
 		_finish_run(true)
 
 
-func _finish_run(win: bool) -> void:
+func _finish_run(win: bool, reason: String = "") -> void:
 	if mode != Mode.EXPEDITION:
 		return
 	mode = Mode.RESULT
@@ -1943,8 +1996,12 @@ func _finish_run(win: bool) -> void:
 		result_title = "ЗАБЫТЫЙ ЛЕС ОЧИЩЕН"
 		result_subtitle = "Ядро усилило Последний Очаг. За тьмой уже видны Мёртвые поля."
 	else:
-		result_title = "ОЧАГ ПОГАС"
-		result_subtitle = "Временные усиления потеряны. Угли и постоянные улучшения остались."
+		if reason == "hero":
+			result_title = "ВЫЛАЗКА ОБОРВАЛАСЬ"
+			result_subtitle = "Ты не вернулся к свету. Угли и постоянные улучшения остались."
+		else:
+			result_title = "ОЧАГ ПОГАС"
+			result_subtitle = "Временные усиления потеряны. Угли и постоянные улучшения остались."
 
 	_save_meta()
 	_stop_joystick()
@@ -2364,7 +2421,8 @@ func _draw_route_gate(pos: Vector2, label: String, color: Color, points_left: bo
 	var tip := pos + dir * 18.0
 	var side := Vector2(-dir.y, dir.x) * 7.0
 	draw_colored_polygon(PackedVector2Array([tip + dir * 7.0, tip - dir * 5.0 + side, tip - dir * 5.0 - side]), color)
-	var text_pos := pos + Vector2(-88, -38)
+	var text_x := clampf(pos.x - 88.0, 8.0, VIEW_SIZE.x - 184.0)
+	var text_pos := Vector2(text_x, pos.y - 38.0)
 	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, 176, 10, Color("#ead9b6"))
 
 
@@ -2390,6 +2448,12 @@ func _draw_route_area_decor() -> void:
 		draw_line(Vector2(340, 235), Vector2(318, 160), Color(0.35, 0.29, 0.21, 0.42), 7.0)
 		draw_line(Vector2(160, 165), Vector2(320, 165), Color(0.40, 0.33, 0.24, 0.46), 7.0)
 		draw_line(Vector2(180, 230), Vector2(300, 180), Color(0.25, 0.22, 0.18, 0.36), 5.0)
+		if not worker_route_complete:
+			var barricade_alpha := 0.58 if enemies.size() > 0 else 0.26
+			draw_line(Vector2(202, 205), Vector2(300, 205), Color(0.48, 0.34, 0.21, barricade_alpha), 8.0)
+			draw_line(Vector2(215, 184), Vector2(285, 224), Color(0.39, 0.28, 0.18, barricade_alpha), 6.0)
+			if enemies.size() > 0:
+				draw_string(font, Vector2(180, 252), "ПРОХОД ЗАБЛОКИРОВАН", HORIZONTAL_ALIGNMENT_CENTER, 144, 9, Color("#c8ad7c"))
 		for p: Vector2 in [Vector2(125, 350), Vector2(360, 390), Vector2(155, 540)]:
 			draw_circle(p, 34.0, Color(0.12, 0.14, 0.13, 0.20))
 			draw_line(p + Vector2(-22, 8), p + Vector2(24, -6), Color(0.36, 0.31, 0.24, 0.25), 4.0)
@@ -2471,8 +2535,8 @@ func _draw_environment_decor() -> void:
 		var pos: Vector2 = item["pos"]
 		var kind := String(item.get("kind", "grass"))
 		var scale := float(item.get("scale", 1.0))
-		var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 18.0
-		var alpha := 0.64 if in_light else 0.035
+		var visibility := _light_visibility(pos)
+		var alpha := lerpf(0.035, 0.64, visibility)
 		if kind == "grass":
 			_draw_centered_texture(TEX_GRASS, pos + Vector2(0, -3), Vector2(20, 16) * scale, Color(0.78, 0.92, 0.76, alpha))
 		elif kind == "pebble":
@@ -3056,6 +3120,8 @@ func _draw_enemy(enemy: Dictionary) -> void:
 	var pos: Vector2 = enemy["pos"]
 	var kind := String(enemy.get("kind", "basic"))
 	var radius := float(enemy.get("radius", 14.0))
+	if area != Area.CAMP and _light_visibility(pos) < 0.12:
+		return
 	var flash := float(enemy.get("hit_flash", 0.0)) > 0.0
 	var body := Color("#70484a")
 	if kind == "fast":
@@ -3234,6 +3300,20 @@ func _nearest_resource_pos(kind: String) -> Vector2:
 	return best_pos
 
 
+func _nearest_enemy_pos() -> Vector2:
+	var best_pos := hero_pos
+	var best_distance := INF
+	for enemy: Dictionary in enemies:
+		if float(enemy.get("hp", 0.0)) <= 0.0:
+			continue
+		var enemy_pos: Vector2 = enemy["pos"]
+		var distance := hero_pos.distance_to(enemy_pos)
+		if distance < best_distance:
+			best_distance = distance
+			best_pos = enemy_pos
+	return best_pos
+
+
 func _guidance_info() -> Dictionary:
 	if stage == Stage.DAY1_GATHER:
 		if carried_wood + carried_stone > 0:
@@ -3253,10 +3333,14 @@ func _guidance_info() -> Dictionary:
 		if area == Area.HUNTER_TRAIL:
 			if day1_route_complete:
 				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			if enemies.size() > 0:
+				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
 			return {"pos": survivor_one_pos, "text": "ОХОТНИК"}
 		if area == Area.SAWMILL:
 			if day1_route_complete:
 				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			if enemies.size() > 0:
+				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
 			return {"pos": Vector2(240, 220), "text": "ЛЕСОПИЛКА"}
 		return {}
 
@@ -3273,9 +3357,11 @@ func _guidance_info() -> Dictionary:
 
 	if stage == Stage.DAY2_RESCUE:
 		if area == Area.CAMP:
-			return {"pos": ROUTE_WORKER_GATE, "text": "СЛЕД К РУИНАМ"}
+			return {}
 		if area == Area.WORKER_RUINS and worker_route_complete:
 			return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+		if area == Area.WORKER_RUINS and enemies.size() > 0:
+			return {"pos": _nearest_enemy_pos(), "text": "СТРАЖИ"}
 		if area == Area.WORKER_RUINS:
 			return {"pos": survivor_two_pos, "text": "РАБОЧИЙ"}
 
@@ -3283,10 +3369,14 @@ func _guidance_info() -> Dictionary:
 		if area == Area.WATCH_RIDGE:
 			if day3_route_complete:
 				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			if enemies.size() > 0:
+				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
 			return {"pos": Vector2(240, 205), "text": "ДОЗОР"}
 		if area == Area.ALTAR_GLADE:
 			if day3_route_complete:
 				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			if enemies.size() > 0:
+				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
 			return {"pos": Vector2(240, 210), "text": "АЛТАРЬ"}
 		return {}
 
@@ -3386,7 +3476,7 @@ func _draw_hud() -> void:
 		_draw_icon_ember(Vector2(387, 22), Color("#d99b50"))
 		draw_string(font, Vector2(400, 27), "%d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 52, 14, Color("#e6c57e"))
 		draw_string(font, Vector2(14, 55), "Карта — новая вылазка. Здания — постоянные улучшения.", HORIZONTAL_ALIGNMENT_LEFT, 410, 10, Color("#98a89c"))
-		draw_string(font, Vector2(430, 55), "v0.9", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
+		draw_string(font, Vector2(430, 55), "v0.10", HORIZONTAL_ALIGNMENT_RIGHT, 38, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
@@ -3414,6 +3504,9 @@ func _draw_hud() -> void:
 	if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]:
 		draw_rect(Rect2(Vector2(14, 70), Vector2(450, 5)), Color("#2b302b"))
 		draw_rect(Rect2(Vector2(14, 70), Vector2(450.0 * clampf(hearth_hp / hearth_max_hp, 0.0, 1.0), 5)), Color("#d18c51"))
+	elif area != Area.CAMP:
+		draw_rect(Rect2(Vector2(14, 70), Vector2(450, 5)), Color("#2b302b"))
+		draw_rect(Rect2(Vector2(14, 70), Vector2(450.0 * clampf(hero_hp / hero_max_hp, 0.0, 1.0), 5)), Color("#b86856"))
 
 
 func _short_objective_text() -> String:
@@ -3428,9 +3521,13 @@ func _short_objective_text() -> String:
 			if area == Area.CAMP and day1_route == "":
 				return "Выбери один путь до наступления темноты"
 			if area == Area.HUNTER_TRAIL and not day1_route_complete:
-				return "Доберись до охотника"
+				if enemies.size() > 0:
+					return "Твари на тропе: %d" % enemies.size()
+				return "Подойди к охотнику"
 			if area == Area.SAWMILL and not sawmill_claimed:
 				return "Запусти старую лесопилку"
+			if area == Area.SAWMILL and enemies.size() > 0:
+				return "Отбей нападение: %d" % enemies.size()
 			if not day1_route_complete:
 				return "Закончи начатое"
 			return "Вернись к Последнему Очагу"
@@ -3443,8 +3540,10 @@ func _short_objective_text() -> String:
 		Stage.DAY2_RESCUE:
 			if area == Area.WORKER_RUINS and worker_route_complete:
 				return "Вернись с рабочим к Очагу"
+			if area == Area.WORKER_RUINS and enemies.size() > 0:
+				return "Стражи у руин: %d" % enemies.size()
 			if area == Area.WORKER_RUINS:
-				return "Освободи рабочего в руинах"
+				return "Подойди к рабочему"
 			return "Иди по следам к старой мастерской"
 		Stage.NIGHT2: return "Защити Очаг от второй волны"
 		Stage.DAY3_TOWER:
@@ -3454,8 +3553,10 @@ func _short_objective_text() -> String:
 				return "Восстанови старый дозор"
 			if area == Area.ALTAR_GLADE and not final_altar_claimed:
 				return "Пробуди древний алтарь"
+			if enemies.size() > 0:
+				return "Переживи нападение: %d" % enemies.size()
 			if not day3_route_complete:
-				return "Переживи последствия выбора"
+				return "Заверши выбранный путь"
 			return "Вернись к Очагу"
 		Stage.EXPEDITION_CHOICE: return "Выбери силу перед последней ночью"
 		Stage.NIGHT3: return "Хранитель идёт за огнём"
