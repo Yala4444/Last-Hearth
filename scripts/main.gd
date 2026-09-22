@@ -1390,7 +1390,7 @@ func _draw_hub() -> void:
 	_draw_hero(hero_pos)
 
 	draw_string(font, Vector2(18, 116), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 300, 22, Color("#f4ead4"))
-	var subtitle := "Забытый лес очищен | новый путь открыт" if bool(meta.get("forest_cleared", false)) else "Соберись у карты и отправляйся в лес"
+	var subtitle := "Мёртвые поля открыты | вдалеке снова виден огонь" if bool(meta.get("forest_cleared", false)) else "Соберись у карты и отправляйся в лес"
 	draw_string(font, Vector2(18, 139), subtitle, HORIZONTAL_ALIGNMENT_LEFT, 440, 12, Color("#9eafa2"))
 
 	var carry_level := int(meta.get("carry_level", 0))
@@ -2360,27 +2360,38 @@ func _draw_flash() -> void:
 
 
 func _draw_result_overlay() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.84))
-	var panel := Rect2(Vector2(30, 224), Vector2(420, 330))
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.86))
+	var panel := Rect2(Vector2(30, 205), Vector2(420, 365))
 	draw_rect(panel, Color("#16231c"))
 	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#d29550") if result_win else Color("#824842"))
 
-	draw_string(font, Vector2(50, 286), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 22, Color("#f4e6ce"))
-	if result_win:
-		draw_string(font, Vector2(62, 329), "Ядро усилило Последний Очаг.", HORIZONTAL_ALIGNMENT_CENTER, 356, 13, Color("#b8c7bb"))
-		draw_string(font, Vector2(62, 349), "За тьмой уже видны Мёртвые поля.", HORIZONTAL_ALIGNMENT_CENTER, 356, 13, Color("#b8c7bb"))
-	else:
-		draw_string(font, Vector2(62, 329), "Огонь погас, но поселение помнит этот поход.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
-		draw_string(font, Vector2(62, 349), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
-	draw_string(font, Vector2(62, 392), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 15, Color("#ecc178"))
+	draw_string(font, Vector2(50, 258), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 21, Color("#f4e6ce"))
 
 	if result_win:
-		draw_string(font, Vector2(62, 434), "Лес отступил. Поселение стало сильнее.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#9eb09f"))
+		# A tiny distant flame is the first visual hook for the next chapter.
+		var distant := Vector2(240, 304)
+		draw_circle(distant, 18.0, Color(0.93, 0.55, 0.22, 0.08))
+		draw_circle(distant, 8.0, Color("#d77e38"))
+		var flame := PackedVector2Array([
+			distant + Vector2(0, -12), distant + Vector2(7, 4),
+			distant + Vector2(0, 10), distant + Vector2(-7, 4)
+		])
+		draw_colored_polygon(flame, Color("#f2b14e"))
+		draw_string(font, Vector2(62, 344), "ГДЕ-ТО ЕЩЁ ГОРИТ ОГОНЬ", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#e7cf9b"))
+		draw_string(font, Vector2(62, 366), "Следующий путь: Мёртвые поля", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#a9b9aa"))
 	else:
-		draw_string(font, Vector2(62, 434), "Новая попытка получит другую расстановку леса и угроз.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
+		draw_string(font, Vector2(62, 320), "Огонь погас, но поселение помнит этот поход.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 342), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
 
-	draw_rect(Rect2(Vector2(93, 480), Vector2(294, 44)), Color("#2a382e"))
-	draw_string(font, Vector2(105, 507), "КОСНИСЬ | ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 12, Color("#f0d7a1"))
+	draw_string(font, Vector2(62, 412), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 15, Color("#ecc178"))
+
+	if result_win:
+		draw_string(font, Vector2(62, 451), "Забытый лес очищен. Поселение стало сильнее.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
+	else:
+		draw_string(font, Vector2(62, 451), "Новая попытка получит другую карту и другие события.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
+
+	draw_rect(Rect2(Vector2(93, 501), Vector2(294, 44)), Color("#2a382e"))
+	draw_string(font, Vector2(105, 528), "КОСНИСЬ | ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 12, Color("#f0d7a1"))
 
 
 func _draw_ellipse_custom(center: Vector2, radii: Vector2, color: Color) -> void:
