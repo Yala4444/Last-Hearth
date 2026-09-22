@@ -396,7 +396,8 @@ func _generate_layout() -> void:
 			"max_hits": 3,
 			"alive": true,
 			"fall_timer": 0.0,
-			"drop_spawned": false
+			"drop_spawned": false,
+			"variant": rng.randi_range(0, 2)
 		})
 
 	for i in range(5):
@@ -1199,10 +1200,13 @@ func _tower_pos() -> Vector2:
 
 func _survivor_day_target(index: int, role: String) -> Vector2:
 	var camp_scale := 1.0 + float(maxi(0, hearth_level - 2)) * 0.08
+	var time := float(Time.get_ticks_msec()) * 0.001
 	if role == "hunter":
-		return HEARTH_POS + Vector2(-118.0, 58.0) * camp_scale
+		var patrol := Vector2(sin(time * 0.55 + float(index)) * 18.0, cos(time * 0.42 + float(index)) * 10.0)
+		return HEARTH_POS + Vector2(-118.0, 58.0) * camp_scale + patrol
 	if role == "worker":
-		return _workshop_pos() + Vector2(18, 20) if workshop_built else HEARTH_POS + Vector2(112.0, 72.0) * camp_scale
+		var work_shift := Vector2(sin(time * 0.8 + float(index)) * 8.0, cos(time * 0.6) * 5.0)
+		return (_workshop_pos() + Vector2(18, 20) + work_shift) if workshop_built else HEARTH_POS + Vector2(112.0, 72.0) * camp_scale
 
 	var guard_slots: Array[Vector2] = [
 		Vector2(122, -78), Vector2(142, 30), Vector2(88, 118),
@@ -1836,23 +1840,51 @@ func _draw_expedition() -> void:
 
 
 func _draw_map_variant_decor() -> void:
-	if map_variant == 1:
-		# A faded road cuts through the map.
-		for i in range(8):
-			var y := 190.0 + float(i) * 72.0
-			draw_line(Vector2(185, y), Vector2(295, y + 8), Color(0.30, 0.28, 0.22, 0.22), 10.0)
-			draw_line(Vector2(190, y), Vector2(290, y + 7), Color(0.39, 0.35, 0.27, 0.13), 3.0)
+	if map_variant == 0:
+		# Quiet clearing: open ground with a faint circular animal trail.
+		draw_arc(HEARTH_POS, 178.0, 0.2, TAU - 0.35, 72, Color(0.28, 0.32, 0.24, 0.13), 6.0)
+
+	elif map_variant == 1:
+		# Ruined road: a broad, broken lane runs across the entire map.
+		var road_left := PackedVector2Array([
+			Vector2(162, 110), Vector2(185, 245), Vector2(171, 390),
+			Vector2(198, 535), Vector2(188, 760)
+		])
+		var road_right := PackedVector2Array([
+			Vector2(292, 110), Vector2(315, 245), Vector2(300, 390),
+			Vector2(327, 535), Vector2(318, 760)
+		])
+		for i in range(road_left.size() - 1):
+			draw_line(road_left[i], road_left[i + 1], Color(0.30, 0.28, 0.22, 0.24), 18.0)
+			draw_line(road_right[i], road_right[i + 1], Color(0.30, 0.28, 0.22, 0.24), 18.0)
+			var middle_a := (road_left[i] + road_right[i]) * 0.5
+			var middle_b := (road_left[i + 1] + road_right[i + 1]) * 0.5
+			draw_line(middle_a, middle_b, Color(0.39, 0.35, 0.27, 0.09), 42.0)
+		for y in range(175, 735, 105):
+			draw_line(Vector2(205, y), Vector2(270, y + 6), Color(0.43, 0.36, 0.25, 0.16), 3.0)
+
 	elif map_variant == 2:
-		# Quarry scars and stone shelves.
-		for p: Vector2 in [Vector2(92, 270), Vector2(385, 285), Vector2(104, 610), Vector2(365, 620)]:
-			draw_arc(p, 28.0, 0.2, 2.8, 18, Color(0.38, 0.41, 0.39, 0.22), 3.0)
-			draw_line(p + Vector2(-18, 10), p + Vector2(18, 4), Color(0.31, 0.34, 0.33, 0.18), 3.0)
+		# Stone hollow: shelves, quarry scars and darker exposed ground.
+		for p: Vector2 in [Vector2(86, 255), Vector2(394, 270), Vector2(98, 608), Vector2(374, 626)]:
+			draw_circle(p, 52.0, Color(0.15, 0.19, 0.17, 0.22))
+			draw_arc(p, 38.0, 0.10, 3.02, 24, Color(0.42, 0.45, 0.42, 0.25), 5.0)
+			draw_line(p + Vector2(-29, 12), p + Vector2(28, 4), Color(0.31, 0.34, 0.33, 0.21), 4.0)
+		draw_line(Vector2(65, 448), Vector2(158, 426), Color(0.32, 0.35, 0.33, 0.17), 8.0)
+		draw_line(Vector2(323, 448), Vector2(430, 430), Color(0.32, 0.35, 0.33, 0.17), 8.0)
+
 	elif map_variant == 3:
-		# Burnt homestead: ash, broken fence and charred ground.
-		for p: Vector2 in [Vector2(98, 330), Vector2(380, 342), Vector2(118, 600)]:
-			draw_circle(p, 34.0, Color(0.08, 0.075, 0.065, 0.22))
-		draw_line(Vector2(50, 305), Vector2(145, 320), Color(0.29, 0.22, 0.16, 0.45), 4.0)
-		draw_line(Vector2(335, 305), Vector2(430, 320), Color(0.29, 0.22, 0.16, 0.45), 4.0)
+		# Burnt homestead: large ash patches, broken fences and charred beams.
+		for p: Vector2 in [Vector2(102, 300), Vector2(380, 330), Vector2(118, 602), Vector2(350, 655)]:
+			draw_circle(p, 48.0, Color(0.07, 0.06, 0.055, 0.29))
+			draw_circle(p + Vector2(10, -6), 26.0, Color(0.11, 0.085, 0.065, 0.20))
+		for segment in [
+			[Vector2(42, 294), Vector2(148, 318)],
+			[Vector2(332, 300), Vector2(444, 322)],
+			[Vector2(55, 605), Vector2(151, 574)]
+		]:
+			draw_line(segment[0], segment[1], Color(0.29, 0.22, 0.16, 0.52), 5.0)
+			var mid: Vector2 = (segment[0] + segment[1]) * 0.5
+			draw_line(mid + Vector2(0, -14), mid + Vector2(0, 15), Color(0.24, 0.18, 0.13, 0.46), 4.0)
 
 
 func _draw_environment_decor() -> void:
@@ -2010,14 +2042,26 @@ func _draw_ruined_shelter(pos: Vector2, color: Color) -> void:
 
 
 func _draw_night_edge_eyes(alpha: float) -> void:
-	if twilight_timer > 0.0:
+	if twilight_timer > 0.0 or active_night_sides.is_empty():
 		return
-	var positions := [Vector2(34, 210), Vector2(445, 300), Vector2(52, 690), Vector2(432, 650)]
-	for i in range(positions.size()):
-		var p: Vector2 = positions[i]
-		var pulse := 0.35 + 0.25 * sin(Time.get_ticks_msec() * 0.004 + float(i))
-		draw_circle(p + Vector2(-4, 0), 1.7, Color(0.94, 0.60, 0.24, alpha * pulse))
-		draw_circle(p + Vector2(4, 0), 1.7, Color(0.94, 0.60, 0.24, alpha * pulse))
+
+	var side_positions := {
+		0: [Vector2(176, 112), Vector2(302, 112)],
+		1: [Vector2(452, 318), Vector2(452, 584)],
+		2: [Vector2(178, 750), Vector2(316, 750)],
+		3: [Vector2(28, 326), Vector2(28, 606)]
+	}
+
+	for side_variant: Variant in active_night_sides:
+		var side := int(side_variant)
+		if not side_positions.has(side):
+			continue
+		var positions: Array = side_positions[side]
+		for j in range(positions.size()):
+			var p: Vector2 = positions[j]
+			var pulse := 0.30 + 0.30 * sin(Time.get_ticks_msec() * 0.004 + float(side) + float(j) * 0.9)
+			draw_circle(p + Vector2(-4, 0), 1.8, Color(0.94, 0.60, 0.24, alpha * pulse))
+			draw_circle(p + Vector2(4, 0), 1.8, Color(0.94, 0.60, 0.24, alpha * pulse))
 
 
 func _draw_ground_texture(color: Color, spacing: int) -> void:
@@ -2089,14 +2133,26 @@ func _draw_resource(node: Dictionary) -> void:
 	var visibility := _light_visibility(pos)
 
 	if kind == "tree":
+		var variant := int(node.get("variant", 0))
 		var trunk := _lit_world_color(Color("#563822"), pos)
 		var crown := _lit_world_color(Color("#285233"), pos)
 		var crown_light := _lit_world_color(Color("#32633b"), pos)
 		if alive:
-			draw_rect(Rect2(pos + Vector2(-5, 8), Vector2(10, 26)), trunk)
-			draw_circle(pos, 22.0, crown)
-			draw_circle(pos + Vector2(-14, 4), 14.0, crown_light)
-			draw_circle(pos + Vector2(14, 4), 14.0, crown_light)
+			var trunk_height := 26.0 + float(variant) * 3.0
+			draw_rect(Rect2(pos + Vector2(-5, 8), Vector2(10, trunk_height)), trunk)
+			if variant == 0:
+				draw_circle(pos, 22.0, crown)
+				draw_circle(pos + Vector2(-14, 4), 14.0, crown_light)
+				draw_circle(pos + Vector2(14, 4), 14.0, crown_light)
+			elif variant == 1:
+				draw_circle(pos + Vector2(0, -5), 20.0, crown)
+				draw_circle(pos + Vector2(-12, 6), 16.0, crown_light)
+				draw_circle(pos + Vector2(13, 7), 15.0, crown)
+			else:
+				draw_circle(pos + Vector2(0, -8), 17.0, crown_light)
+				draw_circle(pos + Vector2(-13, 2), 15.0, crown)
+				draw_circle(pos + Vector2(13, 2), 15.0, crown)
+				draw_circle(pos + Vector2(0, 8), 16.0, crown_light)
 			if visibility > 0.35:
 				var toward_fire := (HEARTH_POS - pos).normalized()
 				draw_arc(pos + toward_fire * 5.0, 20.0, -2.4, -0.65, 12, Color(0.95, 0.64, 0.28, 0.12 * visibility), 2.0)
