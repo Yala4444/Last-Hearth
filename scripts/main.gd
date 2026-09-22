@@ -44,7 +44,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 6,
+	"build_version": 7,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -90,6 +90,18 @@ var events: Array[Dictionary] = []
 var story_hint := ""
 var story_hint_timer := 0.0
 var stage_transition_lock := false
+var hub_feedback_text := ""
+var hub_feedback_pos := Vector2.ZERO
+var hub_feedback_timer := 0.0
+var region_map_open := false
+var dawn_timer := 0.0
+var dawn_pending := 0
+var boss_delay_timer := 0.0
+var boss_announced := false
+var active_night_sides: Array[int] = []
+var enemy_deaths: Array[Dictionary] = []
+var current_stage_wood_start := 0
+var current_stage_stone_start := 0
 
 var resource_nodes: Array[Dictionary] = []
 var resource_pickups: Array[Dictionary] = []
@@ -151,7 +163,9 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	banner_timer = maxf(0.0, banner_timer - delta)
 	story_hint_timer = maxf(0.0, story_hint_timer - delta)
+	hub_feedback_timer = maxf(0.0, hub_feedback_timer - delta)
 	flash_timer = maxf(0.0, flash_timer - delta)
+	_update_enemy_deaths(delta)
 	hero_shot_cd = maxf(0.0, hero_shot_cd - delta)
 	gather_cd = maxf(0.0, gather_cd - delta)
 	pickup_cd = maxf(0.0, pickup_cd - delta)
@@ -186,11 +200,11 @@ func _load_meta() -> void:
 		for key: Variant in saved.keys():
 			meta[key] = saved[key]
 
-	# v0.6 changes progression, layouts and onboarding substantially.
-	# Existing testers get one fresh expedition without losing permanent upgrades.
+	# v0.7 changes resource pacing, events and world presentation.
+	# Existing testers get a fresh expedition without losing permanent upgrades.
 	var loaded_version := int(meta.get("build_version", 0))
-	if loaded_version < 6:
-		meta["build_version"] = 6
+	if loaded_version < 7:
+		meta["build_version"] = 7
 		meta["first_run"] = true
 
 
@@ -214,6 +228,9 @@ func _enter_hub(message: String = "") -> void:
 	core_active = false
 	core_carried = false
 	hub_zone_lock = ""
+	region_map_open = false
+	hub_feedback_text = ""
+	hub_feedback_timer = 0.0
 	if message != "":
 		_banner(message, 2.4)
 
@@ -262,6 +279,17 @@ func _start_expedition() -> void:
 	story_hint = ""
 	story_hint_timer = 0.0
 	stage_transition_lock = false
+	hub_feedback_text = ""
+	hub_feedback_timer = 0.0
+	region_map_open = false
+	dawn_timer = 0.0
+	dawn_pending = 0
+	boss_delay_timer = 0.0
+	boss_announced = false
+	active_night_sides.clear()
+	enemy_deaths.clear()
+	current_stage_wood_start = 0
+	current_stage_stone_start = 0
 
 	enemies.clear()
 	shots.clear()
@@ -569,8 +597,9 @@ func _update_expedition(delta: float) -> void:
 	_deposit_resources_if_close(delta)
 	_update_resource_gathering()
 	_update_resource_pickups(delta)
-	_update_world_events()
+	_update_world_events(delta)
 	_update_survivor_agents(delta)
+	_keep_hero_out_of_hearth()
 
 	if enemies.size() > 0:
 		_update_combat()
@@ -605,10 +634,49 @@ func _update_expedition(delta: float) -> void:
 		_finish_run(false)
 
 
+func _gathering_enabled() -> bool:
+	return stage in [Stage.DAY1_GATHER, Stage.DAY2_BUILD, Stage.DAY3_TOWER]
+
+
+func _resource_kind_needed(kind: String) -> bool:
+	if stage == Stage.DAY1_GATHER:
+		return kind == "tree" and camp_wood < 5
+	if stage == Stage.DAY2_BUILD:
+		if kind == "tree":
+			return camp_wood < current_stage_wood_start + 8
+		return camp_stone < current_stage_stone_start + 5
+	if stage == Stage.DAY3_TOWER:
+		if kind == "tree":
+			return camp_wood < current_stage_wood_start + 6
+		return camp_stone < current_stage_stone_start + 6
+	return false
+
+
 func _update_resource_gathering() -> void:
-	if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3, Stage.CORE_RETURN]:
+	if not _gathering_enabled():
 		return
 	if gather_cd > 0.0:
+		return
+
+	# Black Tree is an actual chopping interaction, not a touch-trigger.
+	for e in range(events.size()):
+		var event: Dictionary = events[e]
+		if String(event.get("kind", "")) != "black_tree" or bool(event.get("triggered", false)):
+			continue
+		var event_pos: Vector2 = event["pos"]
+		if event_pos.distance_to(HEARTH_POS) > light_radius - 8.0:
+			continue
+		if hero_pos.distance_to(event_pos) > HERO_INTERACT_RADIUS:
+			continue
+		var hits_left := int(event.get("hits", 5)) - 1
+		event["hits"] = hits_left
+		event["progress"] = 1.0 - float(maxi(0, hits_left)) / 5.0
+		events[e] = event
+		gather_cd = gather_interval * 1.12
+		_burst(event_pos, 5)
+		camera_shake = maxf(camera_shake, 0.8)
+		if hits_left <= 0:
+			_complete_black_tree_event(e)
 		return
 
 	for i in range(resource_nodes.size()):
@@ -620,7 +688,7 @@ func _update_resource_gathering() -> void:
 			continue
 
 		var kind := String(node.get("kind", "tree"))
-		if stage in [Stage.DAY1_GATHER, Stage.DAY1_RESCUE] and kind != "tree":
+		if not _resource_kind_needed(kind):
 			continue
 
 		var hits := int(node.get("hits", 1)) - 1
@@ -769,30 +837,36 @@ func _check_day_progress() -> void:
 		hearth_hp = hearth_max_hp
 		light_radius = 225.0
 		stage = Stage.DAY1_RESCUE
+		current_stage_wood_start = camp_wood
+		current_stage_stone_start = camp_stone
 		flash_timer = 0.75
 		hearth_pulse = 1.0
 		camera_shake = 4.0
 		_banner("ОЧАГ II | свет открыл новую часть леса", 2.4)
 		stage_transition_lock = false
 
-	elif stage == Stage.DAY2_BUILD and camp_wood >= 8 and camp_stone >= 5:
+	elif stage == Stage.DAY2_BUILD and camp_wood >= current_stage_wood_start + 8 and camp_stone >= current_stage_stone_start + 5:
 		stage_transition_lock = true
 		camp_wood -= 8
 		camp_stone -= 5
 		workshop_built = true
 		stage = Stage.WORKSHOP_CHOICE
+		current_stage_wood_start = camp_wood
+		current_stage_stone_start = camp_stone
 		light_radius = 255.0
 		flash_timer = 0.55
 		camera_shake = 2.0
 		_banner("Мастерская восстановлена | выбери специализацию", 2.2)
 		stage_transition_lock = false
 
-	elif stage == Stage.DAY3_TOWER and camp_wood >= 6 and camp_stone >= 6:
+	elif stage == Stage.DAY3_TOWER and camp_wood >= current_stage_wood_start + 6 and camp_stone >= current_stage_stone_start + 6:
 		stage_transition_lock = true
 		camp_wood -= 6
 		camp_stone -= 6
 		tower_built = true
 		stage = Stage.EXPEDITION_CHOICE
+		current_stage_wood_start = camp_wood
+		current_stage_stone_start = camp_stone
 		light_radius = 300.0
 		flash_timer = 0.65
 		camera_shake = 2.8
@@ -896,6 +970,8 @@ func _complete_night_one() -> void:
 	hearth_hp = hearth_max_hp
 	light_radius = 250.0
 	stage = Stage.DAY2_BUILD
+	current_stage_wood_start = camp_wood
+	current_stage_stone_start = camp_stone
 	flash_timer = 0.45
 	_story("Охотник: Ночью их будет больше. Днём восстановим мастерскую.", 3.4)
 
@@ -907,6 +983,8 @@ func _complete_night_two() -> void:
 	hearth_hp = hearth_max_hp
 	light_radius = 285.0
 	stage = Stage.DAY3_TOWER
+	current_stage_wood_start = camp_wood
+	current_stage_stone_start = camp_stone
 	flash_timer = 0.45
 	_story("Рабочий: Башня ещё стоит. Если укрепим её, она переживёт ночь.", 3.5)
 
@@ -1037,6 +1115,16 @@ func _update_survivor_agents(delta: float) -> void:
 	survivors = 1 + survivor_agents.size()
 
 
+func _keep_hero_out_of_hearth() -> void:
+	var diff := hero_pos - HEARTH_POS
+	var min_radius := 58.0 + float(maxi(0, hearth_level - 2)) * 3.0
+	if diff.length() < min_radius:
+		if diff.length() < 0.01:
+			diff = Vector2(0, 1)
+		hero_pos = HEARTH_POS + diff.normalized() * min_radius
+		hero_target = hero_pos
+
+
 func _update_combat() -> void:
 	if hero_shot_cd <= 0.0:
 		var targets: Array[int] = _nearest_enemy_indices(hero_pos, 285.0, 1)
@@ -1158,6 +1246,13 @@ func _update_enemies(delta: float) -> void:
 func _on_enemy_killed(enemy: Dictionary) -> void:
 	var pos: Vector2 = enemy["pos"]
 	var kind := String(enemy.get("kind", "basic"))
+	enemy_deaths.append({
+		"pos": pos,
+		"kind": kind,
+		"radius": float(enemy.get("radius", 14.0)),
+		"life": 0.34,
+		"max_life": 0.34
+	})
 	_burst(pos, 10 if kind != "boss" else 34)
 	if kind == "elite":
 		camera_shake = maxf(camera_shake, 3.0)
@@ -1215,6 +1310,16 @@ func _finish_run(win: bool) -> void:
 	_stop_joystick()
 
 
+func _update_enemy_deaths(delta: float) -> void:
+	for i in range(enemy_deaths.size() - 1, -1, -1):
+		var death: Dictionary = enemy_deaths[i]
+		var life := float(death.get("life", 0.0)) - delta
+		death["life"] = life
+		enemy_deaths[i] = death
+		if life <= 0.0:
+			enemy_deaths.remove_at(i)
+
+
 func _update_particles(delta: float) -> void:
 	for i in range(particles.size() - 1, -1, -1):
 		var p: Dictionary = particles[i]
@@ -1262,7 +1367,12 @@ func _burst(pos: Vector2, count: int) -> void:
 func _story(text: String, duration: float = 3.0) -> void:
 	story_hint = text
 	story_hint_timer = duration
-	_banner(text, duration)
+
+
+func _hub_feedback(text: String, pos: Vector2, duration: float = 1.8) -> void:
+	hub_feedback_text = text
+	hub_feedback_pos = pos
+	hub_feedback_timer = duration
 
 
 func _banner(text: String, duration: float = 1.8) -> void:
@@ -2259,7 +2369,7 @@ func _draw_hud() -> void:
 		_draw_icon_ember(Vector2(387, 22), Color("#d99b50"))
 		draw_string(font, Vector2(400, 27), "%d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 52, 14, Color("#e6c57e"))
 		draw_string(font, Vector2(14, 55), "Карта — новая вылазка. Здания — постоянные улучшения.", HORIZONTAL_ALIGNMENT_LEFT, 410, 10, Color("#98a89c"))
-		draw_string(font, Vector2(430, 55), "v0.6", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
+		draw_string(font, Vector2(430, 55), "v0.7", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
