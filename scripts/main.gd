@@ -1559,14 +1559,14 @@ func _complete_night_one() -> void:
 func _complete_night_two() -> void:
 	run_embers += 2
 	hearth_level = 4
-	hearth_max_hp = 215.0
+	hearth_max_hp = maxf(215.0, hearth_max_hp + 12.0)
 	hearth_hp = hearth_max_hp
 	light_radius = 285.0
 	stage = Stage.DAY3_TOWER
-	current_stage_wood_start = camp_wood
-	current_stage_stone_start = camp_stone
+	day3_route = ""
+	day3_route_complete = false
 	flash_timer = 0.45
-	_story("Рабочий: Башня ещё стоит. Если укрепим её, она переживёт ночь.", 3.5)
+	_story("РАССВЕТ\nПоследняя ночь близко. Можно успеть только к дозору или к древнему алтарю.", 4.0)
 
 
 func _spawn_enemy(kind: String) -> void:
@@ -2296,7 +2296,7 @@ func _draw_expedition() -> void:
 		_draw_workshop()
 	if area == Area.CAMP and tower_built:
 		_draw_tower()
-	if stage in [Stage.DAY1_RESCUE, Stage.DAY2_RESCUE]:
+	if stage in [Stage.DAY1_RESCUE, Stage.DAY2_RESCUE, Stage.DAY3_TOWER]:
 		_draw_day1_route_navigation()
 
 	for enemy: Dictionary in enemies:
@@ -2337,6 +2337,12 @@ func _draw_day1_route_navigation() -> void:
 			_draw_route_gate(ROUTE_WORKER_GATE, "СЛЕД К РУИНАМ", Color("#b3a177"), false)
 		elif area == Area.WORKER_RUINS and worker_route_complete:
 			_draw_route_gate(ROUTE_RETURN_GATE, "ВЕРНУТЬСЯ С РАБОЧИМ", Color("#e0bc73"), false)
+	elif stage == Stage.DAY3_TOWER:
+		if area == Area.CAMP and day3_route == "":
+			_draw_route_gate(ROUTE_WATCH_GATE, "СЛОМАННЫЙ ДОЗОР", Color("#7f98a0"), true)
+			_draw_route_gate(ROUTE_ALTAR_GATE, "ДРЕВНИЙ АЛТАРЬ", Color("#c07a52"), false)
+		elif area in [Area.WATCH_RIDGE, Area.ALTAR_GLADE] and day3_route_complete:
+			_draw_route_gate(ROUTE_RETURN_GATE, "ПОСЛЕДНЯЯ НОЧЬ ЖДЁТ", Color("#e0bc73"), false)
 
 
 func _draw_route_gate(pos: Vector2, label: String, color: Color, points_left: bool) -> void:
@@ -2377,6 +2383,19 @@ func _draw_route_area_decor() -> void:
 		for p: Vector2 in [Vector2(125, 350), Vector2(360, 390), Vector2(155, 540)]:
 			draw_circle(p, 34.0, Color(0.12, 0.14, 0.13, 0.20))
 			draw_line(p + Vector2(-22, 8), p + Vector2(24, -6), Color(0.36, 0.31, 0.24, 0.25), 4.0)
+	elif area == Area.WATCH_RIDGE:
+		for p: Vector2 in [Vector2(105, 250), Vector2(375, 275), Vector2(130, 540), Vector2(350, 560)]:
+			draw_circle(p, 46.0, Color(0.10, 0.13, 0.13, 0.23))
+		draw_line(Vector2(212, 250), Vector2(228, 152), Color(0.35, 0.28, 0.20, 0.45), 7.0)
+		draw_line(Vector2(270, 250), Vector2(255, 154), Color(0.35, 0.28, 0.20, 0.45), 7.0)
+		draw_line(Vector2(215, 168), Vector2(270, 180), Color(0.42, 0.33, 0.22, 0.48), 7.0)
+	elif area == Area.ALTAR_GLADE:
+		draw_circle(Vector2(240, 215), 82.0, Color(0.15, 0.12, 0.10, 0.28))
+		for i in range(10):
+			var a := TAU * float(i) / 10.0
+			var p := Vector2(240, 215) + Vector2(cos(a), sin(a)) * 58.0
+			draw_circle(p, 5.0, Color(0.34, 0.34, 0.30, 0.46))
+		draw_line(Vector2(150, 420), Vector2(330, 420), Color(0.30, 0.23, 0.18, 0.18), 5.0)
 
 
 func _draw_explorer_lantern() -> void:
@@ -2494,6 +2513,10 @@ func _draw_world_events() -> void:
 				_draw_event_whisper(pos, alpha, triggered)
 			"sawmill":
 				_draw_event_sawmill(pos, alpha, triggered)
+			"watch_repair":
+				_draw_event_broken_watch(pos, alpha, triggered)
+			"final_altar":
+				_draw_event_altar(pos, alpha, triggered)
 
 		if not triggered:
 			var progress := 0.0
@@ -3251,12 +3274,15 @@ func _guidance_info() -> Dictionary:
 			return {"pos": survivor_two_pos, "text": "РАБОЧИЙ"}
 
 	if stage == Stage.DAY3_TOWER:
-		if carried_wood + carried_stone > 0:
-			return {"pos": HEARTH_POS, "text": "НЕСИ В ЗАПАС"}
-		if camp_wood < current_stage_wood_start + 6:
-			return {"pos": _nearest_resource_pos("wood"), "text": "НУЖНО ДЕРЕВО"}
-		if camp_stone < current_stage_stone_start + 6:
-			return {"pos": _nearest_resource_pos("stone"), "text": "НУЖЕН КАМЕНЬ"}
+		if area == Area.WATCH_RIDGE:
+			if day3_route_complete:
+				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			return {"pos": Vector2(240, 205), "text": "ДОЗОР"}
+		if area == Area.ALTAR_GLADE:
+			if day3_route_complete:
+				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			return {"pos": Vector2(240, 210), "text": "АЛТАРЬ"}
+		return {}
 
 	if stage == Stage.EXPEDITION_CHOICE:
 		return {"pos": (left_choice_pos + right_choice_pos) * 0.5, "text": "ВЫБЕРИ СИЛУ"}
@@ -3416,9 +3442,15 @@ func _short_objective_text() -> String:
 			return "Иди по следам к старой мастерской"
 		Stage.NIGHT2: return "Защити Очаг от второй волны"
 		Stage.DAY3_TOWER:
-			if carried_wood + carried_stone > 0:
-				return "Верни ресурсы в запас лагеря"
-			return "Собери ресурсы для дозорной башни"
+			if area == Area.CAMP and day3_route == "":
+				return "Выбери последнюю подготовку"
+			if area == Area.WATCH_RIDGE and not watch_repair_started:
+				return "Восстанови старый дозор"
+			if area == Area.ALTAR_GLADE and not final_altar_claimed:
+				return "Пробуди древний алтарь"
+			if not day3_route_complete:
+				return "Переживи последствия выбора"
+			return "Вернись к Очагу"
 		Stage.EXPEDITION_CHOICE: return "Выбери силу перед последней ночью"
 		Stage.NIGHT3: return "Хранитель идёт за огнём"
 		Stage.CORE_RETURN: return "Верни ядро Хранителя в Очаг"
@@ -3439,7 +3471,10 @@ func _stage_title() -> String:
 			if area == Area.WORKER_RUINS: return "ДЕНЬ 2 | руины мастерской"
 			return "ДЕНЬ 2 | след к руинам"
 		Stage.NIGHT2: return "НОЧЬ 2"
-		Stage.DAY3_TOWER: return "ДЕНЬ 3 | построй башню"
+		Stage.DAY3_TOWER:
+			if area == Area.WATCH_RIDGE: return "ДЕНЬ 3 | сломанный дозор"
+			if area == Area.ALTAR_GLADE: return "ДЕНЬ 3 | древний алтарь"
+			return "ДЕНЬ 3 | последний выбор"
 		Stage.EXPEDITION_CHOICE: return "ДЕНЬ 3 | древний алтарь"
 		Stage.NIGHT3: return "НОЧЬ 3 | хранитель идёт"
 		Stage.CORE_RETURN: return "ПОСЛЕ БОЯ | ядро хранителя"
