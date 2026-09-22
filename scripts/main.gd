@@ -532,7 +532,7 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["carry_level"] = level + 1
 			_save_meta()
-			_banner("Склад улучшен · перенос +1", 2.0)
+			_banner("Склад улучшен | перенос +1", 2.0)
 		else:
 			_banner("Для склада нужно %d углей" % cost, 1.7)
 
@@ -544,7 +544,7 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["damage_level"] = level + 1
 			_save_meta()
-			_banner("Кузница усилена · урон +10%", 2.0)
+			_banner("Кузница усилена | урон +10%", 2.0)
 		else:
 			_banner("Для кузницы нужно %d углей" % cost, 1.7)
 
@@ -560,7 +560,7 @@ func _update_hub_interactions() -> void:
 			_save_meta()
 			hearth_pulse = 1.0
 			camera_shake = 2.0
-			_banner("Сердце Очагa усилено · больше света и прочности", 2.3)
+			_banner("Сердце Очагa усилено | больше света и прочности", 2.3)
 		else:
 			_banner("Для Очагa нужно %d углей" % cost, 1.7)
 
@@ -806,14 +806,14 @@ func _update_workshop_choice() -> void:
 		hero_damage *= 1.28
 		stage = Stage.DAY2_RESCUE
 		_spawn_rescue_guards()
-		_banner("Оружейник · урон +28%", 2.0)
+		_banner("Оружейник | урон +28%", 2.0)
 	elif hero_pos.distance_to(right_choice_pos) < 48.0:
 		workshop_choice = "lumber"
 		carry_limit += 2
 		gather_interval = 0.30
 		stage = Stage.DAY2_RESCUE
 		_spawn_rescue_guards()
-		_banner("Лесопилка · перенос +2", 2.0)
+		_banner("Лесопилка | перенос +2", 2.0)
 
 
 func _spawn_rescue_guards() -> void:
@@ -831,7 +831,7 @@ func _update_expedition_choice() -> void:
 	elif hero_pos.distance_to(right_choice_pos) < 50.0:
 		expedition_choice = "damage"
 		hero_damage *= 1.60
-		_banner("Огненная метка · урон +60%", 2.0)
+		_banner("Огненная метка | урон +60%", 2.0)
 		_start_night(3)
 
 
@@ -847,13 +847,13 @@ func _start_night(number: int) -> void:
 		for i in range(8):
 			night_queue.append("basic")
 		night_queue.append("guard")
-		_banner("СУМЕРКИ · охотник занимает позицию", 2.5)
+		_banner("СУМЕРКИ | охотник занимает позицию", 2.5)
 	elif number == 2:
 		stage = Stage.NIGHT2
 		for i in range(9):
 			night_queue.append("fast" if i % 3 == 2 else "basic")
 		night_queue.append("elite")
-		_banner("СУМЕРКИ · вернись к свету", 2.5)
+		_banner("СУМЕРКИ | вернись к свету", 2.5)
 	else:
 		stage = Stage.NIGHT3
 		for i in range(12):
@@ -869,7 +869,7 @@ func _update_night_spawner(delta: float) -> void:
 	if twilight_timer > 0.0:
 		twilight_timer = maxf(0.0, twilight_timer - delta)
 		if twilight_timer <= 0.0:
-			_banner("НОЧЬ %d · защити Последний Очаг" % current_night, 2.0)
+			_banner("НОЧЬ %d | защити Последний Очаг" % current_night, 2.0)
 			camera_shake = 1.5
 		return
 
@@ -1176,14 +1176,14 @@ func _on_enemy_killed(enemy: Dictionary) -> void:
 		enemies.clear()
 		shots.clear()
 		flash_timer = 0.7
-		_banner("Хранитель пал · забери его ядро", 2.6)
+		_banner("Хранитель пал | забери его ядро", 2.6)
 
 
 func _update_core_return() -> void:
 	if core_active and not core_carried and hero_pos.distance_to(core_pos) < 38.0:
 		core_carried = true
 		core_active = false
-		_banner("Ядро у тебя · неси к очагу", 1.8)
+		_banner("Ядро у тебя | неси к очагу", 1.8)
 
 	if core_carried and hero_pos.distance_to(HEARTH_POS) < 68.0:
 		core_carried = false
@@ -1390,7 +1390,7 @@ func _draw_hub() -> void:
 	_draw_hero(hero_pos)
 
 	draw_string(font, Vector2(18, 116), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 300, 22, Color("#f4ead4"))
-	var subtitle := "Забытый лес очищен · новый путь открыт" if bool(meta.get("forest_cleared", false)) else "Соберись у карты и отправляйся в лес"
+	var subtitle := "Забытый лес очищен | новый путь открыт" if bool(meta.get("forest_cleared", false)) else "Соберись у карты и отправляйся в лес"
 	draw_string(font, Vector2(18, 139), subtitle, HORIZONTAL_ALIGNMENT_LEFT, 440, 12, Color("#9eafa2"))
 
 	var carry_level := int(meta.get("carry_level", 0))
@@ -1495,8 +1495,8 @@ func _draw_expedition() -> void:
 	if stage == Stage.DAY2_RESCUE and not survivor_two_found:
 		_draw_survivor(survivor_two_pos, "!")
 	if stage == Stage.WORKSHOP_CHOICE:
-		_draw_choice_shrine(left_choice_pos, "ОРУЖЕЙНАЯ · +28% УРОН", Color("#a85949"))
-		_draw_choice_shrine(right_choice_pos, "ЛЕСОПИЛКА · +2 ГРУЗ", Color("#567e58"))
+		_draw_choice_shrine(left_choice_pos, "ОРУЖЕЙНАЯ | +28% УРОН", Color("#a85949"))
+		_draw_choice_shrine(right_choice_pos, "ЛЕСОПИЛКА | +2 ГРУЗ", Color("#567e58"))
 	if stage == Stage.EXPEDITION_CHOICE:
 		_draw_choice_shrine(left_choice_pos, "ДВА БОЙЦА", Color("#6688a0"))
 		_draw_choice_shrine(right_choice_pos, "ОГНЕННЫЕ СТРЕЛЫ", Color("#b75e45"))
@@ -2084,46 +2084,77 @@ func _draw_world_progress() -> void:
 	elif stage == Stage.DAY2_BUILD:
 		var pos := HEARTH_POS + Vector2(-112, -48)
 		draw_string(font, pos + Vector2(-78, -55), "МАСТЕРСКАЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
-		draw_string(font, pos + Vector2(-78, -40), "дерево %d/8  ·  камень %d/5" % [mini(camp_wood, 8), mini(camp_stone, 5)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
+		draw_string(font, pos + Vector2(-78, -40), "дерево %d/8  |  камень %d/5" % [mini(camp_wood, 8), mini(camp_stone, 5)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
 	elif stage == Stage.DAY3_TOWER:
 		var pos := HEARTH_POS + Vector2(104, -39)
 		draw_string(font, pos + Vector2(-78, -62), "ДОЗОРНАЯ БАШНЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
-		draw_string(font, pos + Vector2(-78, -47), "дерево %d/6  ·  камень %d/6" % [mini(camp_wood, 6), mini(camp_stone, 6)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
+		draw_string(font, pos + Vector2(-78, -47), "дерево %d/6  |  камень %d/6" % [mini(camp_wood, 6), mini(camp_stone, 6)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
+
+
+func _nearest_resource_pos(kind: String) -> Vector2:
+	var best_pos := HEARTH_POS
+	var best_distance := INF
+	for node: Dictionary in resource_nodes:
+		if not bool(node.get("alive", false)):
+			continue
+		var node_kind := String(node.get("kind", "tree"))
+		if kind == "wood" and node_kind != "tree":
+			continue
+		if kind == "stone" and node_kind != "rock":
+			continue
+		var d := hero_pos.distance_to(node["pos"])
+		if d < best_distance:
+			best_distance = d
+			best_pos = node["pos"]
+	return best_pos
 
 
 func _guidance_info() -> Dictionary:
 	if stage == Stage.DAY1_GATHER:
 		if carried_wood + carried_stone > 0:
-			return {"pos": HEARTH_POS, "text": "ОТНЕСИ К ОЧАГУ"}
+			return {"pos": HEARTH_POS, "text": "ВЕРНИСЬ К ОЧАГУ"}
 		if resource_pickups.size() > 0:
-			var best := resource_pickups[0]
+			var best: Dictionary = resource_pickups[0]
 			var best_d := hero_pos.distance_to(best["pos"])
 			for pickup: Dictionary in resource_pickups:
 				var d := hero_pos.distance_to(pickup["pos"])
 				if d < best_d:
 					best = pickup
 					best_d = d
-			return {"pos": best["pos"], "text": "ПОДБЕРИ"}
-		var found := false
-		var best_pos := HEARTH_POS
-		var best_d := INF
-		for node: Dictionary in resource_nodes:
-			if not bool(node.get("alive", false)) or String(node.get("kind", "")) != "tree":
-				continue
-			var d := hero_pos.distance_to(node["pos"])
-			if d < best_d:
-				best_pos = node["pos"]
-				best_d = d
-				found = true
-		if found:
-			return {"pos": best_pos, "text": "СРУБИ ДЕРЕВО"}
-	elif stage == Stage.DAY1_RESCUE and not survivor_one_found:
+			return {"pos": best["pos"], "text": "ПОДБЕРИ БРЁВНА"}
+		return {"pos": _nearest_resource_pos("wood"), "text": "СРУБИ ДЕРЕВО"}
+
+	if stage == Stage.DAY1_RESCUE and not survivor_one_found:
 		return {"pos": survivor_one_pos, "text": "ВЫЖИВШИЙ"}
-	elif stage == Stage.DAY2_RESCUE and not survivor_two_found:
-		return {"pos": survivor_two_pos, "text": "ОСВОБОДИ"}
-	elif stage == Stage.CORE_RETURN:
+
+	if stage == Stage.DAY2_BUILD:
+		if carried_wood + carried_stone > 0:
+			return {"pos": HEARTH_POS, "text": "НЕСИ В ЗАПАС"}
+		if camp_wood < 8:
+			return {"pos": _nearest_resource_pos("wood"), "text": "НУЖНО ДЕРЕВО"}
+		if camp_stone < 5:
+			return {"pos": _nearest_resource_pos("stone"), "text": "НУЖЕН КАМЕНЬ"}
+
+	if stage == Stage.WORKSHOP_CHOICE:
+		return {"pos": (left_choice_pos + right_choice_pos) * 0.5, "text": "ВЫБЕРИ ПОСТРОЙКУ"}
+
+	if stage == Stage.DAY2_RESCUE and not survivor_two_found:
+		return {"pos": survivor_two_pos, "text": "ОСВОБОДИ РАБОЧЕГО"}
+
+	if stage == Stage.DAY3_TOWER:
+		if carried_wood + carried_stone > 0:
+			return {"pos": HEARTH_POS, "text": "НЕСИ В ЗАПАС"}
+		if camp_wood < 6:
+			return {"pos": _nearest_resource_pos("wood"), "text": "НУЖНО ДЕРЕВО"}
+		if camp_stone < 6:
+			return {"pos": _nearest_resource_pos("stone"), "text": "НУЖЕН КАМЕНЬ"}
+
+	if stage == Stage.EXPEDITION_CHOICE:
+		return {"pos": (left_choice_pos + right_choice_pos) * 0.5, "text": "ВЫБЕРИ СИЛУ"}
+
+	if stage == Stage.CORE_RETURN:
 		if core_carried:
-			return {"pos": HEARTH_POS, "text": "НЕСИ ЯДРО"}
+			return {"pos": HEARTH_POS, "text": "НЕСИ ЯДРО К ОГНЮ"}
 		if core_active:
 			return {"pos": core_pos, "text": "ЗАБЕРИ ЯДРО"}
 	return {}
@@ -2141,7 +2172,7 @@ func _draw_guidance_marker() -> void:
 		Vector2(pos.x, marker_y + 10), Vector2(pos.x - 7, marker_y), Vector2(pos.x + 7, marker_y)
 	])
 	draw_colored_polygon(tri, Color("#f1c979"))
-	draw_string(font, Vector2(pos.x - 70, marker_y - 8), label, HORIZONTAL_ALIGNMENT_CENTER, 140, 10, Color("#f0dfbd"))
+	draw_string(font, Vector2(pos.x - 76, marker_y - 8), label, HORIZONTAL_ALIGNMENT_CENTER, 152, 10, Color("#f0dfbd"))
 
 
 func _draw_particles() -> void:
@@ -2160,14 +2191,50 @@ func _draw_floaters() -> void:
 		draw_string(font, pos + Vector2(-55, 0), String(f.get("text", "")), HORIZONTAL_ALIGNMENT_CENTER, 110, 12, color)
 
 
+func _draw_icon_people(pos: Vector2, color: Color) -> void:
+	draw_circle(pos + Vector2(0, -4), 3.5, color)
+	draw_line(pos + Vector2(0, 0), pos + Vector2(0, 8), color, 3.0)
+	draw_line(pos + Vector2(-5, 3), pos + Vector2(5, 3), color, 2.2)
+
+
+func _draw_icon_ember(pos: Vector2, color: Color) -> void:
+	var pts := PackedVector2Array([
+		pos + Vector2(0, -7), pos + Vector2(6, 1),
+		pos + Vector2(0, 8), pos + Vector2(-6, 1)
+	])
+	draw_colored_polygon(pts, color)
+	draw_circle(pos + Vector2(0, 1), 2.2, Color("#ffe0a0"))
+
+
+func _draw_icon_log(pos: Vector2, color: Color) -> void:
+	draw_line(pos + Vector2(-7, 0), pos + Vector2(7, 0), color, 5.0, true)
+	draw_circle(pos + Vector2(-7, 0), 2.4, Color("#d29a62"))
+	draw_circle(pos + Vector2(7, 0), 2.4, Color("#d29a62"))
+
+
+func _draw_icon_stone(pos: Vector2, color: Color) -> void:
+	var pts := PackedVector2Array([
+		pos + Vector2(-6, 4), pos + Vector2(-4, -5), pos + Vector2(4, -7),
+		pos + Vector2(7, 1), pos + Vector2(3, 6), pos + Vector2(-4, 7)
+	])
+	draw_colored_polygon(pts, color)
+
+
+func _draw_icon_cargo(pos: Vector2, color: Color) -> void:
+	draw_rect(Rect2(pos + Vector2(-6, -5), Vector2(12, 11)), Color(color.r, color.g, color.b, 0.20))
+	draw_line(pos + Vector2(-6, -5), pos + Vector2(6, -5), color, 2.0)
+	draw_line(pos + Vector2(-6, 6), pos + Vector2(6, 6), color, 2.0)
+
+
 func _draw_hud() -> void:
-	draw_rect(Rect2(Vector2(0, 0), Vector2(480, 82)), Color(0.025, 0.04, 0.032, 0.90))
+	draw_rect(Rect2(Vector2(0, 0), Vector2(480, 82)), Color(0.025, 0.04, 0.032, 0.92))
 
 	if mode == Mode.HUB:
-		draw_string(font, Vector2(14, 28), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 235, 17, Color("#f0e4cd"))
-		draw_string(font, Vector2(310, 28), "УГЛИ  %d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_RIGHT, 150, 14, Color("#e6c57e"))
-		draw_string(font, Vector2(14, 55), "Подойди к зданию — действие произойдёт в мире", HORIZONTAL_ALIGNMENT_LEFT, 410, 11, Color("#98a89c"))
-		draw_string(font, Vector2(430, 55), "v0.5", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
+		draw_string(font, Vector2(14, 28), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 245, 17, Color("#f0e4cd"))
+		_draw_icon_ember(Vector2(387, 22), Color("#d99b50"))
+		draw_string(font, Vector2(400, 27), "%d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 52, 14, Color("#e6c57e"))
+		draw_string(font, Vector2(14, 55), "Карта — новая вылазка. Здания — постоянные улучшения.", HORIZONTAL_ALIGNMENT_LEFT, 410, 10, Color("#98a89c"))
+		draw_string(font, Vector2(430, 55), "v0.6", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
@@ -2175,13 +2242,22 @@ func _draw_hud() -> void:
 
 	var stage_title := _stage_title()
 	var short_goal := _short_objective_text()
-	draw_string(font, Vector2(14, 27), stage_title, HORIZONTAL_ALIGNMENT_LEFT, 292, 15, Color("#f1e7d2"))
-	draw_string(font, Vector2(328, 27), "ЛЮДИ %d" % survivors, HORIZONTAL_ALIGNMENT_LEFT, 72, 12, Color("#d8cfba"))
-	draw_string(font, Vector2(408, 27), "УГЛИ %d" % run_embers, HORIZONTAL_ALIGNMENT_LEFT, 58, 11, Color("#efc071"))
+	draw_string(font, Vector2(14, 27), stage_title, HORIZONTAL_ALIGNMENT_LEFT, 270, 15, Color("#f1e7d2"))
 
+	_draw_icon_people(Vector2(302, 22), Color("#c9c0aa"))
+	draw_string(font, Vector2(313, 27), "%d" % survivors, HORIZONTAL_ALIGNMENT_LEFT, 38, 12, Color("#d8cfba"))
+	_draw_icon_ember(Vector2(375, 22), Color("#d99b50"))
+	draw_string(font, Vector2(387, 27), "%d" % run_embers, HORIZONTAL_ALIGNMENT_LEFT, 32, 12, Color("#efc071"))
+
+	draw_string(font, Vector2(14, 56), short_goal, HORIZONTAL_ALIGNMENT_LEFT, 252, 11, Color("#aebcaf"))
+
+	_draw_icon_log(Vector2(286, 52), Color("#9f6b3c"))
+	draw_string(font, Vector2(298, 56), "%d" % camp_wood, HORIZONTAL_ALIGNMENT_LEFT, 30, 11, Color("#d6c19a"))
+	_draw_icon_stone(Vector2(342, 52), Color("#8f9996"))
+	draw_string(font, Vector2(354, 56), "%d" % camp_stone, HORIZONTAL_ALIGNMENT_LEFT, 30, 11, Color("#ccd0ca"))
+	_draw_icon_cargo(Vector2(403, 52), Color("#b6a57f"))
 	var cargo := carried_wood + carried_stone
-	draw_string(font, Vector2(14, 56), short_goal, HORIZONTAL_ALIGNMENT_LEFT, 320, 11, Color("#aebcaf"))
-	draw_string(font, Vector2(351, 56), "ГРУЗ %d/%d" % [cargo, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 112, 11, Color("#d9c39a"))
+	draw_string(font, Vector2(415, 56), "%d/%d" % [cargo, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 52, 11, Color("#d9c39a"))
 
 	if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]:
 		draw_rect(Rect2(Vector2(14, 70), Vector2(450, 5)), Color("#2b302b"))
@@ -2190,33 +2266,44 @@ func _draw_hud() -> void:
 
 func _short_objective_text() -> String:
 	match stage:
-		Stage.DAY1_GATHER: return "Сруби дерево → подбери брёвна → вернись к огню"
-		Stage.DAY1_RESCUE: return "Свет открыл выжившего"
-		Stage.NIGHT1: return "Держись у света"
-		Stage.DAY2_BUILD: return "Восстанови мастерскую"
-		Stage.WORKSHOP_CHOICE: return "Выбери одну постройку"
+		Stage.DAY1_GATHER:
+			if carried_wood > 0:
+				return "Вернись к Очагу"
+			if resource_pickups.size() > 0:
+				return "Подбери брёвна"
+			return "Сруби ближайшее дерево"
+		Stage.DAY1_RESCUE: return "Подойди к найденному выжившему"
+		Stage.NIGHT1: return "Защити огонь"
+		Stage.DAY2_BUILD:
+			if carried_wood + carried_stone > 0:
+				return "Верни ресурсы в запас лагеря"
+			return "Собери ресурсы для мастерской"
+		Stage.WORKSHOP_CHOICE: return "Выбери развитие мастерской"
 		Stage.DAY2_RESCUE: return "Освободи рабочего"
-		Stage.NIGHT2: return "Береги Очаг от быстрых"
-		Stage.DAY3_TOWER: return "Построй дозорную башню"
+		Stage.NIGHT2: return "Защити Очаг от второй волны"
+		Stage.DAY3_TOWER:
+			if carried_wood + carried_stone > 0:
+				return "Верни ресурсы в запас лагеря"
+			return "Собери ресурсы для дозорной башни"
 		Stage.EXPEDITION_CHOICE: return "Выбери силу перед последней ночью"
-		Stage.NIGHT3: return "Хранитель уже близко"
-		Stage.CORE_RETURN: return "Верни ядро в Очаг"
+		Stage.NIGHT3: return "Хранитель идёт за огнём"
+		Stage.CORE_RETURN: return "Верни ядро Хранителя в Очаг"
 	return ""
 
 
 func _stage_title() -> String:
 	match stage:
-		Stage.DAY1_GATHER: return "ДЕНЬ 1 · разожги очаг"
-		Stage.DAY1_RESCUE: return "ДЕНЬ 1 · найден выживший"
+		Stage.DAY1_GATHER: return "ДЕНЬ 1 | разожги очаг"
+		Stage.DAY1_RESCUE: return "ДЕНЬ 1 | найден выживший"
 		Stage.NIGHT1: return "НОЧЬ 1"
-		Stage.DAY2_BUILD: return "ДЕНЬ 2 · восстанови мастерскую"
-		Stage.WORKSHOP_CHOICE: return "ДЕНЬ 2 · выбери развитие"
-		Stage.DAY2_RESCUE: return "ДЕНЬ 2 · освободи рабочего"
+		Stage.DAY2_BUILD: return "ДЕНЬ 2 | восстанови мастерскую"
+		Stage.WORKSHOP_CHOICE: return "ДЕНЬ 2 | выбери развитие"
+		Stage.DAY2_RESCUE: return "ДЕНЬ 2 | освободи рабочего"
 		Stage.NIGHT2: return "НОЧЬ 2"
-		Stage.DAY3_TOWER: return "ДЕНЬ 3 · построй башню"
-		Stage.EXPEDITION_CHOICE: return "ДЕНЬ 3 · древний алтарь"
-		Stage.NIGHT3: return "НОЧЬ 3 · хранитель идёт"
-		Stage.CORE_RETURN: return "ПОСЛЕ БОЯ · ядро хранителя"
+		Stage.DAY3_TOWER: return "ДЕНЬ 3 | построй башню"
+		Stage.EXPEDITION_CHOICE: return "ДЕНЬ 3 | древний алтарь"
+		Stage.NIGHT3: return "НОЧЬ 3 | хранитель идёт"
+		Stage.CORE_RETURN: return "ПОСЛЕ БОЯ | ядро хранителя"
 	return ""
 
 
@@ -2293,7 +2380,7 @@ func _draw_result_overlay() -> void:
 		draw_string(font, Vector2(62, 434), "Новая попытка получит другую расстановку леса и угроз.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
 
 	draw_rect(Rect2(Vector2(93, 480), Vector2(294, 44)), Color("#2a382e"))
-	draw_string(font, Vector2(105, 507), "КОСНИСЬ · ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 12, Color("#f0d7a1"))
+	draw_string(font, Vector2(105, 507), "КОСНИСЬ | ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 12, Color("#f0d7a1"))
 
 
 func _draw_ellipse_custom(center: Vector2, radii: Vector2, color: Color) -> void:
