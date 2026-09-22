@@ -135,6 +135,8 @@ var night_spawn_cd := 0.0
 var twilight_timer := 0.0
 var camera_shake := 0.0
 var hearth_pulse := 0.0
+var light_display_radius := 165.0
+var upgrade_wave := 0.0
 var decor_points: Array[Dictionary] = []
 
 var survivor_one_pos := Vector2.ZERO
@@ -190,6 +192,8 @@ func _process(delta: float) -> void:
 	tower_cd = maxf(0.0, tower_cd - delta)
 	camera_shake = maxf(0.0, camera_shake - delta * 8.0)
 	hearth_pulse = maxf(0.0, hearth_pulse - delta * 2.5)
+	upgrade_wave = maxf(0.0, upgrade_wave - delta * 0.72)
+	light_display_radius = lerpf(light_display_radius, light_radius, 1.0 - exp(-delta * 2.8))
 	_update_resource_flights(delta)
 
 	if mode == Mode.HUB:
@@ -261,7 +265,10 @@ func _start_expedition() -> void:
 	run_seed = rng.randi()
 	rng.seed = run_seed
 
-	hero_pos = Vector2(rng.randf_range(175.0, 305.0), rng.randf_range(640.0, 700.0))
+	if int(meta.get("attempts", 1)) <= 1:
+		hero_pos = Vector2(240.0, 688.0)
+	else:
+		hero_pos = Vector2(rng.randf_range(175.0, 305.0), rng.randf_range(640.0, 700.0))
 	hero_target = hero_pos
 	hero_walk_phase = 0.0
 	hero_facing = Vector2(1.0, 0.0)
@@ -283,6 +290,8 @@ func _start_expedition() -> void:
 	hearth_max_hp = 150.0 + float(permanent_hearth) * 18.0
 	hearth_hp = hearth_max_hp
 	light_radius = 165.0 + float(permanent_hearth) * 8.0
+	light_display_radius = light_radius
+	upgrade_wave = 0.0
 	workshop_built = false
 	workshop_choice = ""
 	tower_built = false
@@ -401,7 +410,22 @@ func _generate_layout() -> void:
 			_add_event("broken_watch", Vector2(110, 615))
 			_add_event("whisper", Vector2(390, 225))
 
-	for i in range(9):
+	var tree_count := 9
+	if int(meta.get("attempts", 1)) <= 1 and map_variant == 0:
+		resource_nodes.append({
+			"kind": "tree",
+			"pos": Vector2(240.0, 590.0),
+			"hits": 3,
+			"max_hits": 3,
+			"alive": true,
+			"fall_timer": 0.0,
+			"drop_spawned": false,
+			"variant": 1,
+			"hit_flash": 0.0
+		})
+		tree_count = 8
+
+	for i in range(tree_count):
 		var index: int = rng.randi_range(0, tree_slots.size() - 1)
 		var base: Vector2 = tree_slots[index]
 		tree_slots.remove_at(index)
@@ -414,7 +438,8 @@ func _generate_layout() -> void:
 			"alive": true,
 			"fall_timer": 0.0,
 			"drop_spawned": false,
-			"variant": rng.randi_range(0, 2)
+			"variant": rng.randi_range(0, 2),
+			"hit_flash": 0.0
 		})
 
 	for i in range(5):
@@ -429,7 +454,8 @@ func _generate_layout() -> void:
 			"max_hits": 4,
 			"alive": true,
 			"fall_timer": 0.0,
-			"drop_spawned": false
+			"drop_spawned": false,
+			"hit_flash": 0.0
 		})
 
 	for i in range(56):
@@ -751,6 +777,12 @@ func _resource_kind_needed(kind: String) -> bool:
 
 
 func _update_resource_gathering() -> void:
+	for i in range(resource_nodes.size()):
+		var feedback_node: Dictionary = resource_nodes[i]
+		var hit_flash := maxf(0.0, float(feedback_node.get("hit_flash", 0.0)) - get_process_delta_time() * 5.5)
+		feedback_node["hit_flash"] = hit_flash
+		resource_nodes[i] = feedback_node
+
 	if not _gathering_enabled():
 		return
 	if gather_cd > 0.0:
@@ -791,8 +823,9 @@ func _update_resource_gathering() -> void:
 
 		var hits := int(node.get("hits", 1)) - 1
 		node["hits"] = hits
+		node["hit_flash"] = 1.0
 		gather_cd = gather_interval
-		_burst(node_pos, 5)
+		_burst_typed(node_pos, 6, "wood" if kind == "tree" else "stone")
 
 		if hits > 0:
 			camera_shake = maxf(camera_shake, 0.7)
@@ -800,8 +833,8 @@ func _update_resource_gathering() -> void:
 			node["alive"] = false
 			node["fall_timer"] = 0.34 if kind == "tree" else 0.16
 			node["drop_spawned"] = false
-			_burst(node_pos, 14)
-			camera_shake = maxf(camera_shake, 2.2 if kind == "tree" else 1.6)
+			_burst_typed(node_pos, 16 if kind == "tree" else 10, "wood" if kind == "tree" else "stone")
+			camera_shake = maxf(camera_shake, 3.2 if kind == "tree" else 1.8)
 
 		resource_nodes[i] = node
 		break
@@ -951,7 +984,9 @@ func _check_day_progress() -> void:
 		current_stage_stone_start = camp_stone
 		flash_timer = 0.75
 		hearth_pulse = 1.0
-		camera_shake = 4.0
+		upgrade_wave = 1.0
+		camera_shake = 4.8
+		_burst_typed(HEARTH_POS, 24, "ember")
 		_banner("ОЧАГ II | свет открыл новую часть леса", 2.4)
 		stage_transition_lock = false
 
@@ -1547,13 +1582,32 @@ func _float_text(pos: Vector2, text: String, color: Color) -> void:
 
 
 func _burst(pos: Vector2, count: int) -> void:
+	_burst_typed(pos, count, "ember")
+
+
+func _burst_typed(pos: Vector2, count: int, kind: String) -> void:
 	for i in range(count):
 		var angle := rng.randf_range(0.0, TAU)
-		var speed := rng.randf_range(35.0, 115.0)
+		var speed := rng.randf_range(34.0, 118.0)
+		var life := rng.randf_range(0.30, 0.72)
+		if kind == "wood":
+			angle = rng.randf_range(-2.85, -0.30)
+			speed = rng.randf_range(45.0, 125.0)
+			life = rng.randf_range(0.25, 0.55)
+		elif kind == "stone":
+			speed = rng.randf_range(25.0, 72.0)
+			life = rng.randf_range(0.22, 0.46)
+		elif kind == "ember":
+			angle = rng.randf_range(-2.75, -0.40)
+			speed = rng.randf_range(28.0, 78.0)
+			life = rng.randf_range(0.38, 0.85)
 		particles.append({
 			"pos": pos,
 			"vel": Vector2(cos(angle), sin(angle)) * speed,
-			"life": rng.randf_range(0.3, 0.7)
+			"life": life,
+			"max_life": life,
+			"kind": kind,
+			"size": rng.randf_range(1.8, 3.7)
 		})
 
 
@@ -1806,7 +1860,7 @@ func _draw_expedition() -> void:
 	_draw_ground_texture(Color("#213529").lerp(Color("#13201a"), night_mix), 64)
 	_draw_map_variant_decor()
 	_draw_environment_decor()
-	_draw_light_field(HEARTH_POS, light_radius)
+	_draw_light_field(HEARTH_POS, light_display_radius)
 	_draw_world_events()
 
 	for node: Dictionary in resource_nodes:
@@ -1817,8 +1871,12 @@ func _draw_expedition() -> void:
 
 	_draw_revealed_landmarks()
 
-	if stage == Stage.DAY1_RESCUE and not survivor_one_found and _light_visibility(survivor_one_pos) > 0.72:
-		_draw_survivor(survivor_one_pos, "?")
+	if stage == Stage.DAY1_RESCUE and not survivor_one_found:
+		var survivor_visibility := _light_visibility(survivor_one_pos)
+		if survivor_visibility > 0.72:
+			_draw_survivor(survivor_one_pos, "?")
+		elif survivor_visibility > 0.18:
+			_draw_survivor_silhouette(survivor_one_pos, survivor_visibility)
 	if stage == Stage.DAY2_RESCUE and not survivor_two_found and _light_visibility(survivor_two_pos) > 0.72:
 		_draw_survivor(survivor_two_pos, "!")
 	if stage == Stage.WORKSHOP_CHOICE:
@@ -2092,15 +2150,18 @@ func _draw_ground_texture(color: Color, spacing: int) -> void:
 	for y in range(140, 790, spacing):
 		for x in range(20, 470, spacing):
 			var offset := float((x * 13 + y * 7) % 17)
-			draw_circle(Vector2(float(x) + offset, float(y)), 2.0, color)
+			var p := Vector2(float(x) + offset, float(y))
+			draw_circle(p, 2.0, color)
+			if int((x + y) / spacing) % 3 == 0:
+				draw_circle(p + Vector2(9, 7), 7.0, Color(0.07, 0.12, 0.09, 0.055))
 
 
 func _light_visibility(pos: Vector2) -> float:
 	if mode == Mode.HUB:
 		return 1.0
 	var distance := pos.distance_to(HEARTH_POS)
-	var full_radius := maxf(60.0, light_radius - 34.0)
-	var edge_radius := light_radius + 6.0
+	var full_radius := maxf(60.0, light_display_radius - 34.0)
+	var edge_radius := light_display_radius + 6.0
 	if distance <= full_radius:
 		return 1.0
 	if distance >= edge_radius:
@@ -2111,7 +2172,7 @@ func _light_visibility(pos: Vector2) -> float:
 func _lit_world_color(base: Color, pos: Vector2, alpha_scale: float = 1.0) -> Color:
 	var visibility := _light_visibility(pos)
 	var distance := pos.distance_to(HEARTH_POS)
-	var warmth := clampf(1.0 - distance / maxf(1.0, light_radius), 0.0, 1.0)
+	var warmth := clampf(1.0 - distance / maxf(1.0, light_display_radius), 0.0, 1.0)
 	var warm := base.lerp(Color("#f2b86a"), warmth * 0.14)
 	var cold := Color(warm.r * 0.54, warm.g * 0.66, warm.b * 0.72, warm.a)
 	var result := cold.lerp(warm, visibility)
@@ -2150,6 +2211,13 @@ func _draw_light_field(center: Vector2, radius: float) -> void:
 	draw_circle(center, effective_radius * 0.15, Color(1.0, 0.67, 0.27, 0.030 + hearth_pulse * 0.016))
 
 
+func _draw_survivor_silhouette(pos: Vector2, visibility: float) -> void:
+	var a := clampf((visibility - 0.18) / 0.54, 0.0, 1.0) * 0.45
+	draw_circle(pos + Vector2(0, -14), 7.0, Color(0.05, 0.07, 0.065, a))
+	draw_rect(Rect2(pos + Vector2(-8, -7), Vector2(16, 24)), Color(0.05, 0.07, 0.065, a))
+	draw_circle(pos, 24.0, Color(0.92, 0.65, 0.28, 0.018 * a))
+
+
 func _draw_resource(node: Dictionary) -> void:
 	var pos: Vector2 = node["pos"]
 	var alive := bool(node.get("alive", false))
@@ -2165,8 +2233,12 @@ func _draw_resource(node: Dictionary) -> void:
 				tree_tex = TEX_TREE_B
 			elif variant == 2:
 				tree_tex = TEX_TREE_C
+			var hit_flash := float(node.get("hit_flash", 0.0))
 			var sway := sin(Time.get_ticks_msec() * 0.0012 + pos.x * 0.013) * 0.7
-			var tree_size := Vector2(78, 86)
+			if hit_flash > 0.0:
+				sway += sin(Time.get_ticks_msec() * 0.065) * 3.2 * hit_flash
+				modulate = modulate.lerp(Color(1.0, 0.86, 0.58, modulate.a), hit_flash * 0.34)
+			var tree_size := Vector2(78, 86) * (1.0 + hit_flash * 0.018)
 			_draw_centered_texture(tree_tex, pos + Vector2(sway, -22), tree_size, modulate)
 
 			if gather_cd > 0.0 and hero_pos.distance_to(pos) <= HERO_INTERACT_RADIUS + 4.0:
@@ -2216,7 +2288,8 @@ func _draw_resource_flights() -> void:
 
 
 func _draw_hearth(pos: Vector2, level: int) -> void:
-	var pulse := 1.0 + hearth_pulse * 0.08 + sin(Time.get_ticks_msec() * 0.0065) * 0.018
+	var time := float(Time.get_ticks_msec()) * 0.001
+	var pulse := 1.0 + hearth_pulse * 0.08 + sin(time * 6.5) * 0.018
 	var glow_alpha := 0.045 + hearth_pulse * 0.040
 	var ring_radius := 34.0 + float(level) * 3.5
 	draw_circle(pos, 58.0 * pulse + float(level) * 5.0, Color(1.0, 0.50, 0.12, glow_alpha))
@@ -2267,6 +2340,24 @@ func _draw_hearth(pos: Vector2, level: int) -> void:
 		draw_arc(pos, ring_radius + 22.0, -2.8, -0.35, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
 		draw_arc(pos, ring_radius + 22.0, 0.35, 2.8, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
 
+	# Smoke, sparks and a short expanding wave make the first upgrade a real payoff.
+	var smoke_strength := 0.11 if level <= 1 else 0.16
+	for i in range(3):
+		var phase := time * (0.38 + float(i) * 0.07) + float(i) * 2.1
+		var smoke_pos := pos + Vector2(sin(phase) * (4.0 + float(i) * 2.0), -38.0 - fmod(time * (10.0 + float(i) * 2.0) + float(i) * 17.0, 38.0))
+		var smoke_alpha := smoke_strength * (1.0 - float(i) * 0.18)
+		draw_circle(smoke_pos, 6.0 + float(i) * 1.7, Color(0.40, 0.43, 0.39, smoke_alpha))
+	for i in range(4):
+		var spark_phase := time * (1.4 + float(i) * 0.12) + float(i) * 1.7
+		var spark_y := fmod(time * (18.0 + float(i) * 3.0) + float(i) * 13.0, 46.0)
+		var spark_pos := pos + Vector2(sin(spark_phase) * 12.0, -22.0 - spark_y)
+		draw_circle(spark_pos, 1.4 + float(i % 2), Color(1.0, 0.70, 0.28, 0.55))
+
+	if upgrade_wave > 0.0:
+		var wave_t := 1.0 - upgrade_wave
+		var wave_radius := 58.0 + wave_t * 155.0
+		draw_arc(pos, wave_radius, 0.0, TAU, 64, Color(1.0, 0.68, 0.28, upgrade_wave * 0.38), 3.0)
+
 	draw_string(font, pos + Vector2(-55, 70), "ОЧАГ %d" % level, HORIZONTAL_ALIGNMENT_CENTER, 110, 12, Color("#eadfc8"))
 
 
@@ -2278,7 +2369,7 @@ func _draw_centered_texture(texture: Texture2D, pos: Vector2, size: Vector2, mod
 func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
 	var visibility := maxf(minimum_visibility, _light_visibility(pos))
 	var distance := pos.distance_to(HEARTH_POS)
-	var warmth := clampf(1.0 - distance / maxf(1.0, light_radius), 0.0, 1.0)
+	var warmth := clampf(1.0 - distance / maxf(1.0, light_display_radius), 0.0, 1.0)
 	var base := Color(0.60, 0.68, 0.70, visibility)
 	var warm := Color(1.0, 0.91, 0.75, visibility)
 	return base.lerp(warm, warmth * 0.58)
@@ -2691,8 +2782,19 @@ func _draw_guidance_marker() -> void:
 func _draw_particles() -> void:
 	for p: Dictionary in particles:
 		var pos: Vector2 = p["pos"]
-		var life := clampf(float(p.get("life", 0.0)), 0.0, 1.0)
-		draw_circle(pos, 3.0, Color(0.95, 0.74, 0.36, life))
+		var max_life := maxf(0.01, float(p.get("max_life", 0.6)))
+		var life := clampf(float(p.get("life", 0.0)) / max_life, 0.0, 1.0)
+		var kind := String(p.get("kind", "ember"))
+		var size := float(p.get("size", 2.6))
+		if kind == "wood":
+			var vel: Vector2 = p.get("vel", Vector2.RIGHT)
+			var dir := vel.normalized() if vel.length() > 0.1 else Vector2.RIGHT
+			draw_line(pos - dir * size, pos + dir * size, Color(0.73, 0.43, 0.21, life), 2.0)
+		elif kind == "stone":
+			draw_circle(pos, size * 0.72, Color(0.50, 0.55, 0.53, life * 0.85))
+		else:
+			draw_circle(pos, size, Color(1.0, 0.66, 0.24, life))
+			draw_circle(pos, size * 0.42, Color(1.0, 0.91, 0.60, life))
 
 
 func _draw_floaters() -> void:
