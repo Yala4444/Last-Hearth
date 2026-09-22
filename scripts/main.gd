@@ -337,6 +337,7 @@ func _generate_layout() -> void:
 			]
 			_add_event("dead_camp", Vector2(92, 205))
 			_add_event("altar", Vector2(392, 610))
+			_add_event("tracks", Vector2(350, 315))
 		1:
 			map_variant_name = "Разорённая дорога"
 			tree_slots = [
@@ -350,6 +351,7 @@ func _generate_layout() -> void:
 			]
 			_add_event("wagon", Vector2(95, 315))
 			_add_event("wounded", Vector2(386, 330))
+			_add_event("broken_watch", Vector2(372, 585))
 		2:
 			map_variant_name = "Каменная низина"
 			tree_slots = [
@@ -363,6 +365,8 @@ func _generate_layout() -> void:
 			]
 			_add_event("altar", Vector2(98, 520))
 			_add_event("black_tree", Vector2(390, 535))
+			_add_event("tracks", Vector2(105, 645))
+			_add_event("whisper", Vector2(398, 230))
 		_:
 			map_variant_name = "Сгоревшая усадьба"
 			tree_slots = [
@@ -377,6 +381,8 @@ func _generate_layout() -> void:
 			_add_event("dead_camp", Vector2(105, 345))
 			_add_event("wagon", Vector2(382, 345))
 			_add_event("wounded", Vector2(390, 610))
+			_add_event("broken_watch", Vector2(110, 615))
+			_add_event("whisper", Vector2(390, 225))
 
 	for i in range(9):
 		var index: int = rng.randi_range(0, tree_slots.size() - 1)
@@ -446,30 +452,73 @@ func _generate_layout() -> void:
 
 
 func _add_event(kind: String, pos: Vector2) -> void:
+	var required := 1.25
+	if kind == "altar":
+		required = 1.65
+	elif kind == "wounded":
+		required = 1.45
+	elif kind == "dead_camp":
+		required = 1.35
+	elif kind == "tracks":
+		required = 1.05
+	elif kind == "broken_watch":
+		required = 1.55
+	elif kind == "whisper":
+		required = 1.10
 	events.append({
 		"kind": kind,
 		"pos": pos,
 		"triggered": false,
-		"outcome": ""
+		"outcome": "",
+		"progress": 0.0,
+		"required": required,
+		"hits": 5
 	})
 
 
-func _update_world_events() -> void:
-	if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3, Stage.CORE_RETURN]:
-		return
+func _event_is_visible(pos: Vector2) -> bool:
+	return pos.distance_to(HEARTH_POS) <= light_radius - 6.0
 
+
+func _update_world_events(delta: float) -> void:
 	for i in range(events.size()):
 		var event: Dictionary = events[i]
 		if bool(event.get("triggered", false)):
 			continue
-		var pos: Vector2 = event["pos"]
-		if pos.distance_to(HEARTH_POS) > light_radius + 30.0:
-			continue
-		if hero_pos.distance_to(pos) > 42.0:
-			continue
 
 		var kind := String(event.get("kind", ""))
+		var pos: Vector2 = event["pos"]
+
+		if kind == "black_tree":
+			continue
+
+		if kind == "whisper":
+			if not (stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3] and twilight_timer > 0.0):
+				continue
+		else:
+			if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3, Stage.CORE_RETURN]:
+				continue
+
+		if not _event_is_visible(pos):
+			continue
+
+		var distance := hero_pos.distance_to(pos)
+		var progress := float(event.get("progress", 0.0))
+		var required := float(event.get("required", 1.25))
+
+		if distance <= 44.0 and enemies.is_empty():
+			progress += delta
+		else:
+			progress = maxf(0.0, progress - delta * 0.65)
+
+		event["progress"] = progress
+		events[i] = event
+
+		if progress < required:
+			continue
+
 		event["triggered"] = true
+		event["progress"] = required
 
 		match kind:
 			"wagon":
@@ -477,45 +526,79 @@ func _update_world_events() -> void:
 					camp_wood += 2
 					camp_stone += 1
 					event["outcome"] = "loot"
-					_story("Брошенная телега: внутри осталось немного припасов.", 2.8)
+					_story("БРОШЕННАЯ ТЕЛЕГА
+Под досками нашлись дерево и камень.", 3.0)
 				else:
 					event["outcome"] = "ambush"
-					_spawn_enemy_at("guard", pos + Vector2(-28, 14))
-					_spawn_enemy_at("guard", pos + Vector2(30, -12))
-					_story("Телега была приманкой. Из темноты вышли двое.", 2.8)
+					_spawn_enemy_at("guard", pos + Vector2(-34, 12))
+					_spawn_enemy_at("guard", pos + Vector2(34, -10))
+					_story("БРОШЕННАЯ ТЕЛЕГА
+Следы были слишком свежими. Засада.", 3.0)
 			"wounded":
 				run_embers += 1
 				event["outcome"] = "helped"
-				_story("Раненый странник: Они идут за светом... Береги огонь.", 3.2)
+				_story("РАНЕНЫЙ СТРАННИК
+«Они идут за светом... Береги огонь.»", 3.2)
 			"altar":
 				if rng.randf() < 0.5:
 					hero_damage *= 1.12
 					event["outcome"] = "damage"
-					_story("Старый алтарь отозвался. Оружие стало сильнее.", 2.8)
+					_story("СТАРЫЙ АЛТАРЬ
+Пламя коснулось оружия. Урон выше.", 3.0)
 				else:
 					carry_limit += 1
 					event["outcome"] = "carry"
-					_story("Старый алтарь отозвался. Ты можешь нести больше.", 2.8)
-			"black_tree":
-				event["outcome"] = "opened"
-				for j in range(4):
-					var angle := TAU * float(j) / 4.0
-					resource_pickups.append({
-						"kind": "wood",
-						"pos": pos + Vector2(cos(angle), sin(angle)) * 24.0,
-						"spin": rng.randf_range(-0.2, 0.2)
-					})
-				_spawn_enemy_at("fast", pos + Vector2(-34, 18))
-				_spawn_enemy_at("fast", pos + Vector2(35, -16))
-				_story("Чёрное дерево треснуло. Древесины много, но шум кого-то разбудил.", 3.0)
+					_story("СТАРЫЙ АЛТАРЬ
+Ноша кажется легче. Перенос +1.", 3.0)
 			"dead_camp":
 				run_embers += 1
 				event["outcome"] = "memory"
-				_story("Потухший костёр. На камне вырезан тот же знак, что и у нашего Очагa.", 3.4)
+				_story("ПОТУХШИЙ КОСТЁР
+На камне вырезан знак нашего Очагa.", 3.2)
+			"tracks":
+				event["outcome"] = "trail"
+				_story("СЛЕДЫ В ГРЯЗИ
+Они ведут глубже в лес — и не похожи на человеческие.", 3.1)
+			"broken_watch":
+				hero_damage *= 1.08
+				event["outcome"] = "arrows"
+				_story("СЛОМАННЫЙ ДОЗОР
+В ящике сохранилась связка хороших стрел.", 3.0)
+			"whisper":
+				_add_survivor("guard", pos)
+				event["outcome"] = "rescued"
+				_story("ШЁПОТ ИЗ ТЬМЫ
+Ещё один человек успел добежать до света.", 3.0)
 
 		events[i] = event
 		_check_day_progress()
 		break
+
+
+func _complete_black_tree_event(index: int) -> void:
+	if index < 0 or index >= events.size():
+		return
+	var event: Dictionary = events[index]
+	if bool(event.get("triggered", false)):
+		return
+	var pos: Vector2 = event["pos"]
+	event["triggered"] = true
+	event["outcome"] = "opened"
+	event["progress"] = 1.0
+	events[index] = event
+
+	for j in range(5):
+		var angle := TAU * float(j) / 5.0
+		resource_pickups.append({
+			"kind": "wood",
+			"pos": pos + Vector2(cos(angle), sin(angle)) * 28.0,
+			"spin": rng.randf_range(-0.2, 0.2)
+		})
+	_spawn_enemy_at("fast", pos + Vector2(-38, 16))
+	_spawn_enemy_at("fast", pos + Vector2(38, -14))
+	camera_shake = 3.2
+	_story("ЧЁРНОЕ ДЕРЕВО
+Ствол раскололся. Шум разбудил тварей.", 3.0)
 
 
 func _update_movement(delta: float) -> void:
