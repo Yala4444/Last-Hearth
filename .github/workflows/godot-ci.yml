@@ -59,6 +59,13 @@ jobs:
             exit 1
           fi
 
+      - name: Progression sanity test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . -s res://tests/progression_sanity.gd 2>&1 | tee /tmp/progression-sanity.log
+          grep -q "PROGRESSION_SANITY_OK" /tmp/progression-sanity.log
+
       - name: Export Web build
         shell: bash
         run: |
