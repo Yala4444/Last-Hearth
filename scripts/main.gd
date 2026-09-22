@@ -2150,7 +2150,10 @@ func _draw_ground_texture(color: Color, spacing: int) -> void:
 	for y in range(140, 790, spacing):
 		for x in range(20, 470, spacing):
 			var offset := float((x * 13 + y * 7) % 17)
-			draw_circle(Vector2(float(x) + offset, float(y)), 2.0, color)
+			var p := Vector2(float(x) + offset, float(y))
+			draw_circle(p, 2.0, color)
+			if int((x + y) / spacing) % 3 == 0:
+				draw_circle(p + Vector2(9, 7), 7.0, Color(0.07, 0.12, 0.09, 0.055))
 
 
 func _light_visibility(pos: Vector2) -> float:
@@ -2230,8 +2233,12 @@ func _draw_resource(node: Dictionary) -> void:
 				tree_tex = TEX_TREE_B
 			elif variant == 2:
 				tree_tex = TEX_TREE_C
+			var hit_flash := float(node.get("hit_flash", 0.0))
 			var sway := sin(Time.get_ticks_msec() * 0.0012 + pos.x * 0.013) * 0.7
-			var tree_size := Vector2(78, 86)
+			if hit_flash > 0.0:
+				sway += sin(Time.get_ticks_msec() * 0.065) * 3.2 * hit_flash
+				modulate = modulate.lerp(Color(1.0, 0.86, 0.58, modulate.a), hit_flash * 0.34)
+			var tree_size := Vector2(78, 86) * (1.0 + hit_flash * 0.018)
 			_draw_centered_texture(tree_tex, pos + Vector2(sway, -22), tree_size, modulate)
 
 			if gather_cd > 0.0 and hero_pos.distance_to(pos) <= HERO_INTERACT_RADIUS + 4.0:
@@ -2281,7 +2288,8 @@ func _draw_resource_flights() -> void:
 
 
 func _draw_hearth(pos: Vector2, level: int) -> void:
-	var pulse := 1.0 + hearth_pulse * 0.08 + sin(Time.get_ticks_msec() * 0.0065) * 0.018
+	var time := float(Time.get_ticks_msec()) * 0.001
+	var pulse := 1.0 + hearth_pulse * 0.08 + sin(time * 6.5) * 0.018
 	var glow_alpha := 0.045 + hearth_pulse * 0.040
 	var ring_radius := 34.0 + float(level) * 3.5
 	draw_circle(pos, 58.0 * pulse + float(level) * 5.0, Color(1.0, 0.50, 0.12, glow_alpha))
@@ -2331,6 +2339,24 @@ func _draw_hearth(pos: Vector2, level: int) -> void:
 	if level >= 5:
 		draw_arc(pos, ring_radius + 22.0, -2.8, -0.35, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
 		draw_arc(pos, ring_radius + 22.0, 0.35, 2.8, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
+
+	# Smoke, sparks and a short expanding wave make the first upgrade a real payoff.
+	var smoke_strength := 0.11 if level <= 1 else 0.16
+	for i in range(3):
+		var phase := time * (0.38 + float(i) * 0.07) + float(i) * 2.1
+		var smoke_pos := pos + Vector2(sin(phase) * (4.0 + float(i) * 2.0), -38.0 - fmod(time * (10.0 + float(i) * 2.0) + float(i) * 17.0, 38.0))
+		var smoke_alpha := smoke_strength * (1.0 - float(i) * 0.18)
+		draw_circle(smoke_pos, 6.0 + float(i) * 1.7, Color(0.40, 0.43, 0.39, smoke_alpha))
+	for i in range(4):
+		var spark_phase := time * (1.4 + float(i) * 0.12) + float(i) * 1.7
+		var spark_y := fmod(time * (18.0 + float(i) * 3.0) + float(i) * 13.0, 46.0)
+		var spark_pos := pos + Vector2(sin(spark_phase) * 12.0, -22.0 - spark_y)
+		draw_circle(spark_pos, 1.4 + float(i % 2), Color(1.0, 0.70, 0.28, 0.55))
+
+	if upgrade_wave > 0.0:
+		var wave_t := 1.0 - upgrade_wave
+		var wave_radius := 58.0 + wave_t * 155.0
+		draw_arc(pos, wave_radius, 0.0, TAU, 64, Color(1.0, 0.68, 0.28, upgrade_wave * 0.38), 3.0)
 
 	draw_string(font, pos + Vector2(-55, 70), "ОЧАГ %d" % level, HORIZONTAL_ALIGNMENT_CENTER, 110, 12, Color("#eadfc8"))
 
