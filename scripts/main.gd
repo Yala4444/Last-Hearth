@@ -1381,11 +1381,11 @@ func _draw_hub() -> void:
 	_draw_hearth_altar(HUB_HEARTH_UPGRADE_POS)
 
 	var resident_roles: Array[String] = ["hunter", "worker", "guard"]
+	var resident_positions: Array[Vector2] = [Vector2(145, 332), Vector2(338, 336), Vector2(240, 690)]
 	var resident_count := 3 if bool(meta.get("forest_cleared", false)) else 2
 	for i in range(resident_count):
-		var angle := 0.4 + float(i) * 2.25
-		var p := HEARTH_POS + Vector2(cos(angle), sin(angle)) * 105.0
-		_draw_humanoid(p, Color("#8a8c72") if i == 0 else Color("#9b7856"), float(i), resident_roles[i], 1.0)
+		var p: Vector2 = resident_positions[i]
+		_draw_humanoid(p, Color("#7f886a") if i == 0 else Color("#9b7856"), float(i), resident_roles[i], 1.0)
 
 	_draw_hero(hero_pos)
 
@@ -1400,9 +1400,9 @@ func _draw_hub() -> void:
 	var damage_cost := 4 + damage_level * 3
 	var hearth_cost := 5 + hearth_bonus * 4
 
-	draw_string(font, HUB_CARRY_POS + Vector2(-63, 62), "ур.%d · %d углей" % [carry_level, carry_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 11, Color("#d7c7a8"))
-	draw_string(font, HUB_DAMAGE_POS + Vector2(-63, 62), "ур.%d · %d углей" % [damage_level, damage_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 11, Color("#d7c7a8"))
-	var hearth_label := "максимум" if hearth_bonus >= 3 else "ур.%d · %d углей" % [hearth_bonus, hearth_cost]
+	draw_string(font, HUB_CARRY_POS + Vector2(-63, 70), "ур.%d | %d углей" % [carry_level, carry_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 10, Color("#d7c7a8"))
+	draw_string(font, HUB_DAMAGE_POS + Vector2(-63, 70), "ур.%d | %d углей" % [damage_level, damage_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 10, Color("#d7c7a8"))
+	var hearth_label := "максимум" if hearth_bonus >= 3 else "ур.%d | %d углей" % [hearth_bonus, hearth_cost]
 	draw_string(font, HUB_HEARTH_UPGRADE_POS + Vector2(-72, 49), hearth_label, HORIZONTAL_ALIGNMENT_CENTER, 144, 11, Color("#e6c583"))
 
 	# Strongest call-to-action is always the next expedition.
@@ -1477,8 +1477,10 @@ func _draw_expedition() -> void:
 	var night_bg := Color("#0a1211")
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), day_bg.lerp(night_bg, night_mix))
 	_draw_ground_texture(Color("#213529").lerp(Color("#13201a"), night_mix), 64)
+	_draw_map_variant_decor()
 	_draw_environment_decor()
 	_draw_light_field(HEARTH_POS, light_radius)
+	_draw_world_events()
 
 	for node: Dictionary in resource_nodes:
 		_draw_resource(node)
@@ -1525,21 +1527,113 @@ func _draw_expedition() -> void:
 		_draw_night_edge_eyes(night_mix)
 
 
+func _draw_map_variant_decor() -> void:
+	if map_variant == 1:
+		# A faded road cuts through the map.
+		for i in range(8):
+			var y := 190.0 + float(i) * 72.0
+			draw_line(Vector2(185, y), Vector2(295, y + 8), Color(0.30, 0.28, 0.22, 0.22), 10.0)
+			draw_line(Vector2(190, y), Vector2(290, y + 7), Color(0.39, 0.35, 0.27, 0.13), 3.0)
+	elif map_variant == 2:
+		# Quarry scars and stone shelves.
+		for p: Vector2 in [Vector2(92, 270), Vector2(385, 285), Vector2(104, 610), Vector2(365, 620)]:
+			draw_arc(p, 28.0, 0.2, 2.8, 18, Color(0.38, 0.41, 0.39, 0.22), 3.0)
+			draw_line(p + Vector2(-18, 10), p + Vector2(18, 4), Color(0.31, 0.34, 0.33, 0.18), 3.0)
+	elif map_variant == 3:
+		# Burnt homestead: ash, broken fence and charred ground.
+		for p: Vector2 in [Vector2(98, 330), Vector2(380, 342), Vector2(118, 600)]:
+			draw_circle(p, 34.0, Color(0.08, 0.075, 0.065, 0.22))
+		draw_line(Vector2(50, 305), Vector2(145, 320), Color(0.29, 0.22, 0.16, 0.45), 4.0)
+		draw_line(Vector2(335, 305), Vector2(430, 320), Color(0.29, 0.22, 0.16, 0.45), 4.0)
+
+
 func _draw_environment_decor() -> void:
 	for item: Dictionary in decor_points:
 		var pos: Vector2 = item["pos"]
 		var kind := String(item.get("kind", "grass"))
 		var scale := float(item.get("scale", 1.0))
 		var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 18.0
-		var alpha := 0.62 if in_light else 0.18
+		var alpha := 0.64 if in_light else 0.10
 		if kind == "grass":
 			draw_line(pos, pos + Vector2(-3 * scale, -7 * scale), Color(0.27, 0.43, 0.29, alpha), 1.4)
 			draw_line(pos, pos + Vector2(2 * scale, -8 * scale), Color(0.29, 0.46, 0.31, alpha), 1.4)
 			draw_line(pos, pos + Vector2(5 * scale, -5 * scale), Color(0.24, 0.39, 0.27, alpha), 1.2)
 		elif kind == "pebble":
 			draw_circle(pos, 2.7 * scale, Color(0.35, 0.39, 0.36, alpha))
+		elif kind == "ash":
+			draw_circle(pos, 3.2 * scale, Color(0.18, 0.17, 0.15, alpha * 0.8))
+			draw_line(pos + Vector2(-5, 2), pos + Vector2(5, -2), Color(0.20, 0.17, 0.14, alpha), 1.8)
 		else:
 			draw_line(pos + Vector2(-6, 2), pos + Vector2(7, -2), Color(0.34, 0.25, 0.17, alpha), 2.2)
+
+
+func _draw_world_events() -> void:
+	for event: Dictionary in events:
+		var pos: Vector2 = event["pos"]
+		var visible := pos.distance_to(HEARTH_POS) <= light_radius + 35.0
+		if not visible:
+			continue
+		var kind := String(event.get("kind", ""))
+		var triggered := bool(event.get("triggered", false))
+		var alpha := 0.42 if triggered else 1.0
+		match kind:
+			"wagon":
+				_draw_event_wagon(pos, alpha, triggered)
+			"wounded":
+				_draw_event_wounded(pos, alpha, triggered)
+			"altar":
+				_draw_event_altar(pos, alpha, triggered)
+			"black_tree":
+				_draw_event_black_tree(pos, alpha, triggered)
+			"dead_camp":
+				_draw_event_dead_camp(pos, alpha, triggered)
+
+
+func _draw_event_wagon(pos: Vector2, alpha: float, triggered: bool) -> void:
+	draw_rect(Rect2(pos + Vector2(-24, -8), Vector2(48, 20)), Color(0.40, 0.29, 0.18, alpha))
+	draw_circle(pos + Vector2(-17, 15), 8.0, Color(0.17, 0.16, 0.14, alpha))
+	draw_circle(pos + Vector2(17, 15), 8.0, Color(0.17, 0.16, 0.14, alpha))
+	draw_line(pos + Vector2(22, -2), pos + Vector2(38, -14), Color(0.43, 0.31, 0.20, alpha), 4.0)
+	if not triggered:
+		draw_string(font, pos + Vector2(-58, -28), "БРОШЕННАЯ ТЕЛЕГА", HORIZONTAL_ALIGNMENT_CENTER, 116, 9, Color(0.83, 0.77, 0.64, 0.80))
+
+
+func _draw_event_wounded(pos: Vector2, alpha: float, triggered: bool) -> void:
+	if not triggered:
+		_draw_humanoid(pos, Color(0.48, 0.43, 0.39, alpha), 0.0, "civilian", 1.0)
+		draw_line(pos + Vector2(-18, 12), pos + Vector2(20, 12), Color(0.28, 0.23, 0.19, alpha), 3.0)
+		draw_string(font, pos + Vector2(-52, -36), "РАНЕНЫЙ", HORIZONTAL_ALIGNMENT_CENTER, 104, 9, Color(0.84, 0.78, 0.67, 0.82))
+
+
+func _draw_event_altar(pos: Vector2, alpha: float, triggered: bool) -> void:
+	for i in range(5):
+		var a := TAU * float(i) / 5.0
+		draw_circle(pos + Vector2(cos(a), sin(a)) * 18.0, 4.0, Color(0.38, 0.40, 0.36, alpha))
+	var glow := 0.05 if triggered else 0.15 + 0.05 * sin(Time.get_ticks_msec() * 0.005)
+	draw_circle(pos, 12.0, Color(0.62, 0.50, 0.34, glow * alpha))
+	draw_string(font, pos + Vector2(-54, -31), "СТАРЫЙ АЛТАРЬ", HORIZONTAL_ALIGNMENT_CENTER, 108, 9, Color(0.82, 0.76, 0.63, 0.76 * alpha))
+
+
+func _draw_event_black_tree(pos: Vector2, alpha: float, triggered: bool) -> void:
+	if triggered:
+		draw_circle(pos + Vector2(0, 14), 8.0, Color(0.20, 0.15, 0.12, alpha))
+		return
+	draw_rect(Rect2(pos + Vector2(-5, 3), Vector2(10, 32)), Color(0.16, 0.12, 0.10, alpha))
+	draw_circle(pos + Vector2(0, -10), 22.0, Color(0.12, 0.16, 0.13, alpha))
+	draw_circle(pos + Vector2(-15, -2), 14.0, Color(0.10, 0.14, 0.11, alpha))
+	draw_circle(pos + Vector2(15, -1), 14.0, Color(0.10, 0.14, 0.11, alpha))
+	draw_circle(pos + Vector2(3, -11), 3.0, Color(0.55, 0.27, 0.18, 0.75 * alpha))
+	draw_string(font, pos + Vector2(-58, -43), "ЧЁРНОЕ ДЕРЕВО", HORIZONTAL_ALIGNMENT_CENTER, 116, 9, Color(0.77, 0.70, 0.60, 0.80 * alpha))
+
+
+func _draw_event_dead_camp(pos: Vector2, alpha: float, triggered: bool) -> void:
+	draw_circle(pos, 16.0, Color(0.20, 0.18, 0.15, 0.7 * alpha))
+	for i in range(6):
+		var a := TAU * float(i) / 6.0
+		draw_circle(pos + Vector2(cos(a), sin(a)) * 15.0, 3.4, Color(0.35, 0.34, 0.31, alpha))
+	draw_line(pos + Vector2(-12, 7), pos + Vector2(12, -7), Color(0.26, 0.18, 0.13, alpha), 4.0)
+	if not triggered:
+		draw_string(font, pos + Vector2(-62, -29), "ПОТУХШИЙ КОСТЁР", HORIZONTAL_ALIGNMENT_CENTER, 124, 9, Color(0.78, 0.73, 0.64, 0.80))
 
 
 func _draw_revealed_landmarks() -> void:
@@ -1578,13 +1672,23 @@ func _draw_ground_texture(color: Color, spacing: int) -> void:
 
 
 func _draw_light_field(center: Vector2, radius: float) -> void:
-	for i in range(12, 0, -1):
-		var t := float(i) / 12.0
-		var r := radius * t
-		var alpha := 0.012 + (1.0 - t) * 0.032
-		draw_circle(center, r, Color(0.98, 0.68, 0.29, alpha))
-	var boundary_alpha := 0.10 + hearth_pulse * 0.16
-	draw_arc(center, radius, 0.0, TAU, 80, Color(0.96, 0.68, 0.30, boundary_alpha), 2.0 + hearth_pulse * 2.0)
+	# Dense, low-alpha layers remove the visible ring effect and create a softer falloff.
+	var time := float(Time.get_ticks_msec()) * 0.001
+	var flicker := 1.0 + sin(time * 3.7) * 0.010 + sin(time * 7.9 + 1.2) * 0.006
+	var effective_radius := radius * flicker
+
+	draw_circle(center, effective_radius * 1.06, Color(0.88, 0.55, 0.23, 0.010))
+	for i in range(42, 0, -1):
+		var t := float(i) / 42.0
+		var r := effective_radius * t
+		var inner := 1.0 - t
+		var alpha := 0.0018 + pow(inner, 1.85) * 0.0105
+		var warmth := 0.50 + inner * 0.24
+		draw_circle(center, r, Color(1.0, warmth, 0.20, alpha))
+
+	# Brighter central pool near the flame.
+	draw_circle(center, effective_radius * 0.34, Color(1.0, 0.55, 0.18, 0.022 + hearth_pulse * 0.010))
+	draw_circle(center, effective_radius * 0.15, Color(1.0, 0.67, 0.27, 0.030 + hearth_pulse * 0.016))
 
 
 func _draw_resource(node: Dictionary) -> void:
@@ -1751,27 +1855,31 @@ func _nearby_resource_kind() -> String:
 
 
 func _draw_back_cargo(pos: Vector2) -> void:
-	# The load must be readable from the character itself, not only from HUD.
 	var visible_logs := mini(carried_wood, 7)
-	for i in range(visible_logs):
-		var row := i / 2
-		var side := -1.0 if i % 2 == 0 else 1.0
-		var center := pos + Vector2(side * 5.0, -12.0 - float(row) * 6.5)
-		var tilt := 0.10 * side
-		var axis := Vector2(cos(tilt), sin(tilt))
-		draw_line(center - axis * 15.0, center + axis * 15.0, Color("#8f5d33"), 6.5, true)
-		draw_circle(center - axis * 15.0, 3.1, Color("#c28a54"))
-		draw_circle(center + axis * 15.0, 3.1, Color("#c28a54"))
 	if visible_logs > 0:
-		draw_line(pos + Vector2(-12, -6), pos + Vector2(11, -30), Color(0.72, 0.58, 0.36, 0.8), 2.0)
+		# A visible carrying frame keeps the logs clearly behind the character.
+		draw_line(pos + Vector2(-13, -25), pos + Vector2(-13, 9), Color("#6d5235"), 3.0, true)
+		draw_line(pos + Vector2(13, -25), pos + Vector2(13, 9), Color("#6d5235"), 3.0, true)
+		draw_line(pos + Vector2(-13, -10), pos + Vector2(13, -10), Color("#876540"), 2.0, true)
+		for i in range(visible_logs):
+			var row := i / 2
+			var side := -1.0 if i % 2 == 0 else 1.0
+			var center := pos + Vector2(side * 4.0, -7.0 - float(row) * 7.0)
+			var tilt := 0.06 * side
+			var axis := Vector2(cos(tilt), sin(tilt))
+			draw_line(center - axis * 16.0, center + axis * 16.0, Color("#8d5c32"), 6.5, true)
+			draw_circle(center - axis * 16.0, 3.2, Color("#c78e56"))
+			draw_circle(center + axis * 16.0, 3.2, Color("#c78e56"))
+		draw_line(pos + Vector2(-13, -1), pos + Vector2(10, -27), Color(0.73, 0.60, 0.39, 0.88), 2.3)
+		draw_line(pos + Vector2(13, -1), pos + Vector2(-10, -27), Color(0.73, 0.60, 0.39, 0.88), 2.3)
 
 	if carried_stone > 0:
-		var sack := pos + Vector2(-18, 5)
-		draw_circle(sack, 9.0, Color("#766f60"))
-		draw_line(sack + Vector2(-5, -5), sack + Vector2(5, -5), Color("#a6977e"), 2.0)
+		var sack := pos + Vector2(-19, 6)
+		draw_circle(sack, 9.5, Color("#746b59"))
+		draw_line(sack + Vector2(-6, -5), sack + Vector2(6, -5), Color("#a9997f"), 2.0)
 		for i in range(mini(carried_stone, 4)):
 			var p := sack + Vector2(-4 + float(i % 2) * 8.0, -2 + float(i / 2) * 6.0)
-			draw_circle(p, 2.6, Color("#a4aaa7"))
+			draw_circle(p, 2.7, Color("#a4aaa7"))
 
 
 func _draw_companions() -> void:
