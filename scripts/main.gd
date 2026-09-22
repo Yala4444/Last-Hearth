@@ -15,6 +15,9 @@ const JOYSTICK_DEADZONE := 0.10
 const TWILIGHT_DURATION := 3.4
 const UNLOAD_INTERVAL := 0.16
 const SAVE_PATH := "user://hearth_meta.json"
+const ROUTE_HUNTER_GATE := Vector2(42.0, 350.0)
+const ROUTE_SAWMILL_GATE := Vector2(438.0, 285.0)
+const ROUTE_RETURN_GATE := Vector2(240.0, 748.0)
 
 const TEX_HERO_IDLE: Texture2D = preload("res://assets/v08/sprint1/hero_idle.svg")
 const TEX_HERO_WALK: Texture2D = preload("res://assets/v08/sprint1/hero_walk.svg")
@@ -39,6 +42,12 @@ enum Mode {
 	RESULT
 }
 
+enum Area {
+	CAMP,
+	HUNTER_TRAIL,
+	SAWMILL
+}
+
 enum Stage {
 	DAY1_GATHER,
 	DAY1_RESCUE,
@@ -61,7 +70,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 8,
+	"build_version": 9,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -103,6 +112,13 @@ var current_night := 0
 var run_seed := 0
 var map_variant := 0
 var map_variant_name := "Тихая поляна"
+var area: Area = Area.CAMP
+var day1_route := ""
+var day1_route_complete := false
+var sawmill_claimed := false
+var camp_resource_backup: Array = []
+var camp_event_backup: Array = []
+var camp_decor_backup: Array = []
 var events: Array[Dictionary] = []
 var story_hint := ""
 var story_hint_timer := 0.0
@@ -221,11 +237,11 @@ func _load_meta() -> void:
 		for key: Variant in saved.keys():
 			meta[key] = saved[key]
 
-	# v0.8 begins the production-asset visual rebuild without changing progression semantics.
-	# Existing testers get a fresh expedition without losing permanent upgrades.
+	# v0.9 turns the Forgotten Forest into a small adventure chapter.
+	# Existing testers get a fresh expedition while permanent hub upgrades remain.
 	var loaded_version := int(meta.get("build_version", 0))
-	if loaded_version < 8:
-		meta["build_version"] = 8
+	if loaded_version < 9:
+		meta["build_version"] = 9
 		meta["first_run"] = true
 
 
@@ -301,6 +317,13 @@ func _start_expedition() -> void:
 	current_night = 0
 	map_variant = 0
 	map_variant_name = "Тихая поляна"
+	area = Area.CAMP
+	day1_route = ""
+	day1_route_complete = false
+	sawmill_claimed = false
+	camp_resource_backup.clear()
+	camp_event_backup.clear()
+	camp_decor_backup.clear()
 	events.clear()
 	story_hint = ""
 	story_hint_timer = 0.0
@@ -509,6 +532,8 @@ func _add_event(kind: String, pos: Vector2) -> void:
 		required = 1.55
 	elif kind == "whisper":
 		required = 1.10
+	elif kind == "sawmill":
+		required = 1.85
 	events.append({
 		"kind": kind,
 		"pos": pos,
@@ -520,8 +545,171 @@ func _add_event(kind: String, pos: Vector2) -> void:
 	})
 
 
+func _active_light_center() -> Vector2:
+	if area == Area.CAMP:
+		return HEARTH_POS
+	return hero_pos
+
+
+func _active_light_radius() -> float:
+	if area == Area.CAMP:
+		return light_display_radius
+	return 142.0
+
+
+func _stash_camp_area() -> void:
+	camp_resource_backup = resource_nodes.duplicate(true)
+	camp_event_backup = events.duplicate(true)
+	camp_decor_backup = decor_points.duplicate(true)
+
+
+func _restore_camp_area() -> void:
+	resource_nodes.clear()
+	for item: Variant in camp_resource_backup:
+		resource_nodes.append((item as Dictionary).duplicate(true))
+	events.clear()
+	for item: Variant in camp_event_backup:
+		events.append((item as Dictionary).duplicate(true))
+	decor_points.clear()
+	for item: Variant in camp_decor_backup:
+		decor_points.append((item as Dictionary).duplicate(true))
+	enemies.clear()
+	shots.clear()
+	resource_pickups.clear()
+	resource_flights.clear()
+	area = Area.CAMP
+	hero_pos = Vector2(240.0, 690.0)
+	hero_target = hero_pos
+	_stop_joystick()
+
+
+func _route_add_tree(pos: Vector2, variant: int) -> void:
+	resource_nodes.append({
+		"kind": "tree",
+		"pos": pos,
+		"hits": 3,
+		"max_hits": 3,
+		"alive": true,
+		"fall_timer": 0.0,
+		"drop_spawned": false,
+		"variant": variant,
+		"hit_flash": 0.0
+	})
+
+
+func _route_add_rock(pos: Vector2) -> void:
+	resource_nodes.append({
+		"kind": "rock",
+		"pos": pos,
+		"hits": 4,
+		"max_hits": 4,
+		"alive": true,
+		"fall_timer": 0.0,
+		"drop_spawned": false,
+		"hit_flash": 0.0
+	})
+
+
+func _enter_day1_route(route_name: String) -> void:
+	if area != Area.CAMP or stage != Stage.DAY1_RESCUE or day1_route != "":
+		return
+	_stash_camp_area()
+	day1_route = route_name
+	resource_nodes.clear()
+	resource_pickups.clear()
+	resource_flights.clear()
+	events.clear()
+	decor_points.clear()
+	enemies.clear()
+	shots.clear()
+	hero_pos = Vector2(240.0, 690.0)
+	hero_target = hero_pos
+	_stop_joystick()
+
+	if route_name == "hunter":
+		area = Area.HUNTER_TRAIL
+		survivor_one_pos = Vector2(245.0, 205.0)
+		for p: Vector2 in [Vector2(78, 185), Vector2(390, 205), Vector2(100, 360), Vector2(382, 390), Vector2(90, 585), Vector2(390, 600)]:
+			_route_add_tree(p, rng.randi_range(0, 2))
+		for p: Vector2 in [Vector2(150, 285), Vector2(335, 300), Vector2(300, 560)]:
+			_route_add_rock(p)
+		for i in range(44):
+			decor_points.append({
+				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
+				"kind": "grass" if i % 4 != 0 else "branch",
+				"scale": rng.randf_range(0.75, 1.25)
+			})
+		_spawn_enemy_at("guard", Vector2(190, 285))
+		_spawn_enemy_at("guard", Vector2(295, 300))
+		_spawn_enemy_at("fast", Vector2(245, 340))
+		_story("ТРОПА ОХОТНИКА
+Крик оборвался. Между деревьями движутся тени.", 3.6)
+	else:
+		area = Area.SAWMILL
+		for p: Vector2 in [Vector2(78, 185), Vector2(400, 190), Vector2(88, 385), Vector2(392, 400), Vector2(100, 610), Vector2(385, 620)]:
+			_route_add_tree(p, rng.randi_range(0, 2))
+		for p: Vector2 in [Vector2(135, 300), Vector2(350, 315), Vector2(330, 570)]:
+			_route_add_rock(p)
+		for i in range(38):
+			decor_points.append({
+				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
+				"kind": "branch" if i % 3 == 0 else "grass",
+				"scale": rng.randf_range(0.75, 1.25)
+			})
+		_add_event("sawmill", Vector2(240.0, 220.0))
+		_story("СТАРАЯ ЛЕСОПИЛКА
+Здесь можно укрепить Очаг, но механизм заржавел.", 3.6)
+
+
+func _return_from_day1_route() -> void:
+	if area == Area.CAMP or not day1_route_complete:
+		return
+	_restore_camp_area()
+	if day1_route == "hunter":
+		_story("Охотник показывает путь назад. Солнце уже садится.", 2.8)
+	else:
+		_story("Ты возвращаешься с досками. Баррикады готовы встретить ночь.", 2.8)
+	_start_night(1)
+
+
+func _update_day1_route() -> void:
+	if stage != Stage.DAY1_RESCUE:
+		return
+
+	if area == Area.HUNTER_TRAIL and not day1_route_complete:
+		if enemies.is_empty() and hero_pos.distance_to(survivor_one_pos) < 48.0:
+			survivor_one_found = true
+			_add_survivor("hunter", survivor_one_pos)
+			day1_route_complete = true
+			run_embers += 1
+			_story("ОХОТНИК СПАСЁН
+«Ночью они идут на огонь. Я останусь у края света.»", 3.7)
+
+	if area == Area.SAWMILL and sawmill_claimed and not day1_route_complete and enemies.is_empty():
+		day1_route_complete = true
+		carry_limit += 1
+		hearth_max_hp += 38.0
+		hearth_hp = hearth_max_hp
+		run_embers += 1
+		_story("ЛЕСОПИЛКА ОЧИЩЕНА
+Доски укрепят Очаг. Перенос +1, прочность выше.", 3.6)
+
+
+func _update_area_transitions() -> void:
+	if stage != Stage.DAY1_RESCUE:
+		return
+
+	if area == Area.CAMP and day1_route == "":
+		if hero_pos.distance_to(ROUTE_HUNTER_GATE) < 46.0:
+			_enter_day1_route("hunter")
+		elif hero_pos.distance_to(ROUTE_SAWMILL_GATE) < 46.0:
+			_enter_day1_route("sawmill")
+	elif area != Area.CAMP and day1_route_complete and hero_pos.distance_to(ROUTE_RETURN_GATE) < 50.0:
+		_return_from_day1_route()
+
+
 func _event_is_visible(pos: Vector2) -> bool:
-	return pos.distance_to(HEARTH_POS) <= light_radius - 6.0
+	return pos.distance_to(_active_light_center()) <= _active_light_radius() - 6.0
 
 
 func _update_world_events(delta: float) -> void:
@@ -604,6 +792,14 @@ func _update_world_events(delta: float) -> void:
 				_add_survivor("guard", pos)
 				event["outcome"] = "rescued"
 				_story("ШЁПОТ ИЗ ТЬМЫ\nЕщё один человек успел добежать до света.", 3.0)
+			"sawmill":
+				sawmill_claimed = true
+				event["outcome"] = "started"
+				_spawn_enemy_at("guard", pos + Vector2(-68, 55))
+				_spawn_enemy_at("guard", pos + Vector2(66, 48))
+				_spawn_enemy_at("fast", pos + Vector2(0, 82))
+				camera_shake = 2.2
+				_story("МЕХАНИЗМ ЗАРАБОТАЛ\nСкрип пилы разбудил тех, кто прятался рядом.", 3.2)
 
 		events[i] = event
 		_check_day_progress()
@@ -723,7 +919,10 @@ func _update_expedition(delta: float) -> void:
 	_update_resource_pickups(delta)
 	_update_world_events(delta)
 	_update_survivor_agents(delta)
-	_keep_hero_out_of_hearth()
+	_update_day1_route()
+	_update_area_transitions()
+	if area == Area.CAMP:
+		_keep_hero_out_of_hearth()
 
 	if enemies.size() > 0:
 		_update_combat()
@@ -734,11 +933,7 @@ func _update_expedition(delta: float) -> void:
 
 	match stage:
 		Stage.DAY1_RESCUE:
-			if hero_pos.distance_to(survivor_one_pos) < 42.0:
-				survivor_one_found = true
-				_add_survivor("hunter", survivor_one_pos)
-				_story("Охотник: Я видел другой огонь на севере. Потом он погас.", 3.4)
-				_start_night(1)
+			pass
 		Stage.WORKSHOP_CHOICE:
 			_update_workshop_choice()
 		Stage.DAY2_RESCUE:
@@ -931,6 +1126,9 @@ func _spawn_resource_drops(source_kind: String, source_pos: Vector2) -> void:
 
 
 func _deposit_resources_if_close(delta: float) -> void:
+	if area != Area.CAMP:
+		unload_active = false
+		return
 	var near_hearth := hero_pos.distance_to(HEARTH_POS) <= 70.0
 	if not near_hearth:
 		unload_active = false
@@ -987,7 +1185,8 @@ func _check_day_progress() -> void:
 		upgrade_wave = 1.0
 		camera_shake = 4.8
 		_burst_typed(HEARTH_POS, 24, "ember")
-		_banner("ОЧАГ II | свет открыл новую часть леса", 2.4)
+		_banner("ОЧАГ II | свет открыл две тропы", 2.4)
+		_story("До темноты хватит времени только на один путь: слева слышен крик, справа тянется дым.", 4.2)
 		stage_transition_lock = false
 
 	elif stage == Stage.DAY2_BUILD and camp_wood >= current_stage_wood_start + 8 and camp_stone >= current_stage_stone_start + 5:
@@ -1068,11 +1267,17 @@ func _start_night(number: int) -> void:
 
 	if number == 1:
 		stage = Stage.NIGHT1
-		active_night_sides = [2, 3]
-		for i in range(10):
-			night_queue.append("fast" if i == 7 else "basic")
+		if day1_route == "hunter":
+			active_night_sides = [2]
+			for i in range(8):
+				night_queue.append("fast" if i == 6 else "basic")
+			_story("Охотник: «Они придут с юга. Я прикрою край света.»", 2.9)
+		else:
+			active_night_sides = [2, 3]
+			for i in range(10):
+				night_queue.append("fast" if i in [6, 9] else "basic")
+			_story("Баррикады крепки, но без охотника придётся держать две стороны.", 2.9)
 		_banner("СУМЕРКИ", 1.8)
-		_story("Охотник занимает край света. Вернись к Очагу.", 2.7)
 	elif number == 2:
 		stage = Stage.NIGHT2
 		active_night_sides = [0, 1]
@@ -1151,7 +1356,10 @@ func _complete_night_one() -> void:
 	current_stage_wood_start = camp_wood
 	current_stage_stone_start = camp_stone
 	flash_timer = 0.45
-	_story("Охотник: Ночью их будет больше. Днём восстановим мастерскую.", 3.4)
+	if day1_route == "hunter":
+		_story("Охотник: «Это была разведка. Я видел следы у старой мастерской.»", 3.4)
+	else:
+		_story("На досках лесопилки вырезан знак Очагa. Кто-то был здесь до нас.", 3.4)
 
 
 func _complete_night_two() -> void:
@@ -1858,9 +2066,12 @@ func _draw_expedition() -> void:
 	var night_bg := Color("#0a1211")
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), day_bg.lerp(night_bg, night_mix))
 	_draw_ground_texture(Color("#213529").lerp(Color("#13201a"), night_mix), 64)
-	_draw_map_variant_decor()
+	if area == Area.CAMP:
+		_draw_map_variant_decor()
+	else:
+		_draw_route_area_decor()
 	_draw_environment_decor()
-	_draw_light_field(HEARTH_POS, light_display_radius)
+	_draw_light_field(_active_light_center(), _active_light_radius())
 	_draw_world_events()
 
 	for node: Dictionary in resource_nodes:
@@ -1869,9 +2080,10 @@ func _draw_expedition() -> void:
 		_draw_resource_pickup(pickup)
 	_draw_resource_flights()
 
-	_draw_revealed_landmarks()
+	if area == Area.CAMP:
+		_draw_revealed_landmarks()
 
-	if stage == Stage.DAY1_RESCUE and not survivor_one_found:
+	if stage == Stage.DAY1_RESCUE and area == Area.HUNTER_TRAIL and not survivor_one_found:
 		var survivor_visibility := _light_visibility(survivor_one_pos)
 		if survivor_visibility > 0.72:
 			_draw_survivor(survivor_one_pos, "?")
@@ -1886,10 +2098,12 @@ func _draw_expedition() -> void:
 		_draw_choice_shrine(left_choice_pos, "ДВА БОЙЦА", Color("#6688a0"))
 		_draw_choice_shrine(right_choice_pos, "ОГНЕННЫЕ СТРЕЛЫ", Color("#b75e45"))
 
-	if workshop_built:
+	if area == Area.CAMP and workshop_built:
 		_draw_workshop()
-	if tower_built:
+	if area == Area.CAMP and tower_built:
 		_draw_tower()
+	if stage == Stage.DAY1_RESCUE:
+		_draw_day1_route_navigation()
 
 	for enemy: Dictionary in enemies:
 		_draw_enemy(enemy)
@@ -1901,9 +2115,12 @@ func _draw_expedition() -> void:
 	if core_carried:
 		_draw_core(hero_pos + Vector2(0, -46))
 
-	_draw_hearth(HEARTH_POS, hearth_level)
-	_draw_stockpile()
-	_draw_world_progress()
+	if area == Area.CAMP:
+		_draw_hearth(HEARTH_POS, hearth_level)
+		_draw_stockpile()
+		_draw_world_progress()
+	else:
+		_draw_explorer_lantern()
 	_draw_companions()
 	_draw_hero(hero_pos)
 	_draw_guidance_marker()
@@ -1912,6 +2129,52 @@ func _draw_expedition() -> void:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.015, 0.03, 0.035, 0.10 * night_mix))
 		_draw_night_edge_eyes(night_mix)
 	_draw_world_vignette(night_mix)
+
+
+func _draw_day1_route_navigation() -> void:
+	if area == Area.CAMP and day1_route == "":
+		_draw_route_gate(ROUTE_HUNTER_GATE, "КРИК О ПОМОЩИ", Color("#d8b06b"), true)
+		_draw_route_gate(ROUTE_SAWMILL_GATE, "ДЫМ ЛЕСОПИЛКИ", Color("#91a977"), false)
+	elif area != Area.CAMP and day1_route_complete:
+		_draw_route_gate(ROUTE_RETURN_GATE, "ВЕРНУТЬСЯ К ОЧАГУ", Color("#e0bc73"), false)
+
+
+func _draw_route_gate(pos: Vector2, label: String, color: Color, points_left: bool) -> void:
+	var pulse := 0.82 + sin(Time.get_ticks_msec() * 0.006) * 0.12
+	draw_circle(pos, 28.0, Color(color.r, color.g, color.b, 0.055 * pulse))
+	var dir := Vector2(-1, 0) if points_left else Vector2(1, 0)
+	if pos == ROUTE_RETURN_GATE:
+		dir = Vector2(0, 1)
+	var tip := pos + dir * 18.0
+	var side := Vector2(-dir.y, dir.x) * 7.0
+	draw_colored_polygon(PackedVector2Array([tip + dir * 7.0, tip - dir * 5.0 + side, tip - dir * 5.0 - side]), color)
+	var text_pos := pos + Vector2(-88, -38)
+	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, 176, 10, Color("#ead9b6"))
+
+
+func _draw_route_area_decor() -> void:
+	if area == Area.HUNTER_TRAIL:
+		draw_line(Vector2(238, 745), Vector2(250, 585), Color(0.35, 0.30, 0.21, 0.20), 18.0)
+		draw_line(Vector2(250, 585), Vector2(225, 410), Color(0.35, 0.30, 0.21, 0.18), 15.0)
+		draw_line(Vector2(225, 410), Vector2(245, 205), Color(0.35, 0.30, 0.21, 0.16), 12.0)
+		for p: Vector2 in [Vector2(202, 420), Vector2(275, 510), Vector2(218, 315)]:
+			for i in range(3):
+				draw_circle(p + Vector2(float(i) * 8.0, float(i % 2) * 6.0), 2.6, Color(0.39, 0.30, 0.20, 0.48))
+	elif area == Area.SAWMILL:
+		draw_rect(Rect2(Vector2(122, 145), Vector2(236, 108)), Color(0.14, 0.13, 0.10, 0.34))
+		for x in [140.0, 188.0, 292.0, 340.0]:
+			draw_line(Vector2(x, 145), Vector2(x + 12.0, 250), Color(0.34, 0.25, 0.16, 0.35), 6.0)
+		draw_line(Vector2(120, 258), Vector2(360, 258), Color(0.39, 0.29, 0.18, 0.42), 6.0)
+		for y in [350.0, 470.0, 590.0]:
+			draw_line(Vector2(90, y), Vector2(150, y - 12), Color(0.33, 0.24, 0.16, 0.28), 4.0)
+			draw_line(Vector2(330, y + 8), Vector2(395, y - 4), Color(0.33, 0.24, 0.16, 0.28), 4.0)
+
+
+func _draw_explorer_lantern() -> void:
+	var glow := 0.055 + sin(Time.get_ticks_msec() * 0.007) * 0.012
+	draw_circle(hero_pos + Vector2(0, -10), 32.0, Color(1.0, 0.58, 0.22, glow))
+	draw_circle(hero_pos + Vector2(13, -4), 4.0, Color("#efae55"))
+	draw_circle(hero_pos + Vector2(13, -4), 9.0, Color(1.0, 0.66, 0.28, 0.08))
 
 
 func _draw_map_variant_decor() -> void:
@@ -2020,6 +2283,8 @@ func _draw_world_events() -> void:
 				_draw_event_broken_watch(pos, alpha, triggered)
 			"whisper":
 				_draw_event_whisper(pos, alpha, triggered)
+			"sawmill":
+				_draw_event_sawmill(pos, alpha, triggered)
 
 		if not triggered:
 			var progress := 0.0
@@ -2106,6 +2371,20 @@ func _draw_event_whisper(pos: Vector2, alpha: float, triggered: bool) -> void:
 	draw_circle(pos + Vector2(4, -4), 1.5, Color(0.86, 0.75, 0.49, alpha * pulse))
 
 
+func _draw_event_sawmill(pos: Vector2, alpha: float, triggered: bool) -> void:
+	var beam := Color(0.43, 0.31, 0.19, alpha)
+	draw_rect(Rect2(pos + Vector2(-48, -18), Vector2(96, 36)), Color(0.24, 0.19, 0.13, 0.72 * alpha))
+	draw_line(pos + Vector2(-44, -20), pos + Vector2(-32, -52), beam, 7.0)
+	draw_line(pos + Vector2(44, -20), pos + Vector2(32, -52), beam, 7.0)
+	draw_line(pos + Vector2(-36, -50), pos + Vector2(38, -50), beam, 7.0)
+	draw_circle(pos + Vector2(0, -3), 20.0, Color(0.38, 0.40, 0.36, 0.85 * alpha))
+	for i in range(8):
+		var a := TAU * float(i) / 8.0
+		draw_line(pos + Vector2(cos(a), sin(a)) * 5.0, pos + Vector2(cos(a), sin(a)) * 18.0, Color(0.64, 0.64, 0.56, alpha), 2.0)
+	if not triggered:
+		draw_string(font, pos + Vector2(-72, -72), "СТАРАЯ ЛЕСОПИЛКА", HORIZONTAL_ALIGNMENT_CENTER, 144, 10, Color(0.86, 0.78, 0.63, 0.86 * alpha))
+
+
 func _draw_revealed_landmarks() -> void:
 	# The rescued people live in actual places revealed by the firelight.
 	if _light_visibility(survivor_one_pos) > 0.66:
@@ -2159,9 +2438,11 @@ func _draw_ground_texture(color: Color, spacing: int) -> void:
 func _light_visibility(pos: Vector2) -> float:
 	if mode == Mode.HUB:
 		return 1.0
-	var distance := pos.distance_to(HEARTH_POS)
-	var full_radius := maxf(60.0, light_display_radius - 34.0)
-	var edge_radius := light_display_radius + 6.0
+	var center := _active_light_center()
+	var radius := _active_light_radius()
+	var distance := pos.distance_to(center)
+	var full_radius := maxf(60.0, radius - 34.0)
+	var edge_radius := radius + 6.0
 	if distance <= full_radius:
 		return 1.0
 	if distance >= edge_radius:
@@ -2171,8 +2452,10 @@ func _light_visibility(pos: Vector2) -> float:
 
 func _lit_world_color(base: Color, pos: Vector2, alpha_scale: float = 1.0) -> Color:
 	var visibility := _light_visibility(pos)
-	var distance := pos.distance_to(HEARTH_POS)
-	var warmth := clampf(1.0 - distance / maxf(1.0, light_display_radius), 0.0, 1.0)
+	var center := _active_light_center()
+	var radius := _active_light_radius()
+	var distance := pos.distance_to(center)
+	var warmth := clampf(1.0 - distance / maxf(1.0, radius), 0.0, 1.0)
 	var warm := base.lerp(Color("#f2b86a"), warmth * 0.14)
 	var cold := Color(warm.r * 0.54, warm.g * 0.66, warm.b * 0.72, warm.a)
 	var result := cold.lerp(warm, visibility)
@@ -2728,8 +3011,16 @@ func _guidance_info() -> Dictionary:
 			return {"pos": best["pos"], "text": "ПОДБЕРИ БРЁВНА"}
 		return {"pos": _nearest_resource_pos("wood"), "text": "СРУБИ ДЕРЕВО"}
 
-	if stage == Stage.DAY1_RESCUE and not survivor_one_found:
-		return {"pos": survivor_one_pos, "text": "ВЫЖИВШИЙ"}
+	if stage == Stage.DAY1_RESCUE:
+		if area == Area.HUNTER_TRAIL:
+			if day1_route_complete:
+				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			return {"pos": survivor_one_pos, "text": "ОХОТНИК"}
+		if area == Area.SAWMILL:
+			if day1_route_complete:
+				return {"pos": ROUTE_RETURN_GATE, "text": "К ОЧАГУ"}
+			return {"pos": Vector2(240, 220), "text": "ЛЕСОПИЛКА"}
+		return {}
 
 	if stage == Stage.DAY2_BUILD:
 		if carried_wood + carried_stone > 0:
@@ -2849,7 +3140,7 @@ func _draw_hud() -> void:
 		_draw_icon_ember(Vector2(387, 22), Color("#d99b50"))
 		draw_string(font, Vector2(400, 27), "%d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 52, 14, Color("#e6c57e"))
 		draw_string(font, Vector2(14, 55), "Карта — новая вылазка. Здания — постоянные улучшения.", HORIZONTAL_ALIGNMENT_LEFT, 410, 10, Color("#98a89c"))
-		draw_string(font, Vector2(430, 55), "v0.8", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
+		draw_string(font, Vector2(430, 55), "v0.9", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
@@ -2887,7 +3178,16 @@ func _short_objective_text() -> String:
 			if resource_pickups.size() > 0:
 				return "Подбери брёвна"
 			return "Сруби ближайшее дерево"
-		Stage.DAY1_RESCUE: return "Подойди к найденному выжившему"
+		Stage.DAY1_RESCUE:
+			if area == Area.CAMP and day1_route == "":
+				return "Выбери один путь до наступления темноты"
+			if area == Area.HUNTER_TRAIL and not day1_route_complete:
+				return "Доберись до охотника"
+			if area == Area.SAWMILL and not sawmill_claimed:
+				return "Запусти старую лесопилку"
+			if not day1_route_complete:
+				return "Закончи начатое"
+			return "Вернись к Последнему Очагу"
 		Stage.NIGHT1: return "Защити огонь"
 		Stage.DAY2_BUILD:
 			if carried_wood + carried_stone > 0:
@@ -2909,7 +3209,10 @@ func _short_objective_text() -> String:
 func _stage_title() -> String:
 	match stage:
 		Stage.DAY1_GATHER: return "ДЕНЬ 1 | разожги очаг"
-		Stage.DAY1_RESCUE: return "ДЕНЬ 1 | найден выживший"
+		Stage.DAY1_RESCUE:
+			if area == Area.HUNTER_TRAIL: return "ДЕНЬ 1 | тропа охотника"
+			if area == Area.SAWMILL: return "ДЕНЬ 1 | старая лесопилка"
+			return "ДЕНЬ 1 | выбери путь"
 		Stage.NIGHT1: return "НОЧЬ 1"
 		Stage.DAY2_BUILD: return "ДЕНЬ 2 | восстанови мастерскую"
 		Stage.WORKSHOP_CHOICE: return "ДЕНЬ 2 | выбери развитие"
