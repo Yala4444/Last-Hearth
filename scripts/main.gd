@@ -232,7 +232,7 @@ func _enter_hub(message: String = "") -> void:
 	hub_feedback_text = ""
 	hub_feedback_timer = 0.0
 	if message != "":
-		_banner(message, 2.4)
+		_hub_feedback("ВОЗВРАЩЕНИЕ В ПОСЕЛЕНИЕ", HEARTH_POS, 1.8)
 
 
 func _start_expedition() -> void:
@@ -720,15 +720,15 @@ func _gathering_enabled() -> bool:
 
 func _resource_kind_needed(kind: String) -> bool:
 	if stage == Stage.DAY1_GATHER:
-		return kind == "tree" and camp_wood < 5
+		return kind == "tree" and camp_wood + carried_wood < 5
 	if stage == Stage.DAY2_BUILD:
 		if kind == "tree":
-			return camp_wood < current_stage_wood_start + 8
-		return camp_stone < current_stage_stone_start + 5
+			return camp_wood + carried_wood < current_stage_wood_start + 8
+		return camp_stone + carried_stone < current_stage_stone_start + 5
 	if stage == Stage.DAY3_TOWER:
 		if kind == "tree":
-			return camp_wood < current_stage_wood_start + 6
-		return camp_stone < current_stage_stone_start + 6
+			return camp_wood + carried_wood < current_stage_wood_start + 6
+		return camp_stone + carried_stone < current_stage_stone_start + 6
 	return false
 
 
@@ -789,6 +789,15 @@ func _update_resource_gathering() -> void:
 		break
 
 
+func _pickup_kind_allowed(kind: String) -> bool:
+	if not _gathering_enabled():
+		# Already-felled resources may be collected, but only if they are useful to the current active stage.
+		return false
+	if kind == "wood":
+		return _resource_kind_needed("tree")
+	return _resource_kind_needed("rock")
+
+
 func _update_resource_pickups(delta: float) -> void:
 	for i in range(resource_nodes.size()):
 		var node: Dictionary = resource_nodes[i]
@@ -813,6 +822,9 @@ func _update_resource_pickups(delta: float) -> void:
 	var nearest_distance := INF
 	for i in range(resource_pickups.size()):
 		var pickup: Dictionary = resource_pickups[i]
+		var kind := String(pickup.get("kind", "wood"))
+		if not _pickup_kind_allowed(kind):
+			continue
 		var pickup_pos: Vector2 = pickup["pos"]
 		var distance := hero_pos.distance_to(pickup_pos)
 		if distance <= HERO_PICKUP_RADIUS and distance < nearest_distance:
