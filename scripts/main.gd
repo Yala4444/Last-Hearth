@@ -2321,6 +2321,8 @@ func _draw_hero(pos: Vector2) -> void:
 
 
 func _nearby_resource_kind() -> String:
+	if not _gathering_enabled():
+		return ""
 	for node: Dictionary in resource_nodes:
 		if not bool(node.get("alive", false)):
 			continue
