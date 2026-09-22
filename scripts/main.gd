@@ -3628,17 +3628,24 @@ func _draw_flash() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(1.0, 0.78, 0.42, alpha))
 
 
+func _run_choice_line(day: int) -> String:
+	if day == 1:
+		return "ДЕНЬ 1  •  Охотник спасён" if day1_route == "hunter" else "ДЕНЬ 1  •  Лесопилка укреплена"
+	if day == 2:
+		return "ДЕНЬ 2  •  Оружейная" if workshop_choice == "armory" else "ДЕНЬ 2  •  Лесопилка"
+	return "ДЕНЬ 3  •  Дозор восстановлен" if day3_route == "watch" else "ДЕНЬ 3  •  Огненные стрелы"
+
+
 func _draw_result_overlay() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.86))
-	var panel := Rect2(Vector2(30, 205), Vector2(420, 365))
+	var panel := Rect2(Vector2(30, 185), Vector2(420, 420))
 	draw_rect(panel, Color("#16231c"))
 	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#d29550") if result_win else Color("#824842"))
 
-	draw_string(font, Vector2(50, 258), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 21, Color("#f4e6ce"))
+	draw_string(font, Vector2(50, 235), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 20, Color("#f4e6ce"))
 
 	if result_win:
-		# A tiny distant flame is the first visual hook for the next chapter.
-		var distant := Vector2(240, 304)
+		var distant := Vector2(240, 278)
 		draw_circle(distant, 18.0, Color(0.93, 0.55, 0.22, 0.08))
 		draw_circle(distant, 8.0, Color("#d77e38"))
 		var flame := PackedVector2Array([
@@ -3646,21 +3653,25 @@ func _draw_result_overlay() -> void:
 			distant + Vector2(0, 10), distant + Vector2(-7, 4)
 		])
 		draw_colored_polygon(flame, Color("#f2b14e"))
-		draw_string(font, Vector2(62, 344), "ГДЕ-ТО ЕЩЁ ГОРИТ ОГОНЬ", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#e7cf9b"))
-		draw_string(font, Vector2(62, 366), "Следующий путь: Мёртвые поля", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#a9b9aa"))
+		draw_string(font, Vector2(62, 315), "ГДЕ-ТО ЕЩЁ ГОРИТ ОГОНЬ", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#e7cf9b"))
+		draw_string(font, Vector2(62, 336), "Следующий путь: Мёртвые поля", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#a9b9aa"))
 	else:
-		draw_string(font, Vector2(62, 320), "Огонь погас, но поселение помнит этот поход.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
-		draw_string(font, Vector2(62, 342), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 296), "Огонь погас, но поселение помнит этот поход.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 318), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#b8c7bb"))
 
-	draw_string(font, Vector2(62, 412), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 15, Color("#ecc178"))
+	draw_string(font, Vector2(62, 374), "ТВОЯ ИСТОРИЯ ЭТОЙ ВЫЛАЗКИ", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#d7bc86"))
+	for i in range(3):
+		draw_string(font, Vector2(84, 402 + i * 23), _run_choice_line(i + 1), HORIZONTAL_ALIGNMENT_LEFT, 320, 11, Color("#b9c5ba"))
+
+	draw_string(font, Vector2(62, 478), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 14, Color("#ecc178"))
 
 	if result_win:
-		draw_string(font, Vector2(62, 451), "Забытый лес очищен. Поселение стало сильнее.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
+		draw_string(font, Vector2(62, 509), "Забытый лес очищен. Но ответы только начались.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
 	else:
-		draw_string(font, Vector2(62, 451), "Новая попытка получит другую карту и другие события.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
+		draw_string(font, Vector2(62, 509), "Следующая попытка может пойти по другому пути.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
 
-	draw_rect(Rect2(Vector2(93, 501), Vector2(294, 44)), Color("#2a382e"))
-	draw_string(font, Vector2(105, 528), "КОСНИСЬ | ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 12, Color("#f0d7a1"))
+	draw_rect(Rect2(Vector2(93, 544), Vector2(294, 42)), Color("#2a382e"))
+	draw_string(font, Vector2(105, 570), "КОСНИСЬ | ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 11, Color("#f0d7a1"))
 
 
 func _draw_ellipse_custom(center: Vector2, radii: Vector2, color: Color) -> void:
