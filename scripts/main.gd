@@ -1877,13 +1877,16 @@ func _draw_map_variant_decor() -> void:
 		for p: Vector2 in [Vector2(102, 300), Vector2(380, 330), Vector2(118, 602), Vector2(350, 655)]:
 			draw_circle(p, 48.0, Color(0.07, 0.06, 0.055, 0.29))
 			draw_circle(p + Vector2(10, -6), 26.0, Color(0.11, 0.085, 0.065, 0.20))
-		for segment in [
+		var fence_segments: Array[Array] = [
 			[Vector2(42, 294), Vector2(148, 318)],
 			[Vector2(332, 300), Vector2(444, 322)],
 			[Vector2(55, 605), Vector2(151, 574)]
-		]:
-			draw_line(segment[0], segment[1], Color(0.29, 0.22, 0.16, 0.52), 5.0)
-			var mid: Vector2 = (segment[0] + segment[1]) * 0.5
+		]
+		for segment: Array in fence_segments:
+			var start: Vector2 = segment[0]
+			var finish: Vector2 = segment[1]
+			draw_line(start, finish, Color(0.29, 0.22, 0.16, 0.52), 5.0)
+			var mid: Vector2 = (start + finish) * 0.5
 			draw_line(mid + Vector2(0, -14), mid + Vector2(0, 15), Color(0.24, 0.18, 0.13, 0.46), 4.0)
 
 
@@ -1916,6 +1919,8 @@ func _draw_world_events() -> void:
 
 		var kind := String(event.get("kind", ""))
 		var triggered := bool(event.get("triggered", false))
+		if kind == "whisper" and not (stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3] and twilight_timer > 0.0):
+			continue
 
 		if visibility < 0.58 and not triggered:
 			# Unknown things stay unknown until the fire actually reaches them.
@@ -1943,8 +1948,12 @@ func _draw_world_events() -> void:
 			"whisper":
 				_draw_event_whisper(pos, alpha, triggered)
 
-		if not triggered and kind != "black_tree":
-			var progress := clampf(float(event.get("progress", 0.0)) / maxf(0.01, float(event.get("required", 1.0))), 0.0, 1.0)
+		if not triggered:
+			var progress := 0.0
+			if kind == "black_tree":
+				progress = clampf(float(event.get("progress", 0.0)), 0.0, 1.0)
+			else:
+				progress = clampf(float(event.get("progress", 0.0)) / maxf(0.01, float(event.get("required", 1.0))), 0.0, 1.0)
 			if progress > 0.01:
 				draw_arc(pos, 29.0, -PI * 0.5, -PI * 0.5 + TAU * progress, 30, Color(0.94, 0.76, 0.42, 0.85), 3.0)
 
