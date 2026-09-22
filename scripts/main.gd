@@ -1177,22 +1177,52 @@ func _add_survivor(role: String, spawn_pos: Vector2) -> void:
 	_burst(spawn_pos, 8)
 
 
+func _workshop_pos() -> Vector2:
+	return HEARTH_POS + Vector2(-148.0, -62.0)
+
+
+func _tower_pos() -> Vector2:
+	return HEARTH_POS + Vector2(148.0, -55.0)
+
+
 func _survivor_day_target(index: int, role: String) -> Vector2:
+	var camp_scale := 1.0 + float(maxi(0, hearth_level - 2)) * 0.08
 	if role == "hunter":
-		return HEARTH_POS + Vector2(-84.0, 54.0)
+		return HEARTH_POS + Vector2(-118.0, 58.0) * camp_scale
 	if role == "worker":
-		return HEARTH_POS + (Vector2(-110.0, -48.0) if workshop_built else Vector2(88.0, 60.0))
+		return _workshop_pos() + Vector2(18, 20) if workshop_built else HEARTH_POS + Vector2(112.0, 72.0) * camp_scale
 
 	var guard_slots: Array[Vector2] = [
-		Vector2(96, -54), Vector2(112, 36), Vector2(70, 88), Vector2(-68, 90)
+		Vector2(122, -78), Vector2(142, 30), Vector2(88, 118),
+		Vector2(-88, 118), Vector2(-142, 26), Vector2(-122, -78)
 	]
-	return HEARTH_POS + guard_slots[index % guard_slots.size()]
+	return HEARTH_POS + guard_slots[index % guard_slots.size()] * camp_scale
 
 
 func _survivor_defense_target(index: int) -> Vector2:
 	var count := maxi(1, survivor_agents.size())
 	var angle := -PI * 0.78 + TAU * float(index) / float(count)
-	return HEARTH_POS + Vector2(cos(angle), sin(angle)) * 78.0
+	var radius := 104.0 + float(maxi(0, hearth_level - 2)) * 7.0
+	return HEARTH_POS + Vector2(cos(angle), sin(angle)) * radius
+
+
+func _separate_survivor_position(pos: Vector2, index: int) -> Vector2:
+	var result := pos
+	var from_hearth := result - HEARTH_POS
+	var minimum := 74.0
+	if from_hearth.length() < minimum:
+		if from_hearth.length() < 0.01:
+			from_hearth = Vector2(1, 0)
+		result = HEARTH_POS + from_hearth.normalized() * minimum
+
+	for j in range(survivor_agents.size()):
+		if j == index:
+			continue
+		var other: Vector2 = survivor_agents[j]["pos"]
+		var diff := result - other
+		if diff.length() < 25.0 and diff.length() > 0.01:
+			result += diff.normalized() * (25.0 - diff.length()) * 0.45
+	return result
 
 
 func _update_survivor_agents(delta: float) -> void:
@@ -1209,6 +1239,7 @@ func _update_survivor_agents(delta: float) -> void:
 		if moving:
 			var move_speed := 100.0 if night else 68.0
 			pos += to_target.normalized() * minf(to_target.length(), move_speed * delta)
+		pos = _separate_survivor_position(pos, i)
 		var phase_speed := 6.0 if moving else (4.2 if role == "worker" and not night else 1.8)
 		agent["phase"] = float(agent.get("phase", 0.0)) + delta * phase_speed
 
@@ -1267,7 +1298,7 @@ func _update_combat() -> void:
 func _update_tower() -> void:
 	if tower_cd > 0.0 or enemies.is_empty():
 		return
-	var tower_pos := HEARTH_POS + Vector2(92.0, -35.0)
+	var tower_pos := _tower_pos()
 	var targets := _nearest_enemy_indices(tower_pos, 340.0, 1)
 	if targets.size() > 0:
 		shots.append({
@@ -1753,9 +1784,9 @@ func _draw_expedition() -> void:
 
 	_draw_revealed_landmarks()
 
-	if stage == Stage.DAY1_RESCUE and not survivor_one_found:
+	if stage == Stage.DAY1_RESCUE and not survivor_one_found and _light_visibility(survivor_one_pos) > 0.72:
 		_draw_survivor(survivor_one_pos, "?")
-	if stage == Stage.DAY2_RESCUE and not survivor_two_found:
+	if stage == Stage.DAY2_RESCUE and not survivor_two_found and _light_visibility(survivor_two_pos) > 0.72:
 		_draw_survivor(survivor_two_pos, "!")
 	if stage == Stage.WORKSHOP_CHOICE:
 		_draw_choice_shrine(left_choice_pos, "ОРУЖЕЙНАЯ | +28% УРОН", Color("#a85949"))
@@ -1789,6 +1820,7 @@ func _draw_expedition() -> void:
 	if night_mix > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.015, 0.03, 0.035, 0.10 * night_mix))
 		_draw_night_edge_eyes(night_mix)
+	_draw_world_vignette(night_mix)
 
 
 func _draw_map_variant_decor() -> void:
@@ -1902,9 +1934,9 @@ func _draw_event_dead_camp(pos: Vector2, alpha: float, triggered: bool) -> void:
 
 func _draw_revealed_landmarks() -> void:
 	# The rescued people live in actual places revealed by the firelight.
-	if survivor_one_pos.distance_to(HEARTH_POS) <= light_radius + 28.0:
+	if _light_visibility(survivor_one_pos) > 0.66:
 		_draw_ruined_shelter(survivor_one_pos + Vector2(-18, 20), Color("#5f543f"))
-	if survivor_two_pos.distance_to(HEARTH_POS) <= light_radius + 28.0:
+	if _light_visibility(survivor_two_pos) > 0.66:
 		_draw_ruined_shelter(survivor_two_pos + Vector2(22, 18), Color("#5a4c3d"))
 	if light_radius >= 245.0:
 		_draw_ruined_shelter(HEARTH_POS + Vector2(-112, -44), Color("#574c3c"))
@@ -1933,6 +1965,41 @@ func _draw_ground_texture(color: Color, spacing: int) -> void:
 		for x in range(20, 470, spacing):
 			var offset := float((x * 13 + y * 7) % 17)
 			draw_circle(Vector2(float(x) + offset, float(y)), 2.0, color)
+
+
+func _light_visibility(pos: Vector2) -> float:
+	if mode == Mode.HUB:
+		return 1.0
+	var distance := pos.distance_to(HEARTH_POS)
+	var full_radius := maxf(60.0, light_radius - 34.0)
+	var edge_radius := light_radius + 6.0
+	if distance <= full_radius:
+		return 1.0
+	if distance >= edge_radius:
+		return 0.035
+	return lerpf(0.035, 1.0, 1.0 - (distance - full_radius) / maxf(1.0, edge_radius - full_radius))
+
+
+func _lit_world_color(base: Color, pos: Vector2, alpha_scale: float = 1.0) -> Color:
+	var visibility := _light_visibility(pos)
+	var distance := pos.distance_to(HEARTH_POS)
+	var warmth := clampf(1.0 - distance / maxf(1.0, light_radius), 0.0, 1.0)
+	var warm := base.lerp(Color("#f2b86a"), warmth * 0.14)
+	var cold := Color(warm.r * 0.54, warm.g * 0.66, warm.b * 0.72, warm.a)
+	var result := cold.lerp(warm, visibility)
+	result.a = visibility * alpha_scale
+	return result
+
+
+func _draw_world_vignette(night_mix: float) -> void:
+	var strength := 0.10 + night_mix * 0.15
+	for i in range(5):
+		var inset := float(i) * 13.0
+		var a := strength * (1.0 - float(i) / 6.0)
+		draw_rect(Rect2(Vector2(inset, 82 + inset), Vector2(480.0 - inset * 2.0, 17.0)), Color(0.0, 0.02, 0.025, a))
+		draw_rect(Rect2(Vector2(inset, 783.0 - inset), Vector2(480.0 - inset * 2.0, 17.0)), Color(0.0, 0.02, 0.025, a))
+		draw_rect(Rect2(Vector2(inset, 82 + inset), Vector2(15.0, 718.0 - inset * 2.0)), Color(0.0, 0.02, 0.025, a))
+		draw_rect(Rect2(Vector2(465.0 - inset, 82 + inset), Vector2(15.0, 718.0 - inset * 2.0)), Color(0.0, 0.02, 0.025, a))
 
 
 func _draw_light_field(center: Vector2, radius: float) -> void:
@@ -2283,7 +2350,7 @@ func _draw_shot(shot: Dictionary) -> void:
 
 
 func _draw_workshop() -> void:
-	var pos := HEARTH_POS + Vector2(-112, -48)
+	var pos := _workshop_pos()
 	_draw_ellipse_custom(pos + Vector2(0, 23), Vector2(38, 10), Color(0.01, 0.02, 0.015, 0.26))
 	draw_rect(Rect2(pos + Vector2(-31, -14), Vector2(62, 42)), Color("#5c4935"))
 	var roof := PackedVector2Array([
@@ -2297,7 +2364,7 @@ func _draw_workshop() -> void:
 
 
 func _draw_tower() -> void:
-	var pos := HEARTH_POS + Vector2(104, -39)
+	var pos := _tower_pos()
 	_draw_ellipse_custom(pos + Vector2(0, 22), Vector2(30, 9), Color(0.01, 0.02, 0.015, 0.25))
 	draw_line(pos + Vector2(-13, 25), pos + Vector2(-8, -38), Color("#604a31"), 7.0)
 	draw_line(pos + Vector2(13, 25), pos + Vector2(8, -38), Color("#604a31"), 7.0)
@@ -2367,16 +2434,20 @@ func _draw_stockpile() -> void:
 
 func _draw_world_progress() -> void:
 	if stage == Stage.DAY1_GATHER:
-		var need := 5
-		draw_string(font, HEARTH_POS + Vector2(-72, -78), "БРЁВНА %d/%d" % [mini(camp_wood, need), need], HORIZONTAL_ALIGNMENT_CENTER, 144, 12, Color("#f1d79f"))
+		var delivered := mini(camp_wood, 5)
+		draw_string(font, HEARTH_POS + Vector2(-72, -78), "БРЁВНА %d/5" % delivered, HORIZONTAL_ALIGNMENT_CENTER, 144, 12, Color("#f1d79f"))
 	elif stage == Stage.DAY2_BUILD:
-		var pos := HEARTH_POS + Vector2(-112, -48)
-		draw_string(font, pos + Vector2(-78, -55), "МАСТЕРСКАЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
-		draw_string(font, pos + Vector2(-78, -40), "дерево %d/8  |  камень %d/5" % [mini(camp_wood, 8), mini(camp_stone, 5)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
+		var pos := _workshop_pos()
+		var wood_progress := clampi(camp_wood - current_stage_wood_start, 0, 8)
+		var stone_progress := clampi(camp_stone - current_stage_stone_start, 0, 5)
+		draw_string(font, pos + Vector2(-78, -58), "МАСТЕРСКАЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
+		draw_string(font, pos + Vector2(-82, -42), "дерево %d/8 | камень %d/5" % [wood_progress, stone_progress], HORIZONTAL_ALIGNMENT_CENTER, 164, 10, Color("#d4ba88"))
 	elif stage == Stage.DAY3_TOWER:
-		var pos := HEARTH_POS + Vector2(104, -39)
-		draw_string(font, pos + Vector2(-78, -62), "ДОЗОРНАЯ БАШНЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
-		draw_string(font, pos + Vector2(-78, -47), "дерево %d/6  |  камень %d/6" % [mini(camp_wood, 6), mini(camp_stone, 6)], HORIZONTAL_ALIGNMENT_CENTER, 156, 10, Color("#d4ba88"))
+		var pos := _tower_pos()
+		var wood_progress := clampi(camp_wood - current_stage_wood_start, 0, 6)
+		var stone_progress := clampi(camp_stone - current_stage_stone_start, 0, 6)
+		draw_string(font, pos + Vector2(-78, -68), "ДОЗОРНАЯ БАШНЯ", HORIZONTAL_ALIGNMENT_CENTER, 156, 11, Color("#e7dbc4"))
+		draw_string(font, pos + Vector2(-82, -52), "дерево %d/6 | камень %d/6" % [wood_progress, stone_progress], HORIZONTAL_ALIGNMENT_CENTER, 164, 10, Color("#d4ba88"))
 
 
 func _nearest_resource_pos(kind: String) -> Vector2:
@@ -2418,9 +2489,9 @@ func _guidance_info() -> Dictionary:
 	if stage == Stage.DAY2_BUILD:
 		if carried_wood + carried_stone > 0:
 			return {"pos": HEARTH_POS, "text": "НЕСИ В ЗАПАС"}
-		if camp_wood < 8:
+		if camp_wood < current_stage_wood_start + 8:
 			return {"pos": _nearest_resource_pos("wood"), "text": "НУЖНО ДЕРЕВО"}
-		if camp_stone < 5:
+		if camp_stone < current_stage_stone_start + 5:
 			return {"pos": _nearest_resource_pos("stone"), "text": "НУЖЕН КАМЕНЬ"}
 
 	if stage == Stage.WORKSHOP_CHOICE:
@@ -2432,9 +2503,9 @@ func _guidance_info() -> Dictionary:
 	if stage == Stage.DAY3_TOWER:
 		if carried_wood + carried_stone > 0:
 			return {"pos": HEARTH_POS, "text": "НЕСИ В ЗАПАС"}
-		if camp_wood < 6:
+		if camp_wood < current_stage_wood_start + 6:
 			return {"pos": _nearest_resource_pos("wood"), "text": "НУЖНО ДЕРЕВО"}
-		if camp_stone < 6:
+		if camp_stone < current_stage_stone_start + 6:
 			return {"pos": _nearest_resource_pos("stone"), "text": "НУЖЕН КАМЕНЬ"}
 
 	if stage == Stage.EXPEDITION_CHOICE:
