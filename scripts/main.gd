@@ -566,13 +566,16 @@ func _stash_camp_area() -> void:
 func _restore_camp_area() -> void:
 	resource_nodes.clear()
 	for item: Variant in camp_resource_backup:
-		resource_nodes.append((item as Dictionary).duplicate(true))
+		var restored_resource: Dictionary = item
+		resource_nodes.append(restored_resource.duplicate(true))
 	events.clear()
 	for item: Variant in camp_event_backup:
-		events.append((item as Dictionary).duplicate(true))
+		var restored_event: Dictionary = item
+		events.append(restored_event.duplicate(true))
 	decor_points.clear()
 	for item: Variant in camp_decor_backup:
-		decor_points.append((item as Dictionary).duplicate(true))
+		var restored_decor: Dictionary = item
+		decor_points.append(restored_decor.duplicate(true))
 	enemies.clear()
 	shots.clear()
 	resource_pickups.clear()
