@@ -1582,13 +1582,32 @@ func _float_text(pos: Vector2, text: String, color: Color) -> void:
 
 
 func _burst(pos: Vector2, count: int) -> void:
+	_burst_typed(pos, count, "ember")
+
+
+func _burst_typed(pos: Vector2, count: int, kind: String) -> void:
 	for i in range(count):
 		var angle := rng.randf_range(0.0, TAU)
-		var speed := rng.randf_range(35.0, 115.0)
+		var speed := rng.randf_range(34.0, 118.0)
+		var life := rng.randf_range(0.30, 0.72)
+		if kind == "wood":
+			angle = rng.randf_range(-2.85, -0.30)
+			speed = rng.randf_range(45.0, 125.0)
+			life = rng.randf_range(0.25, 0.55)
+		elif kind == "stone":
+			speed = rng.randf_range(25.0, 72.0)
+			life = rng.randf_range(0.22, 0.46)
+		elif kind == "ember":
+			angle = rng.randf_range(-2.75, -0.40)
+			speed = rng.randf_range(28.0, 78.0)
+			life = rng.randf_range(0.38, 0.85)
 		particles.append({
 			"pos": pos,
 			"vel": Vector2(cos(angle), sin(angle)) * speed,
-			"life": rng.randf_range(0.3, 0.7)
+			"life": life,
+			"max_life": life,
+			"kind": kind,
+			"size": rng.randf_range(1.8, 3.7)
 		})
 
 
@@ -2737,8 +2756,19 @@ func _draw_guidance_marker() -> void:
 func _draw_particles() -> void:
 	for p: Dictionary in particles:
 		var pos: Vector2 = p["pos"]
-		var life := clampf(float(p.get("life", 0.0)), 0.0, 1.0)
-		draw_circle(pos, 3.0, Color(0.95, 0.74, 0.36, life))
+		var max_life := maxf(0.01, float(p.get("max_life", 0.6)))
+		var life := clampf(float(p.get("life", 0.0)) / max_life, 0.0, 1.0)
+		var kind := String(p.get("kind", "ember"))
+		var size := float(p.get("size", 2.6))
+		if kind == "wood":
+			var vel: Vector2 = p.get("vel", Vector2.RIGHT)
+			var dir := vel.normalized() if vel.length() > 0.1 else Vector2.RIGHT
+			draw_line(pos - dir * size, pos + dir * size, Color(0.73, 0.43, 0.21, life), 2.0)
+		elif kind == "stone":
+			draw_circle(pos, size * 0.72, Color(0.50, 0.55, 0.53, life * 0.85))
+		else:
+			draw_circle(pos, size, Color(1.0, 0.66, 0.24, life))
+			draw_circle(pos, size * 0.42, Color(1.0, 0.91, 0.60, life))
 
 
 func _draw_floaters() -> void:
