@@ -76,27 +76,21 @@ func _init() -> void:
 		fail("Workshop did not preserve pre-existing stock")
 		return
 
-	# Day 3 follows the same rule and still covers the old 6/6 soft-lock case.
+	# v0.9 removes the old Day 3 6/6 resource gate entirely.
 	game.stage = 7
+	game.day3_route = ""
 	game.current_stage_wood_start = 4
 	game.current_stage_stone_start = 3
-	game.camp_wood = 4
-	game.camp_stone = 3
+	game.camp_wood = 20
+	game.camp_stone = 20
 	game.tower_built = false
 	game.stage_transition_lock = false
 	game._check_day_progress()
 	if int(game.stage) != 7 or bool(game.tower_built):
-		fail("Tower incorrectly consumed pre-farmed stock")
+		fail("Day 3 resources should not auto-build the tower in v0.9")
 		return
-
-	game.camp_wood = 10
-	game.camp_stone = 9
-	game._check_day_progress()
-	if int(game.stage) != 8 or not bool(game.tower_built):
-		fail("Tower 6/6 progression sanity failed")
-		return
-	if int(game.camp_wood) != 4 or int(game.camp_stone) != 3:
-		fail("Tower did not preserve pre-existing stock")
+	if bool(game._gathering_enabled()):
+		fail("Day 3 should no longer be a gathering phase")
 		return
 
 	# Hero can never occupy the hearth center.
