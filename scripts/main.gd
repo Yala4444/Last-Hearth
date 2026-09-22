@@ -288,21 +288,73 @@ func _start_expedition() -> void:
 
 func _generate_layout() -> void:
 	resource_nodes.clear()
-	var tree_slots: Array[Vector2] = [
-		Vector2(95, 235), Vector2(175, 205), Vector2(290, 210), Vector2(385, 240),
-		Vector2(80, 360), Vector2(400, 355), Vector2(105, 560), Vector2(385, 565),
-		Vector2(175, 620), Vector2(315, 620), Vector2(70, 690), Vector2(410, 685)
-	]
-	var rock_slots: Array[Vector2] = [
-		Vector2(125, 290), Vector2(355, 300), Vector2(135, 510),
-		Vector2(345, 505), Vector2(235, 655), Vector2(420, 455)
-	]
+	events.clear()
+	decor_points.clear()
+
+	map_variant = rng.randi_range(0, 3)
+	var tree_slots: Array[Vector2] = []
+	var rock_slots: Array[Vector2] = []
+
+	match map_variant:
+		0:
+			map_variant_name = "Тихая поляна"
+			tree_slots = [
+				Vector2(90, 245), Vector2(175, 205), Vector2(300, 215), Vector2(392, 250),
+				Vector2(82, 365), Vector2(398, 365), Vector2(105, 560), Vector2(380, 560),
+				Vector2(170, 630), Vector2(315, 625), Vector2(75, 690), Vector2(410, 690)
+			]
+			rock_slots = [
+				Vector2(130, 300), Vector2(355, 305), Vector2(135, 505),
+				Vector2(345, 505), Vector2(240, 655), Vector2(420, 455)
+			]
+			_add_event("dead_camp", Vector2(92, 205))
+			_add_event("altar", Vector2(392, 610))
+		1:
+			map_variant_name = "Разорённая дорога"
+			tree_slots = [
+				Vector2(72, 225), Vector2(155, 250), Vector2(335, 225), Vector2(420, 260),
+				Vector2(90, 405), Vector2(390, 410), Vector2(112, 585), Vector2(370, 590),
+				Vector2(178, 680), Vector2(310, 675), Vector2(65, 730), Vector2(420, 720)
+			]
+			rock_slots = [
+				Vector2(115, 320), Vector2(365, 335), Vector2(105, 520),
+				Vector2(380, 510), Vector2(225, 620), Vector2(430, 445)
+			]
+			_add_event("wagon", Vector2(95, 315))
+			_add_event("wounded", Vector2(386, 330))
+		2:
+			map_variant_name = "Каменная низина"
+			tree_slots = [
+				Vector2(78, 245), Vector2(155, 205), Vector2(330, 205), Vector2(408, 250),
+				Vector2(92, 400), Vector2(388, 395), Vector2(105, 590), Vector2(375, 600),
+				Vector2(180, 690), Vector2(300, 690), Vector2(68, 735), Vector2(422, 730)
+			]
+			rock_slots = [
+				Vector2(120, 300), Vector2(350, 290), Vector2(155, 470),
+				Vector2(325, 465), Vector2(225, 585), Vector2(420, 520)
+			]
+			_add_event("altar", Vector2(98, 520))
+			_add_event("black_tree", Vector2(390, 535))
+		_:
+			map_variant_name = "Сгоревшая усадьба"
+			tree_slots = [
+				Vector2(85, 230), Vector2(170, 215), Vector2(310, 215), Vector2(405, 230),
+				Vector2(70, 390), Vector2(410, 400), Vector2(100, 565), Vector2(385, 560),
+				Vector2(165, 650), Vector2(320, 650), Vector2(75, 725), Vector2(415, 715)
+			]
+			rock_slots = [
+				Vector2(125, 300), Vector2(355, 300), Vector2(140, 505),
+				Vector2(340, 500), Vector2(240, 640), Vector2(425, 455)
+			]
+			_add_event("dead_camp", Vector2(105, 345))
+			_add_event("wagon", Vector2(382, 345))
+			_add_event("wounded", Vector2(390, 610))
 
 	for i in range(9):
 		var index: int = rng.randi_range(0, tree_slots.size() - 1)
 		var base: Vector2 = tree_slots[index]
 		tree_slots.remove_at(index)
-		var pos := base + Vector2(rng.randf_range(-18.0, 18.0), rng.randf_range(-14.0, 14.0))
+		var pos: Vector2 = base + Vector2(rng.randf_range(-16.0, 16.0), rng.randf_range(-12.0, 12.0))
 		resource_nodes.append({
 			"kind": "tree",
 			"pos": pos,
@@ -317,7 +369,7 @@ func _generate_layout() -> void:
 		var index: int = rng.randi_range(0, rock_slots.size() - 1)
 		var base: Vector2 = rock_slots[index]
 		rock_slots.remove_at(index)
-		var pos := base + Vector2(rng.randf_range(-15.0, 15.0), rng.randf_range(-12.0, 12.0))
+		var pos: Vector2 = base + Vector2(rng.randf_range(-13.0, 13.0), rng.randf_range(-10.0, 10.0))
 		resource_nodes.append({
 			"kind": "rock",
 			"pos": pos,
@@ -328,33 +380,34 @@ func _generate_layout() -> void:
 			"drop_spawned": false
 		})
 
-	decor_points.clear()
-	for i in range(46):
-		var dpos := Vector2(rng.randf_range(28.0, 452.0), rng.randf_range(128.0, 770.0))
-		if dpos.distance_to(HEARTH_POS) < 82.0:
+	for i in range(56):
+		var dpos := Vector2(rng.randf_range(26.0, 454.0), rng.randf_range(128.0, 770.0))
+		if dpos.distance_to(HEARTH_POS) < 80.0:
 			continue
 		var roll := rng.randf()
 		var kind := "grass"
-		if roll > 0.72:
+		if roll > 0.68:
 			kind = "pebble"
-		if roll > 0.90:
+		if roll > 0.88:
 			kind = "branch"
+		if map_variant == 3 and roll > 0.78:
+			kind = "ash"
 		decor_points.append({
 			"pos": dpos,
 			"kind": kind,
-			"scale": rng.randf_range(0.75, 1.25)
+			"scale": rng.randf_range(0.72, 1.28)
 		})
 
 	var first_rescue_slots: Array[Vector2] = [
-		Vector2(92, 520), Vector2(392, 525), Vector2(108, 325), Vector2(372, 330)
+		Vector2(96, 520), Vector2(384, 525), Vector2(112, 335), Vector2(368, 338)
 	]
 	var second_rescue_slots: Array[Vector2] = [
-		Vector2(92, 184), Vector2(388, 188), Vector2(72, 655), Vector2(408, 650)
+		Vector2(92, 182), Vector2(388, 188), Vector2(78, 660), Vector2(404, 655)
 	]
 	var first_index: int = rng.randi_range(0, first_rescue_slots.size() - 1)
-	survivor_one_pos = first_rescue_slots[first_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
+	survivor_one_pos = first_rescue_slots[first_index] + Vector2(rng.randf_range(-10.0, 10.0), rng.randf_range(-8.0, 8.0))
 	var second_index: int = rng.randi_range(0, second_rescue_slots.size() - 1)
-	survivor_two_pos = second_rescue_slots[second_index] + Vector2(rng.randf_range(-12.0, 12.0), rng.randf_range(-10.0, 10.0))
+	survivor_two_pos = second_rescue_slots[second_index] + Vector2(rng.randf_range(-10.0, 10.0), rng.randf_range(-8.0, 8.0))
 
 	if rng.randf() < 0.5:
 		left_choice_pos = Vector2(130.0, 285.0)
@@ -362,6 +415,79 @@ func _generate_layout() -> void:
 	else:
 		left_choice_pos = Vector2(125.0, 540.0)
 		right_choice_pos = Vector2(355.0, 540.0)
+
+
+func _add_event(kind: String, pos: Vector2) -> void:
+	events.append({
+		"kind": kind,
+		"pos": pos,
+		"triggered": false,
+		"outcome": ""
+	})
+
+
+func _update_world_events() -> void:
+	if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3, Stage.CORE_RETURN]:
+		return
+
+	for i in range(events.size()):
+		var event: Dictionary = events[i]
+		if bool(event.get("triggered", false)):
+			continue
+		var pos: Vector2 = event["pos"]
+		if pos.distance_to(HEARTH_POS) > light_radius + 30.0:
+			continue
+		if hero_pos.distance_to(pos) > 42.0:
+			continue
+
+		var kind := String(event.get("kind", ""))
+		event["triggered"] = true
+
+		match kind:
+			"wagon":
+				if rng.randf() < 0.68:
+					camp_wood += 2
+					camp_stone += 1
+					event["outcome"] = "loot"
+					_story("Брошенная телега: внутри осталось немного припасов.", 2.8)
+				else:
+					event["outcome"] = "ambush"
+					_spawn_enemy_at("guard", pos + Vector2(-28, 14))
+					_spawn_enemy_at("guard", pos + Vector2(30, -12))
+					_story("Телега была приманкой. Из темноты вышли двое.", 2.8)
+			"wounded":
+				run_embers += 1
+				event["outcome"] = "helped"
+				_story("Раненый странник: Они идут за светом... Береги огонь.", 3.2)
+			"altar":
+				if rng.randf() < 0.5:
+					hero_damage *= 1.12
+					event["outcome"] = "damage"
+					_story("Старый алтарь отозвался. Оружие стало сильнее.", 2.8)
+				else:
+					carry_limit += 1
+					event["outcome"] = "carry"
+					_story("Старый алтарь отозвался. Ты можешь нести больше.", 2.8)
+			"black_tree":
+				event["outcome"] = "opened"
+				for j in range(4):
+					var angle := TAU * float(j) / 4.0
+					resource_pickups.append({
+						"kind": "wood",
+						"pos": pos + Vector2(cos(angle), sin(angle)) * 24.0,
+						"spin": rng.randf_range(-0.2, 0.2)
+					})
+				_spawn_enemy_at("fast", pos + Vector2(-34, 18))
+				_spawn_enemy_at("fast", pos + Vector2(35, -16))
+				_story("Чёрное дерево треснуло. Древесины много, но шум кого-то разбудил.", 3.0)
+			"dead_camp":
+				run_embers += 1
+				event["outcome"] = "memory"
+				_story("Потухший костёр. На камне вырезан тот же знак, что и у нашего Очагa.", 3.4)
+
+		events[i] = event
+		_check_day_progress()
+		break
 
 
 func _update_movement(delta: float) -> void:
