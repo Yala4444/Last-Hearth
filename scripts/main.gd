@@ -16,6 +16,23 @@ const TWILIGHT_DURATION := 3.4
 const UNLOAD_INTERVAL := 0.16
 const SAVE_PATH := "user://hearth_meta.json"
 
+const TEX_HERO_IDLE: Texture2D = preload("res://assets/v08/sprint1/hero_idle.svg")
+const TEX_HERO_WALK: Texture2D = preload("res://assets/v08/sprint1/hero_walk.svg")
+const TEX_HERO_ATTACK: Texture2D = preload("res://assets/v08/sprint1/hero_attack.svg")
+const TEX_HERO_CARRY_1: Texture2D = preload("res://assets/v08/sprint1/hero_carry_1.svg")
+const TEX_HERO_CARRY_2: Texture2D = preload("res://assets/v08/sprint1/hero_carry_2.svg")
+const TEX_HERO_CARRY_3: Texture2D = preload("res://assets/v08/sprint1/hero_carry_3.svg")
+const TEX_TREE_A: Texture2D = preload("res://assets/v08/sprint1/tree_a.svg")
+const TEX_TREE_B: Texture2D = preload("res://assets/v08/sprint1/tree_b.svg")
+const TEX_TREE_C: Texture2D = preload("res://assets/v08/sprint1/tree_c.svg")
+const TEX_TREE_FALLING: Texture2D = preload("res://assets/v08/sprint1/tree_falling.svg")
+const TEX_STUMP: Texture2D = preload("res://assets/v08/sprint1/stump.svg")
+const TEX_LOG: Texture2D = preload("res://assets/v08/sprint1/log.svg")
+const TEX_HEARTH_1: Texture2D = preload("res://assets/v08/sprint1/hearth_1.svg")
+const TEX_HEARTH_2: Texture2D = preload("res://assets/v08/sprint1/hearth_2.svg")
+const TEX_ROCK: Texture2D = preload("res://assets/v08/sprint1/rock.svg")
+const TEX_GRASS: Texture2D = preload("res://assets/v08/sprint1/grass.svg")
+
 enum Mode {
 	HUB,
 	EXPEDITION,
@@ -44,7 +61,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 7,
+	"build_version": 8,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -200,11 +217,11 @@ func _load_meta() -> void:
 		for key: Variant in saved.keys():
 			meta[key] = saved[key]
 
-	# v0.7 changes resource pacing, events and world presentation.
+	# v0.8 begins the production-asset visual rebuild without changing progression semantics.
 	# Existing testers get a fresh expedition without losing permanent upgrades.
 	var loaded_version := int(meta.get("build_version", 0))
-	if loaded_version < 7:
-		meta["build_version"] = 7
+	if loaded_version < 8:
+		meta["build_version"] = 8
 		meta["first_run"] = true
 
 
@@ -1898,9 +1915,7 @@ func _draw_environment_decor() -> void:
 		var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 18.0
 		var alpha := 0.64 if in_light else 0.035
 		if kind == "grass":
-			draw_line(pos, pos + Vector2(-3 * scale, -7 * scale), Color(0.27, 0.43, 0.29, alpha), 1.4)
-			draw_line(pos, pos + Vector2(2 * scale, -8 * scale), Color(0.29, 0.46, 0.31, alpha), 1.4)
-			draw_line(pos, pos + Vector2(5 * scale, -5 * scale), Color(0.24, 0.39, 0.27, alpha), 1.2)
+			_draw_centered_texture(TEX_GRASS, pos + Vector2(0, -3), Vector2(20, 16) * scale, Color(0.78, 0.92, 0.76, alpha))
 		elif kind == "pebble":
 			draw_circle(pos, 2.7 * scale, Color(0.35, 0.39, 0.36, alpha))
 		elif kind == "ash":
@@ -2140,73 +2155,49 @@ func _draw_resource(node: Dictionary) -> void:
 	var alive := bool(node.get("alive", false))
 	var kind := String(node.get("kind", "tree"))
 	var visibility := _light_visibility(pos)
+	var modulate := _asset_modulate(pos, 0.035)
 
 	if kind == "tree":
-		var variant := int(node.get("variant", 0))
-		var trunk := _lit_world_color(Color("#563822"), pos)
-		var crown := _lit_world_color(Color("#285233"), pos)
-		var crown_light := _lit_world_color(Color("#32633b"), pos)
+		var variant := int(node.get("variant", 0)) % 3
 		if alive:
-			var trunk_height := 26.0 + float(variant) * 3.0
-			draw_rect(Rect2(pos + Vector2(-5, 8), Vector2(10, trunk_height)), trunk)
-			if variant == 0:
-				draw_circle(pos, 22.0, crown)
-				draw_circle(pos + Vector2(-14, 4), 14.0, crown_light)
-				draw_circle(pos + Vector2(14, 4), 14.0, crown_light)
-			elif variant == 1:
-				draw_circle(pos + Vector2(0, -5), 20.0, crown)
-				draw_circle(pos + Vector2(-12, 6), 16.0, crown_light)
-				draw_circle(pos + Vector2(13, 7), 15.0, crown)
-			else:
-				draw_circle(pos + Vector2(0, -8), 17.0, crown_light)
-				draw_circle(pos + Vector2(-13, 2), 15.0, crown)
-				draw_circle(pos + Vector2(13, 2), 15.0, crown)
-				draw_circle(pos + Vector2(0, 8), 16.0, crown_light)
-			if visibility > 0.35:
-				var toward_fire := (HEARTH_POS - pos).normalized()
-				draw_arc(pos + toward_fire * 5.0, 20.0, -2.4, -0.65, 12, Color(0.95, 0.64, 0.28, 0.12 * visibility), 2.0)
+			var tree_tex: Texture2D = TEX_TREE_A
+			if variant == 1:
+				tree_tex = TEX_TREE_B
+			elif variant == 2:
+				tree_tex = TEX_TREE_C
+			var sway := sin(Time.get_ticks_msec() * 0.0012 + pos.x * 0.013) * 0.7
+			var tree_size := Vector2(78, 86)
+			_draw_centered_texture(tree_tex, pos + Vector2(sway, -22), tree_size, modulate)
+
+			if gather_cd > 0.0 and hero_pos.distance_to(pos) <= HERO_INTERACT_RADIUS + 4.0:
+				var hit_t := 1.0 - clampf(gather_cd / maxf(0.01, gather_interval), 0.0, 1.0)
+				var shake := sin(hit_t * PI * 3.0) * 2.2
+				draw_line(pos + Vector2(shake - 12, -11), pos + Vector2(shake + 13, -17), Color(0.95, 0.70, 0.34, 0.20 * visibility), 2.0)
 		elif not bool(node.get("drop_spawned", true)):
 			var progress := 1.0 - clampf(float(node.get("fall_timer", 0.0)) / 0.34, 0.0, 1.0)
-			var fall_x := 14.0 + progress * 34.0
-			draw_line(pos + Vector2(0, 16), pos + Vector2(fall_x, -4 + progress * 18.0), trunk, 9.0)
-			draw_circle(pos + Vector2(fall_x, -8 + progress * 18.0), 19.0, crown)
+			var falling_pos := pos + Vector2(22.0 * progress, -10.0 + progress * 13.0)
+			_draw_centered_texture(TEX_TREE_FALLING, falling_pos, Vector2(112, 78), modulate)
 		else:
-			draw_circle(pos + Vector2(0, 14), 8.0, trunk)
+			_draw_centered_texture(TEX_STUMP, pos + Vector2(0, 4), Vector2(39, 39), modulate)
 	else:
-		var stone := _lit_world_color(Color("#737c79"), pos)
-		var stone_dark := _lit_world_color(Color("#5e6764"), pos)
 		if alive:
-			var pts := PackedVector2Array([
-				pos + Vector2(-18, 10), pos + Vector2(-10, -12), pos + Vector2(8, -16),
-				pos + Vector2(19, 2), pos + Vector2(11, 15), pos + Vector2(-7, 17)
-			])
-			draw_colored_polygon(pts, stone)
-			if visibility > 0.40:
-				draw_line(pos + Vector2(-8, -9), pos + Vector2(4, -13), Color(0.95, 0.72, 0.42, 0.10 * visibility), 2.0)
+			_draw_centered_texture(TEX_ROCK, pos + Vector2(0, -2), Vector2(46, 42), modulate)
 		elif not bool(node.get("drop_spawned", true)):
-			draw_circle(pos + Vector2(-9, 2), 11.0, stone)
-			draw_circle(pos + Vector2(11, 6), 9.0, stone_dark)
+			_draw_centered_texture(TEX_ROCK, pos + Vector2(-7, 2), Vector2(30, 28), modulate)
+			_draw_centered_texture(TEX_ROCK, pos + Vector2(9, 7), Vector2(23, 21), modulate)
 		else:
-			draw_circle(pos, 7.0, stone_dark)
+			draw_circle(pos, 5.5, Color(0.42, 0.47, 0.45, maxf(0.08, visibility * 0.6)))
 
 
 func _draw_resource_pickup(pickup: Dictionary) -> void:
 	var pos: Vector2 = pickup["pos"]
 	var kind := String(pickup.get("kind", "wood"))
-	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006 + pos.x * 0.04) * 0.06
-	draw_circle(pos + Vector2(0, 5), 11.0, Color(0.02, 0.03, 0.02, 0.20))
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006 + pos.x * 0.04) * 0.05
+	draw_circle(pos + Vector2(0, 7), 10.0, Color(0.02, 0.03, 0.02, 0.20))
 	if kind == "wood":
-		var spin := float(pickup.get("spin", 0.0))
-		var axis := Vector2(cos(spin), sin(spin))
-		draw_line(pos - axis * 10.0, pos + axis * 10.0, Color("#9b6a3d"), 7.0 * pulse, true)
-		draw_circle(pos - axis * 10.0, 3.5, Color("#c18b54"))
-		draw_circle(pos + axis * 10.0, 3.5, Color("#c18b54"))
+		_draw_centered_texture(TEX_LOG, pos, Vector2(36, 18) * pulse, _asset_modulate(pos, 0.20))
 	else:
-		var pts := PackedVector2Array([
-			pos + Vector2(-7, 4), pos + Vector2(-4, -7), pos + Vector2(6, -6),
-			pos + Vector2(9, 2), pos + Vector2(3, 8), pos + Vector2(-5, 7)
-		])
-		draw_colored_polygon(pts, Color("#8d9694"))
+		_draw_centered_texture(TEX_ROCK, pos, Vector2(27, 24) * pulse, _asset_modulate(pos, 0.18))
 
 
 func _draw_resource_flights() -> void:
@@ -2219,53 +2210,49 @@ func _draw_resource_flights() -> void:
 		var p := from * inv * inv + mid * 2.0 * inv * t + to * t * t
 		var kind := String(flight.get("kind", "wood"))
 		if kind == "wood":
-			draw_line(p + Vector2(-8, 0), p + Vector2(8, 0), Color("#a87342"), 6.0, true)
-			draw_circle(p + Vector2(-8, 0), 2.8, Color("#d09a61"))
-			draw_circle(p + Vector2(8, 0), 2.8, Color("#d09a61"))
+			_draw_centered_texture(TEX_LOG, p, Vector2(29, 15), Color.WHITE)
 		else:
-			draw_circle(p, 5.5, Color("#929b98"))
+			_draw_centered_texture(TEX_ROCK, p, Vector2(19, 17), Color.WHITE)
 
 
 func _draw_hearth(pos: Vector2, level: int) -> void:
-	var pulse := 1.0 + hearth_pulse * 0.10 + sin(Time.get_ticks_msec() * 0.007) * 0.025
+	var pulse := 1.0 + hearth_pulse * 0.08 + sin(Time.get_ticks_msec() * 0.0065) * 0.018
+	var glow_alpha := 0.045 + hearth_pulse * 0.040
 	var ring_radius := 34.0 + float(level) * 3.5
-	draw_circle(pos + Vector2(0, 15), 50.0 + float(level) * 3.0, Color(0.02, 0.025, 0.02, 0.34))
-	draw_circle(pos, (44.0 + float(level) * 4.0) * pulse, Color(0.95, 0.58, 0.18, 0.035 + hearth_pulse * 0.035))
+	draw_circle(pos, 58.0 * pulse + float(level) * 5.0, Color(1.0, 0.50, 0.12, glow_alpha))
+	draw_circle(pos, 35.0 * pulse + float(level) * 3.0, Color(1.0, 0.68, 0.22, 0.055 + hearth_pulse * 0.05))
 
-	# Heavy stone ring and burning logs make the hearth feel built, not icon-like.
-	for i in range(9):
-		var angle := TAU * float(i) / 9.0
-		var stone := pos + Vector2(cos(angle), sin(angle)) * ring_radius
-		draw_circle(stone, 7.5 + float(level) * 0.4, Color("#5b5950"))
-		draw_circle(stone + Vector2(-2, -2), 2.0, Color(0.45, 0.44, 0.39, 0.45))
-	for a in [-0.45, 0.45]:
-		var axis := Vector2(cos(a), sin(a))
-		draw_line(pos - axis * 20.0, pos + axis * 20.0, Color("#704326"), 8.0, true)
-
-	var flame_h := (29.0 + float(level) * 7.0) * pulse
-	var flame_w := 17.0 + float(level) * 2.4
-	var outer := PackedVector2Array([
-		pos + Vector2(0, -flame_h),
-		pos + Vector2(flame_w, 8),
-		pos + Vector2(8, 22),
-		pos + Vector2(-8, 22),
-		pos + Vector2(-flame_w, 8)
-	])
-	draw_colored_polygon(outer, Color("#ee8e32"))
-	var middle := PackedVector2Array([
-		pos + Vector2(2, -flame_h * 0.72),
-		pos + Vector2(flame_w * 0.62, 9),
-		pos + Vector2(0, 20),
-		pos + Vector2(-flame_w * 0.62, 8)
-	])
-	draw_colored_polygon(middle, Color("#ffc45e"))
-	var inner := PackedVector2Array([
-		pos + Vector2(0, -flame_h * 0.42),
-		pos + Vector2(7, 8),
-		pos + Vector2(0, 16),
-		pos + Vector2(-7, 8)
-	])
-	draw_colored_polygon(inner, Color("#fff0b1"))
+	if level <= 1:
+		_draw_centered_texture(TEX_HEARTH_1, pos + Vector2(0, -1), Vector2(92, 92) * pulse, Color.WHITE)
+	elif level == 2:
+		_draw_centered_texture(TEX_HEARTH_2, pos + Vector2(0, -2), Vector2(104, 104) * pulse, Color.WHITE)
+	else:
+		# Higher levels retain the existing built structure until Sprint 3 replaces them with dedicated assets.
+		draw_circle(pos + Vector2(0, 15), 50.0 + float(level) * 3.0, Color(0.02, 0.025, 0.02, 0.34))
+		for i in range(9):
+			var angle := TAU * float(i) / 9.0
+			var stone := pos + Vector2(cos(angle), sin(angle)) * ring_radius
+			draw_circle(stone, 7.5 + float(level) * 0.4, Color("#5b5950"))
+		for a in [-0.45, 0.45]:
+			var axis := Vector2(cos(a), sin(a))
+			draw_line(pos - axis * 20.0, pos + axis * 20.0, Color("#704326"), 8.0, true)
+		var flame_h := (29.0 + float(level) * 7.0) * pulse
+		var flame_w := 17.0 + float(level) * 2.4
+		var outer := PackedVector2Array([
+			pos + Vector2(0, -flame_h), pos + Vector2(flame_w, 8),
+			pos + Vector2(8, 22), pos + Vector2(-8, 22), pos + Vector2(-flame_w, 8)
+		])
+		draw_colored_polygon(outer, Color("#ee8e32"))
+		var middle := PackedVector2Array([
+			pos + Vector2(2, -flame_h * 0.72), pos + Vector2(flame_w * 0.62, 9),
+			pos + Vector2(0, 20), pos + Vector2(-flame_w * 0.62, 8)
+		])
+		draw_colored_polygon(middle, Color("#ffc45e"))
+		var inner := PackedVector2Array([
+			pos + Vector2(0, -flame_h * 0.42), pos + Vector2(7, 8),
+			pos + Vector2(0, 16), pos + Vector2(-7, 8)
+		])
+		draw_colored_polygon(inner, Color("#fff0b1"))
 
 	if level >= 3:
 		draw_line(pos + Vector2(-52, 30), pos + Vector2(-52, -28), Color("#6a5135"), 6.0)
@@ -2283,31 +2270,59 @@ func _draw_hearth(pos: Vector2, level: int) -> void:
 	draw_string(font, pos + Vector2(-55, 70), "ОЧАГ %d" % level, HORIZONTAL_ALIGNMENT_CENTER, 110, 12, Color("#eadfc8"))
 
 
-func _draw_hero(pos: Vector2) -> void:
-	var bob := sin(hero_walk_phase) * 1.8
-	_draw_back_cargo(pos + Vector2(0, bob))
-	_draw_humanoid(pos, Color("#c4ad79"), hero_walk_phase, "hero", 1.0 if hero_facing.x >= 0.0 else -1.0)
+func _draw_centered_texture(texture: Texture2D, pos: Vector2, size: Vector2, modulate: Color = Color.WHITE) -> void:
+	var rect := Rect2(pos - size * 0.5, size)
+	draw_texture_rect(texture, rect, false, modulate)
 
+
+func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
+	var visibility := maxf(minimum_visibility, _light_visibility(pos))
+	var distance := pos.distance_to(HEARTH_POS)
+	var warmth := clampf(1.0 - distance / maxf(1.0, light_radius), 0.0, 1.0)
+	var base := Color(0.60, 0.68, 0.70, visibility)
+	var warm := Color(1.0, 0.91, 0.75, visibility)
+	return base.lerp(warm, warmth * 0.58)
+
+
+func _draw_hero(pos: Vector2) -> void:
+	var moving := hero_pos.distance_to(hero_target) > 3.0 or joystick_vector.length() > JOYSTICK_DEADZONE
 	var work_kind := _nearby_resource_kind()
-	var hand := pos + Vector2((12.0 if hero_facing.x >= 0.0 else -12.0), -3.0 + bob)
-	var direction := 1.0 if hero_facing.x >= 0.0 else -1.0
-	if work_kind != "":
-		var swing_phase := 1.0 - clampf(gather_cd / maxf(0.01, gather_interval), 0.0, 1.0)
-		var swing := sin(swing_phase * PI) * 0.95
-		var angle := -1.15 + swing * direction
-		var tip := hand + Vector2(cos(angle) * direction, sin(angle)) * 29.0
-		draw_line(hand, tip, Color("#b98b5b"), 3.0, true)
-		if work_kind == "tree":
-			draw_line(tip + Vector2(-6, -4), tip + Vector2(6, 4), Color("#bcc1bb"), 5.0, true)
+	var texture: Texture2D = TEX_HERO_IDLE
+	var size := Vector2(64, 64)
+
+	if carried_wood > 0:
+		if carried_wood == 1:
+			texture = TEX_HERO_CARRY_1
+		elif carried_wood == 2:
+			texture = TEX_HERO_CARRY_2
 		else:
-			draw_line(tip + Vector2(-7, 1), tip + Vector2(7, -1), Color("#aeb5b1"), 4.0, true)
-	else:
-		# Compact crossbow-like weapon: readable, but does not clutter movement.
-		draw_line(hand, hand + Vector2(20.0 * direction, -7.0), Color("#c9b58b"), 3.0, true)
-		draw_line(hand + Vector2(10.0 * direction, -8.0), hand + Vector2(10.0 * direction, 3.0), Color("#8c6d47"), 2.0, true)
+			texture = TEX_HERO_CARRY_3
+	elif work_kind != "" and gather_cd > 0.04:
+		texture = TEX_HERO_ATTACK
+		size = Vector2(72, 62)
+	elif moving:
+		texture = TEX_HERO_WALK
+
+	var bob := 0.0
+	if moving:
+		bob = sin(hero_walk_phase * 1.15) * 1.6
+
+	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(16, 5), Color(0.01, 0.02, 0.015, 0.30))
+	_draw_centered_texture(texture, pos + Vector2(0, -9 + bob), size, _asset_modulate(pos, 0.34))
+
+	# Stone cargo remains readable until its dedicated production sprite arrives in Sprint 2.
+	if carried_stone > 0:
+		var sack := pos + Vector2(-19, 5 + bob)
+		draw_circle(sack, 8.5, Color("#746b59"))
+		draw_line(sack + Vector2(-6, -5), sack + Vector2(6, -5), Color("#a9997f"), 2.0)
+		for i in range(mini(carried_stone, 4)):
+			var p := sack + Vector2(-4 + float(i % 2) * 8.0, -2 + float(i / 2) * 6.0)
+			draw_circle(p, 2.7, Color("#a4aaa7"))
 
 
 func _nearby_resource_kind() -> String:
+	if not _gathering_enabled():
+		return ""
 	for node: Dictionary in resource_nodes:
 		if not bool(node.get("alive", false)):
 			continue
@@ -2732,7 +2747,7 @@ func _draw_hud() -> void:
 		_draw_icon_ember(Vector2(387, 22), Color("#d99b50"))
 		draw_string(font, Vector2(400, 27), "%d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 52, 14, Color("#e6c57e"))
 		draw_string(font, Vector2(14, 55), "Карта — новая вылазка. Здания — постоянные улучшения.", HORIZONTAL_ALIGNMENT_LEFT, 410, 10, Color("#98a89c"))
-		draw_string(font, Vector2(430, 55), "v0.7", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
+		draw_string(font, Vector2(430, 55), "v0.8", HORIZONTAL_ALIGNMENT_RIGHT, 34, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:

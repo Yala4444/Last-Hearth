@@ -108,5 +108,31 @@ func _init() -> void:
 		fail("Hero-hearth separation sanity failed")
 		return
 
+
+	# Sprint 1 production assets must all import as textures.
+	var asset_paths: Array[String] = [
+		"res://assets/v08/sprint1/hero_idle.svg",
+		"res://assets/v08/sprint1/hero_walk.svg",
+		"res://assets/v08/sprint1/hero_attack.svg",
+		"res://assets/v08/sprint1/hero_carry_1.svg",
+		"res://assets/v08/sprint1/hero_carry_2.svg",
+		"res://assets/v08/sprint1/hero_carry_3.svg",
+		"res://assets/v08/sprint1/tree_a.svg",
+		"res://assets/v08/sprint1/tree_b.svg",
+		"res://assets/v08/sprint1/tree_c.svg",
+		"res://assets/v08/sprint1/tree_falling.svg",
+		"res://assets/v08/sprint1/stump.svg",
+		"res://assets/v08/sprint1/log.svg",
+		"res://assets/v08/sprint1/hearth_1.svg",
+		"res://assets/v08/sprint1/hearth_2.svg",
+		"res://assets/v08/sprint1/rock.svg",
+		"res://assets/v08/sprint1/grass.svg"
+	]
+	for asset_path: String in asset_paths:
+		var texture: Resource = load(asset_path)
+		if texture == null:
+			fail("Visual asset failed to import: " + asset_path)
+			return
+
 	print("PROGRESSION_SANITY_OK")
 	quit(0)
