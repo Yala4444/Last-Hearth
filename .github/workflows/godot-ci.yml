@@ -66,6 +66,13 @@ jobs:
           godot --headless --path . -s res://tests/progression_sanity.gd 2>&1 | tee /tmp/progression-sanity.log
           grep -q "PROGRESSION_SANITY_OK" /tmp/progression-sanity.log
 
+      - name: Visual sprint 1 sanity test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . -s res://tests/visual_sprint1_sanity.gd 2>&1 | tee /tmp/visual-sprint1.log
+          grep -q "VISUAL_SPRINT1_SANITY_OK" /tmp/visual-sprint1.log
+
       - name: Export Web build
         shell: bash
         run: |
