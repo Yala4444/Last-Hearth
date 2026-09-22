@@ -1849,7 +1849,7 @@ func _draw_environment_decor() -> void:
 		var kind := String(item.get("kind", "grass"))
 		var scale := float(item.get("scale", 1.0))
 		var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 18.0
-		var alpha := 0.64 if in_light else 0.10
+		var alpha := 0.64 if in_light else 0.035
 		if kind == "grass":
 			draw_line(pos, pos + Vector2(-3 * scale, -7 * scale), Color(0.27, 0.43, 0.29, alpha), 1.4)
 			draw_line(pos, pos + Vector2(2 * scale, -8 * scale), Color(0.29, 0.46, 0.31, alpha), 1.4)
@@ -1866,12 +1866,21 @@ func _draw_environment_decor() -> void:
 func _draw_world_events() -> void:
 	for event: Dictionary in events:
 		var pos: Vector2 = event["pos"]
-		var visible := pos.distance_to(HEARTH_POS) <= light_radius + 35.0
-		if not visible:
+		var visibility := _light_visibility(pos)
+		if visibility < 0.11:
 			continue
+
 		var kind := String(event.get("kind", ""))
 		var triggered := bool(event.get("triggered", false))
-		var alpha := 0.42 if triggered else 1.0
+
+		if visibility < 0.58 and not triggered:
+			# Unknown things stay unknown until the fire actually reaches them.
+			draw_circle(pos, 18.0, Color(0.06, 0.08, 0.075, 0.22 * visibility))
+			if kind in ["black_tree", "broken_watch"]:
+				draw_line(pos + Vector2(0, 15), pos + Vector2(0, -22), Color(0.08, 0.10, 0.09, 0.28 * visibility), 7.0)
+			continue
+
+		var alpha := (0.40 if triggered else 1.0) * visibility
 		match kind:
 			"wagon":
 				_draw_event_wagon(pos, alpha, triggered)
@@ -1883,6 +1892,19 @@ func _draw_world_events() -> void:
 				_draw_event_black_tree(pos, alpha, triggered)
 			"dead_camp":
 				_draw_event_dead_camp(pos, alpha, triggered)
+			"tracks":
+				_draw_event_tracks(pos, alpha, triggered)
+			"broken_watch":
+				_draw_event_broken_watch(pos, alpha, triggered)
+			"whisper":
+				_draw_event_whisper(pos, alpha, triggered)
+
+		if not triggered and kind != "black_tree":
+			var progress := clampf(float(event.get("progress", 0.0)) / maxf(0.01, float(event.get("required", 1.0))), 0.0, 1.0)
+			if progress > 0.01:
+				draw_arc(pos, 29.0, -PI * 0.5, -PI * 0.5 + TAU * progress, 30, Color(0.94, 0.76, 0.42, 0.85), 3.0)
+
+
 
 
 func _draw_event_wagon(pos: Vector2, alpha: float, triggered: bool) -> void:
@@ -1930,6 +1952,32 @@ func _draw_event_dead_camp(pos: Vector2, alpha: float, triggered: bool) -> void:
 	draw_line(pos + Vector2(-12, 7), pos + Vector2(12, -7), Color(0.26, 0.18, 0.13, alpha), 4.0)
 	if not triggered:
 		draw_string(font, pos + Vector2(-62, -29), "ПОТУХШИЙ КОСТЁР", HORIZONTAL_ALIGNMENT_CENTER, 124, 9, Color(0.78, 0.73, 0.64, 0.80))
+
+
+func _draw_event_tracks(pos: Vector2, alpha: float, triggered: bool) -> void:
+	for i in range(4):
+		var p := pos + Vector2(-20 + float(i) * 13.0, -8 + float(i % 2) * 11.0)
+		draw_circle(p, 3.0, Color(0.38, 0.31, 0.23, alpha))
+		draw_circle(p + Vector2(3, -3), 1.5, Color(0.38, 0.31, 0.23, alpha))
+	if not triggered:
+		draw_string(font, pos + Vector2(-52, -30), "СЛЕДЫ", HORIZONTAL_ALIGNMENT_CENTER, 104, 9, Color(0.80, 0.74, 0.63, 0.76 * alpha))
+
+
+func _draw_event_broken_watch(pos: Vector2, alpha: float, triggered: bool) -> void:
+	draw_line(pos + Vector2(-13, 22), pos + Vector2(-8, -24), Color(0.35, 0.28, 0.20, alpha), 5.0)
+	draw_line(pos + Vector2(15, 22), pos + Vector2(6, -20), Color(0.35, 0.28, 0.20, alpha), 5.0)
+	draw_line(pos + Vector2(-16, -18), pos + Vector2(17, -10), Color(0.45, 0.35, 0.23, alpha), 5.0)
+	if not triggered:
+		draw_string(font, pos + Vector2(-62, -36), "СЛОМАННЫЙ ДОЗОР", HORIZONTAL_ALIGNMENT_CENTER, 124, 9, Color(0.80, 0.74, 0.63, 0.76 * alpha))
+
+
+func _draw_event_whisper(pos: Vector2, alpha: float, triggered: bool) -> void:
+	if triggered:
+		return
+	var pulse := 0.55 + sin(Time.get_ticks_msec() * 0.008) * 0.18
+	draw_circle(pos, 18.0, Color(0.55, 0.66, 0.58, 0.06 * alpha * pulse))
+	draw_circle(pos + Vector2(-4, -4), 1.5, Color(0.86, 0.75, 0.49, alpha * pulse))
+	draw_circle(pos + Vector2(4, -4), 1.5, Color(0.86, 0.75, 0.49, alpha * pulse))
 
 
 func _draw_revealed_landmarks() -> void:
@@ -2026,34 +2074,43 @@ func _draw_resource(node: Dictionary) -> void:
 	var pos: Vector2 = node["pos"]
 	var alive := bool(node.get("alive", false))
 	var kind := String(node.get("kind", "tree"))
-	var in_light := pos.distance_to(HEARTH_POS) <= light_radius + 35.0
-	var alpha := 1.0 if in_light else 0.12
+	var visibility := _light_visibility(pos)
 
 	if kind == "tree":
+		var trunk := _lit_world_color(Color("#563822"), pos)
+		var crown := _lit_world_color(Color("#285233"), pos)
+		var crown_light := _lit_world_color(Color("#32633b"), pos)
 		if alive:
-			draw_rect(Rect2(pos + Vector2(-5, 8), Vector2(10, 26)), Color(0.33, 0.22, 0.14, alpha))
-			draw_circle(pos, 22.0, Color(0.16, 0.34, 0.20, alpha))
-			draw_circle(pos + Vector2(-14, 4), 14.0, Color(0.18, 0.39, 0.23, alpha))
-			draw_circle(pos + Vector2(14, 4), 14.0, Color(0.18, 0.39, 0.23, alpha))
+			draw_rect(Rect2(pos + Vector2(-5, 8), Vector2(10, 26)), trunk)
+			draw_circle(pos, 22.0, crown)
+			draw_circle(pos + Vector2(-14, 4), 14.0, crown_light)
+			draw_circle(pos + Vector2(14, 4), 14.0, crown_light)
+			if visibility > 0.35:
+				var toward_fire := (HEARTH_POS - pos).normalized()
+				draw_arc(pos + toward_fire * 5.0, 20.0, -2.4, -0.65, 12, Color(0.95, 0.64, 0.28, 0.12 * visibility), 2.0)
 		elif not bool(node.get("drop_spawned", true)):
 			var progress := 1.0 - clampf(float(node.get("fall_timer", 0.0)) / 0.34, 0.0, 1.0)
 			var fall_x := 14.0 + progress * 34.0
-			draw_line(pos + Vector2(0, 16), pos + Vector2(fall_x, -4 + progress * 18.0), Color(0.33, 0.22, 0.14, alpha), 9.0)
-			draw_circle(pos + Vector2(fall_x, -8 + progress * 18.0), 19.0, Color(0.16, 0.34, 0.20, alpha))
+			draw_line(pos + Vector2(0, 16), pos + Vector2(fall_x, -4 + progress * 18.0), trunk, 9.0)
+			draw_circle(pos + Vector2(fall_x, -8 + progress * 18.0), 19.0, crown)
 		else:
-			draw_circle(pos + Vector2(0, 14), 8.0, Color(0.30, 0.22, 0.16, alpha))
+			draw_circle(pos + Vector2(0, 14), 8.0, trunk)
 	else:
+		var stone := _lit_world_color(Color("#737c79"), pos)
+		var stone_dark := _lit_world_color(Color("#5e6764"), pos)
 		if alive:
 			var pts := PackedVector2Array([
 				pos + Vector2(-18, 10), pos + Vector2(-10, -12), pos + Vector2(8, -16),
 				pos + Vector2(19, 2), pos + Vector2(11, 15), pos + Vector2(-7, 17)
 			])
-			draw_colored_polygon(pts, Color(0.42, 0.46, 0.45, alpha))
+			draw_colored_polygon(pts, stone)
+			if visibility > 0.40:
+				draw_line(pos + Vector2(-8, -9), pos + Vector2(4, -13), Color(0.95, 0.72, 0.42, 0.10 * visibility), 2.0)
 		elif not bool(node.get("drop_spawned", true)):
-			draw_circle(pos + Vector2(-9, 2), 11.0, Color(0.42, 0.46, 0.45, alpha))
-			draw_circle(pos + Vector2(11, 6), 9.0, Color(0.38, 0.42, 0.41, alpha))
+			draw_circle(pos + Vector2(-9, 2), 11.0, stone)
+			draw_circle(pos + Vector2(11, 6), 9.0, stone_dark)
 		else:
-			draw_circle(pos, 7.0, Color(0.33, 0.36, 0.35, alpha))
+			draw_circle(pos, 7.0, stone_dark)
 
 
 func _draw_resource_pickup(pickup: Dictionary) -> void:
@@ -2230,45 +2287,50 @@ func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facin
 	var moving_stride: float = sin(phase) * 4.0
 	var bob: float = absf(sin(phase * 0.5)) * 1.4
 	var base: Vector2 = pos + Vector2(0, -bob)
-	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(14, 5), Color(0.01, 0.02, 0.015, 0.30))
+	var visibility := _light_visibility(pos)
+	var lit_coat := _lit_world_color(coat, pos)
+	var skin := _lit_world_color(Color("#c69c7d"), pos)
+	var dark_leg := _lit_world_color(Color("#403c34"), pos)
+	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(14, 5), Color(0.01, 0.02, 0.015, 0.30 * maxf(0.2, visibility)))
 
-	# Legs and boots.
-	draw_line(base + Vector2(-5, 8), base + Vector2(-7 + moving_stride, 19), Color("#403c34"), 4.0, true)
-	draw_line(base + Vector2(5, 8), base + Vector2(7 - moving_stride, 19), Color("#403c34"), 4.0, true)
-	draw_line(base + Vector2(-10 + moving_stride, 19), base + Vector2(-4 + moving_stride, 19), Color("#272824"), 4.0, true)
-	draw_line(base + Vector2(4 - moving_stride, 19), base + Vector2(10 - moving_stride, 19), Color("#272824"), 4.0, true)
+	draw_line(base + Vector2(-5, 8), base + Vector2(-7 + moving_stride, 19), dark_leg, 4.0, true)
+	draw_line(base + Vector2(5, 8), base + Vector2(7 - moving_stride, 19), dark_leg, 4.0, true)
+	draw_line(base + Vector2(-10 + moving_stride, 19), base + Vector2(-4 + moving_stride, 19), _lit_world_color(Color("#272824"), pos), 4.0, true)
+	draw_line(base + Vector2(4 - moving_stride, 19), base + Vector2(10 - moving_stride, 19), _lit_world_color(Color("#272824"), pos), 4.0, true)
 
-	# Torso / coat.
 	var torso := PackedVector2Array([
 		base + Vector2(-10, -10), base + Vector2(10, -10),
 		base + Vector2(12, 9), base + Vector2(-12, 9)
 	])
-	draw_colored_polygon(torso, coat)
-	draw_rect(Rect2(base + Vector2(-11, 4), Vector2(22, 3)), Color(0.30, 0.24, 0.17, 0.85))
+	draw_colored_polygon(torso, lit_coat)
+	draw_rect(Rect2(base + Vector2(-11, 4), Vector2(22, 3)), _lit_world_color(Color("#5a4630"), pos))
 
-	# Arms.
 	var arm_sway := sin(phase + 1.2) * 3.0
-	draw_line(base + Vector2(-9, -5), base + Vector2(-14 - arm_sway, 6), coat.lightened(0.08), 4.0, true)
-	draw_line(base + Vector2(9, -5), base + Vector2(14 + arm_sway, 5), coat.lightened(0.08), 4.0, true)
+	draw_line(base + Vector2(-9, -5), base + Vector2(-14 - arm_sway, 6), lit_coat.lightened(0.06), 4.0, true)
+	draw_line(base + Vector2(9, -5), base + Vector2(14 + arm_sway, 5), lit_coat.lightened(0.06), 4.0, true)
 
-	# Head, hair/hood and a tiny face mark: these make units read as people at phone scale.
-	draw_circle(base + Vector2(0, -17), 7.2, Color("#c69c7d"))
-	draw_arc(base + Vector2(0, -18), 7.0, PI, TAU, 16, Color("#5b4737"), 4.0)
-	draw_circle(base + Vector2(2.5 * facing, -17), 0.9, Color("#342f28"))
+	draw_circle(base + Vector2(0, -17), 7.2, skin)
+	draw_arc(base + Vector2(0, -18), 7.0, PI, TAU, 16, _lit_world_color(Color("#5b4737"), pos), 4.0)
+	draw_circle(base + Vector2(2.5 * facing, -17), 0.9, _lit_world_color(Color("#342f28"), pos))
+
+	if visibility > 0.30:
+		var fire_dir := (HEARTH_POS - pos).normalized()
+		draw_line(base + fire_dir * 8.0 + Vector2(0, -5), base + fire_dir * 10.0 + Vector2(0, 7), Color(1.0, 0.67, 0.30, 0.20 * visibility), 2.2, true)
+		draw_circle(base + Vector2(0, -17) + fire_dir * 4.8, 2.2, Color(1.0, 0.73, 0.42, 0.18 * visibility))
 
 	if role == "hunter":
 		var hand := base + Vector2(13, 0)
-		draw_arc(hand + Vector2(7, -2), 9.0, -1.55, 1.55, 12, Color("#d1b989"), 2.0)
-		draw_line(hand + Vector2(7, -11), hand + Vector2(7, 7), Color("#b69a6c"), 1.5)
+		draw_arc(hand + Vector2(7, -2), 9.0, -1.55, 1.55, 12, _lit_world_color(Color("#d1b989"), pos), 2.0)
+		draw_line(hand + Vector2(7, -11), hand + Vector2(7, 7), _lit_world_color(Color("#b69a6c"), pos), 1.5)
 	elif role == "worker":
 		var work := 0.25 + sin(phase) * 0.45
 		var hand := base + Vector2(13, 0)
 		var tip := hand + Vector2(cos(-0.8 + work), sin(-0.8 + work)) * 20.0
-		draw_line(hand, tip, Color("#b2875b"), 3.0)
-		draw_rect(Rect2(tip + Vector2(-4, -4), Vector2(8, 6)), Color("#8d8c83"))
+		draw_line(hand, tip, _lit_world_color(Color("#b2875b"), pos), 3.0)
+		draw_rect(Rect2(tip + Vector2(-4, -4), Vector2(8, 6)), _lit_world_color(Color("#8d8c83"), pos))
 	elif role == "guard":
-		draw_line(base + Vector2(11, -1), base + Vector2(24, -13), Color("#c5c9c4"), 2.5)
-		draw_line(base + Vector2(19, -14), base + Vector2(26, -9), Color("#c5c9c4"), 2.0)
+		draw_line(base + Vector2(11, -1), base + Vector2(24, -13), _lit_world_color(Color("#c5c9c4"), pos), 2.5)
+		draw_line(base + Vector2(19, -14), base + Vector2(26, -9), _lit_world_color(Color("#c5c9c4"), pos), 2.0)
 
 
 func _draw_person(pos: Vector2, color: Color, phase: float) -> void:
@@ -2352,11 +2414,11 @@ func _draw_shot(shot: Dictionary) -> void:
 func _draw_workshop() -> void:
 	var pos := _workshop_pos()
 	_draw_ellipse_custom(pos + Vector2(0, 23), Vector2(38, 10), Color(0.01, 0.02, 0.015, 0.26))
-	draw_rect(Rect2(pos + Vector2(-31, -14), Vector2(62, 42)), Color("#5c4935"))
+	draw_rect(Rect2(pos + Vector2(-31, -14), Vector2(62, 42)), _lit_world_color(Color("#5c4935"), pos))
 	var roof := PackedVector2Array([
 		pos + Vector2(-38, -14), pos + Vector2(0, -43), pos + Vector2(38, -14)
 	])
-	draw_colored_polygon(roof, Color("#7b5f3c"))
+	draw_colored_polygon(roof, _lit_world_color(Color("#7b5f3c"), pos))
 	draw_rect(Rect2(pos + Vector2(-20, 4), Vector2(17, 13)), Color("#302d27"))
 	draw_line(pos + Vector2(12, 5), pos + Vector2(28, -7), Color("#c0a574"), 3.0)
 	draw_rect(Rect2(pos + Vector2(25, -11), Vector2(8, 7)), Color("#8f8c81"))
@@ -2366,9 +2428,9 @@ func _draw_workshop() -> void:
 func _draw_tower() -> void:
 	var pos := _tower_pos()
 	_draw_ellipse_custom(pos + Vector2(0, 22), Vector2(30, 9), Color(0.01, 0.02, 0.015, 0.25))
-	draw_line(pos + Vector2(-13, 25), pos + Vector2(-8, -38), Color("#604a31"), 7.0)
-	draw_line(pos + Vector2(13, 25), pos + Vector2(8, -38), Color("#604a31"), 7.0)
-	draw_rect(Rect2(pos + Vector2(-24, -48), Vector2(48, 17)), Color("#765939"))
+	draw_line(pos + Vector2(-13, 25), pos + Vector2(-8, -38), _lit_world_color(Color("#604a31"), pos), 7.0)
+	draw_line(pos + Vector2(13, 25), pos + Vector2(8, -38), _lit_world_color(Color("#604a31"), pos), 7.0)
+	draw_rect(Rect2(pos + Vector2(-24, -48), Vector2(48, 17)), _lit_world_color(Color("#765939"), pos))
 	draw_line(pos + Vector2(-18, -33), pos + Vector2(18, -33), Color("#8f7048"), 4.0)
 	draw_line(pos + Vector2(0, -44), pos + Vector2(25, -56), Color("#d5c49d"), 3.0)
 	draw_string(font, pos + Vector2(-48, 42), "ДОЗОР", HORIZONTAL_ALIGNMENT_CENTER, 96, 10, Color("#ded1b7"))
