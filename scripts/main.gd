@@ -234,6 +234,7 @@ var mouse_dragging := false
 
 var banner_text := ""
 var banner_timer := 0.0
+var notice_queue: Array[Dictionary] = []
 var flash_timer := 0.0
 var hub_zone_lock := ""
 var result_title := ""
@@ -257,6 +258,7 @@ func _process(delta: float) -> void:
 	banner_timer = maxf(0.0, banner_timer - delta)
 	story_hint_timer = maxf(0.0, story_hint_timer - delta)
 	hub_feedback_timer = maxf(0.0, hub_feedback_timer - delta)
+	_advance_notice_queue()
 	flash_timer = maxf(0.0, flash_timer - delta)
 	route_grace_timer = maxf(0.0, route_grace_timer - delta)
 	area_fade_timer = maxf(0.0, area_fade_timer - delta)
@@ -353,6 +355,11 @@ func _enter_hub(message: String = "") -> void:
 	help_open = false
 	hub_feedback_text = ""
 	hub_feedback_timer = 0.0
+	banner_text = ""
+	banner_timer = 0.0
+	story_hint = ""
+	story_hint_timer = 0.0
+	notice_queue.clear()
 	if int(meta.get("forest_fires", 0)) > 0 and not bool(meta.get("guide_seen", false)):
 		help_open = true
 		meta["guide_seen"] = true
@@ -536,9 +543,12 @@ func _start_expedition() -> void:
 	events.clear()
 	story_hint = ""
 	story_hint_timer = 0.0
-	stage_transition_lock = false
+	banner_text = ""
+	banner_timer = 0.0
 	hub_feedback_text = ""
 	hub_feedback_timer = 0.0
+	notice_queue.clear()
+	stage_transition_lock = false
 	region_map_open = false
 	dawn_timer = 0.0
 	dawn_pending = 0
@@ -2823,20 +2833,82 @@ func _burst_typed(pos: Vector2, count: int, kind: String) -> void:
 		})
 
 
+func _active_notice_priority() -> int:
+	if story_hint_timer > 0.0 and story_hint != "":
+		return 3
+	if banner_timer > 0.0 and banner_text != "":
+		return 2
+	if hub_feedback_timer > 0.0 and hub_feedback_text != "":
+		return 1
+	return 0
+
+
+func _activate_notice(item: Dictionary) -> void:
+	var kind := String(item.get("kind", ""))
+	var text := String(item.get("text", ""))
+	var duration := float(item.get("duration", 1.8))
+	match kind:
+		"story":
+			story_hint = text
+			story_hint_timer = duration
+		"banner":
+			banner_text = text
+			banner_timer = duration
+		"hub":
+			hub_feedback_text = text
+			hub_feedback_pos = item.get("pos", HEARTH_POS)
+			hub_feedback_timer = duration
+
+
+func _clear_active_notice() -> void:
+	story_hint_timer = 0.0
+	banner_timer = 0.0
+	hub_feedback_timer = 0.0
+
+
+func _queue_notice(kind: String, text: String, duration: float, priority: int, pos: Vector2 = Vector2.ZERO) -> void:
+	var item := {
+		"kind": kind,
+		"text": text,
+		"duration": duration,
+		"priority": priority,
+		"pos": pos
+	}
+	var active_priority := _active_notice_priority()
+	if active_priority == 0:
+		_activate_notice(item)
+		return
+	if priority > active_priority:
+		# Critical story consequences should never be hidden behind a lower-priority banner.
+		_clear_active_notice()
+		_activate_notice(item)
+		return
+	notice_queue.append(item)
+	notice_queue.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("priority", 0)) > int(b.get("priority", 0))
+	)
+	# Avoid stale combat chatter building an unreadable backlog.
+	while notice_queue.size() > 4:
+		notice_queue.pop_back()
+
+
+func _advance_notice_queue() -> void:
+	if _active_notice_priority() > 0 or notice_queue.is_empty():
+		return
+	var next_notice: Dictionary = notice_queue.pop_front()
+	_activate_notice(next_notice)
+
+
 func _story(text: String, duration: float = 3.0) -> void:
-	story_hint = text
-	story_hint_timer = duration
+	_queue_notice("story", text, duration, 3)
 
 
 func _hub_feedback(text: String, pos: Vector2, duration: float = 1.8) -> void:
-	hub_feedback_text = text
-	hub_feedback_pos = pos
-	hub_feedback_timer = duration
+	_queue_notice("hub", text, duration, 1, pos)
 
 
 func _banner(text: String, duration: float = 1.8) -> void:
-	banner_text = text
-	banner_timer = duration
+	_queue_notice("banner", text, duration, 2)
 
 
 func _stop_joystick() -> void:
@@ -3035,13 +3107,14 @@ func _draw_hub() -> void:
 	_draw_resource_flights()
 	_draw_hero(hero_pos)
 
-	draw_string(font, Vector2(18, 116), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 300, 22, Color("#f4ead4"))
-	var subtitle := "Пока здесь горит огонь — людям есть куда возвращаться."
-	if fires > 0 and fires < 3:
-		subtitle = "Огни Забытых лесов: %d/3 | поселение растёт" % fires
-	elif fires >= 3:
-		subtitle = "Три огня леса восстановлены | дальше лежит новая тьма"
-	draw_string(font, Vector2(18, 139), subtitle, HORIZONTAL_ALIGNMENT_LEFT, 440, 11, Color("#9eafa2"))
+	if _active_notice_priority() == 0:
+		draw_string(font, Vector2(18, 116), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 300, 22, Color("#f4ead4"))
+		var subtitle := "Пока здесь горит огонь — людям есть куда возвращаться."
+		if fires > 0 and fires < 3:
+			subtitle = "Огни Забытых лесов: %d/3 | поселение растёт" % fires
+		elif fires >= 3:
+			subtitle = "Три огня леса восстановлены | дальше лежит новая тьма"
+		draw_string(font, Vector2(18, 139), subtitle, HORIZONTAL_ALIGNMENT_LEFT, 440, 11, Color("#9eafa2"))
 
 	var carry_level := int(meta.get("carry_level", 0))
 	var damage_level := int(meta.get("damage_level", 0))
@@ -3124,14 +3197,16 @@ func _draw_hub_resource_area() -> void:
 	var return_left := hub_area_return_gate.x < VIEW_SIZE.x * 0.5
 	_draw_route_gate(hub_area_return_gate, "К ПОСЛЕДНЕМУ ОЧАГУ", Color("#d6bd82"), return_left)
 	if grove:
-		draw_string(font, Vector2(18, 118), "РОЩА ПОСЛЕДНЕГО ОЧАГА", HORIZONTAL_ALIGNMENT_LEFT, 350, 17, Color("#e8dec9"))
-		draw_string(font, Vector2(18, 140), "Древесина для домов и построек.", HORIZONTAL_ALIGNMENT_LEFT, 340, 10, Color("#9fb0a2"))
+		if _active_notice_priority() == 0:
+			draw_string(font, Vector2(18, 118), "РОЩА ПОСЛЕДНЕГО ОЧАГА", HORIZONTAL_ALIGNMENT_LEFT, 350, 17, Color("#e8dec9"))
+			draw_string(font, Vector2(18, 140), "Древесина для домов и построек.", HORIZONTAL_ALIGNMENT_LEFT, 340, 10, Color("#9fb0a2"))
 		if bool(meta.get("forester_home_built", false)):
 			_draw_humanoid(Vector2(310, 185), Color("#71866a"), 0.0, "civilian", 1.0)
 			draw_string(font, Vector2(254, 226), "ЛЕСНИК", HORIZONTAL_ALIGNMENT_CENTER, 112, 9, Color("#cbbd9d"))
 	else:
-		draw_string(font, Vector2(18, 118), "КАМЕННЫЙ СКЛОН", HORIZONTAL_ALIGNMENT_LEFT, 300, 17, Color("#e8dec9"))
-		draw_string(font, Vector2(18, 140), "Камень для более крепких построек.", HORIZONTAL_ALIGNMENT_LEFT, 340, 10, Color("#9fa9a5"))
+		if _active_notice_priority() == 0:
+			draw_string(font, Vector2(18, 118), "КАМЕННЫЙ СКЛОН", HORIZONTAL_ALIGNMENT_LEFT, 300, 17, Color("#e8dec9"))
+			draw_string(font, Vector2(18, 140), "Камень для более крепких построек.", HORIZONTAL_ALIGNMENT_LEFT, 340, 10, Color("#9fa9a5"))
 	_draw_explorer_lantern()
 	_draw_hero(hero_pos)
 
