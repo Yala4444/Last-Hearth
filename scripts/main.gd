@@ -1394,7 +1394,7 @@ func _update_world_events(delta: float) -> void:
 				_spawn_enemy_at("elite", pos + Vector2(0, 96))
 				route_grace_timer = 1.0
 				camera_shake = 2.8
-				_story("АЛТАРЬ ВСПЫХНУЛ\nОгонь ответил — и вместе с ним проснулось то, что лежало под камнями.", 3.3)
+				_story("МЕТКА ВСПЫХНУЛА\nСтарое пламя ответило — и вместе с ним проснулось то, что лежало под камнями.", 3.3)
 			"nest":
 				event["outcome"] = "opened"
 				_spawn_enemy_at("fast", pos + Vector2(-62, 54))
@@ -2214,7 +2214,7 @@ func _start_night(number: int) -> void:
 				active_night_sides = [0, 3]
 				for i in range(9):
 					night_queue.append("fast" if i in [5, 8] else "basic")
-				_story("Жар старого костра притянул тени. Они идут на новый свет.", 3.0)
+				_story("Свет угасшего маяка снова заметен из чащи. Тени идут на него.", 3.0)
 			_:
 				active_night_sides = [2, 3]
 				for i in range(10):
@@ -4858,7 +4858,7 @@ func _stage_title() -> String:
 		Stage.DAY3_TOWER:
 			if area != Area.CAMP: return "ДЕНЬ 3 | %s" % _day3_route_title(day3_route)
 			return "ДЕНЬ 3 | последний выбор"
-		Stage.EXPEDITION_CHOICE: return "ДЕНЬ 3 | древний алтарь"
+		Stage.EXPEDITION_CHOICE: return "ДЕНЬ 3 | последняя подготовка"
 		Stage.NIGHT3: return "НОЧЬ 3 | хранитель идёт"
 		Stage.CORE_RETURN: return "ПОСЛЕ БОЯ | ядро хранителя"
 	return ""
