@@ -182,5 +182,41 @@ func _init() -> void:
 		fail("Choice cards are still occupying the top narrative lane")
 		return
 
+	# v0.15 -> v0.16 migration must keep permanent upgrades while converting old NPC flags into chapter fates.
+	var legacy_save := {
+		"build_version": 15,
+		"first_run": false,
+		"embers": 17,
+		"carry_level": 2,
+		"damage_level": 3,
+		"hearth_bonus": 1,
+		"forest_fires": 2,
+		"forest_cleared": false,
+		"rescued_hunter": true,
+		"rescued_worker": true
+	}
+	var legacy_file := FileAccess.open(game.SAVE_PATH, FileAccess.WRITE)
+	if legacy_file == null:
+		fail("Could not create legacy v0.15 save for migration regression")
+		return
+	legacy_file.store_string(JSON.stringify(legacy_save))
+	legacy_file.close()
+	game._load_meta()
+	if int(game.meta.get("embers", -1)) != 17:
+		fail("v0.15 migration lost embers")
+		return
+	if int(game.meta.get("carry_level", -1)) != 2 or int(game.meta.get("damage_level", -1)) != 3 or int(game.meta.get("hearth_bonus", -1)) != 1:
+		fail("v0.15 migration lost permanent upgrades")
+		return
+	if String(game.meta.get("hunter_fate", "")) != "keeper_fire_1":
+		fail("v0.15 Hunter migration did not convert to local keeper")
+		return
+	if String(game.meta.get("master_relationship_state", "")) != "waiting_forest":
+		fail("v0.15 Master migration joined the hub too early")
+		return
+	if int(game.meta.get("build_version", 0)) != 16:
+		fail("v0.15 save was not upgraded to v0.16 schema")
+		return
+
 	print("V016_REGION_MEMORY_SANITY_OK")
 	quit(0)
