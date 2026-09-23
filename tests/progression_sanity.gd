@@ -15,9 +15,9 @@ func _init() -> void:
 	root.add_child(game)
 	await process_frame
 
-	# Day 1 still advances at exactly five delivered logs.
+	# v0.11 makes the ad-facing first loop one tree long.
 	game.stage = 0
-	game.camp_wood = 5
+	game.camp_wood = game.FIELD_FIRE_WOOD_COST
 	game.camp_stone = 0
 	game.carried_wood = 0
 	game.current_stage_wood_start = 0
@@ -45,7 +45,7 @@ func _init() -> void:
 	# Carried resources count toward the current need, preventing over-farming.
 	game.stage = 0
 	game.camp_wood = 0
-	game.carried_wood = 5
+	game.carried_wood = game.FIELD_FIRE_WOOD_COST
 	if bool(game._resource_kind_needed("tree")):
 		fail("Day 1 allowed over-farming while enough wood was already carried")
 		return
