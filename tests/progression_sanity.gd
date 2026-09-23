@@ -50,6 +50,21 @@ func _init() -> void:
 		fail("Day 1 allowed over-farming while enough wood was already carried")
 		return
 
+	# The ad-readable core loop must give immediate feedback: every delivered log expands the light.
+	game.stage = game.Stage.DAY1_GATHER
+	game.area = game.Area.CAMP
+	game.camp_wood = 0
+	game.carried_wood = 1
+	game.carried_stone = 0
+	game.light_radius = 165.0
+	game.light_display_radius = 165.0
+	game.hero_pos = game.HEARTH_POS + Vector2(0.0, 66.0)
+	game.unload_cd = 0.0
+	game._deposit_resources_if_close(0.2)
+	if int(game.camp_wood) != 1 or float(game.light_radius) <= 165.0:
+		fail("Delivering a Day 1 log did not visibly push the light outward")
+		return
+
 	# Day 2 must NOT auto-build from stock collected before the stage began.
 	game.stage = 3
 	game.current_stage_wood_start = 10
