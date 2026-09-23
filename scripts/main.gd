@@ -5042,14 +5042,20 @@ func _run_choice_line(day: int) -> String:
 
 func _draw_result_overlay() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.86))
-	var panel := Rect2(Vector2(30, 185), Vector2(420, 420))
+	var panel := Rect2(Vector2(30, 165), Vector2(420, 470))
 	draw_rect(panel, Color("#16231c"))
 	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#d29550") if result_win else Color("#824842"))
 
-	draw_string(font, Vector2(50, 235), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 20, Color("#f4e6ce"))
+	draw_string(font, Vector2(50, 214), result_title, HORIZONTAL_ALIGNMENT_CENTER, 380, 20, Color("#f4e6ce"))
+
+	# The cause/consequence text used to exist only in state and was never drawn.
+	# Keep it visible here so a loss teaches the player what actually happened.
+	var subtitle_lines := _wrap_story_lines(result_subtitle, 54)
+	for i in range(mini(2, subtitle_lines.size())):
+		draw_string(font, Vector2(62, 244 + i * 18), subtitle_lines[i], HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#b9c7bb"))
 
 	if result_win:
-		var distant := Vector2(240, 278)
+		var distant := Vector2(240, 294)
 		draw_circle(distant, 18.0, Color(0.93, 0.55, 0.22, 0.08))
 		draw_circle(distant, 8.0, Color("#d77e38"))
 		var flame := PackedVector2Array([
@@ -5057,30 +5063,29 @@ func _draw_result_overlay() -> void:
 			distant + Vector2(0, 10), distant + Vector2(-7, 4)
 		])
 		draw_colored_polygon(flame, Color("#f2b14e"))
-		draw_string(font, Vector2(62, 315), "ГДЕ-ТО ЕЩЁ ГОРИТ ОГОНЬ", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#e7cf9b"))
+		draw_string(font, Vector2(62, 330), "ГДЕ-ТО ЕЩЁ ГОРИТ ОГОНЬ", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#e7cf9b"))
 		var fires := int(meta.get("forest_fires", 0))
 		var progress_text := "Огни Забытых лесов: %d/3 | следующий сигнал глубже в лесу" % fires
 		if fires >= 3:
 			progress_text = "Все сигналы леса найдены | Мёртвые поля пока скрыты"
-		draw_string(font, Vector2(62, 336), progress_text, HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#a9b9aa"))
+		draw_string(font, Vector2(62, 351), progress_text, HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#a9b9aa"))
 	else:
-		draw_string(font, Vector2(62, 296), "Огонь погас, но поселение помнит этот поход.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#b8c7bb"))
-		draw_string(font, Vector2(62, 318), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#b8c7bb"))
+		draw_string(font, Vector2(62, 314), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#a9b9aa"))
 
-	draw_string(font, Vector2(62, 374), "ТВОЯ ИСТОРИЯ ЭТОЙ ВЫЛАЗКИ", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#d7bc86"))
+	draw_string(font, Vector2(62, 390), "ТВОЯ ИСТОРИЯ ЭТОЙ ВЫЛАЗКИ", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#d7bc86"))
 	for i in range(3):
-		draw_string(font, Vector2(84, 402 + i * 23), _run_choice_line(i + 1), HORIZONTAL_ALIGNMENT_LEFT, 320, 11, Color("#b9c5ba"))
+		draw_string(font, Vector2(84, 417 + i * 23), _run_choice_line(i + 1), HORIZONTAL_ALIGNMENT_LEFT, 320, 11, Color("#b9c5ba"))
 
-	draw_string(font, Vector2(62, 478), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 14, Color("#ecc178"))
+	draw_string(font, Vector2(62, 504), "УГЛИ ЗА ВЫЛАЗКУ  +%d" % run_embers, HORIZONTAL_ALIGNMENT_CENTER, 356, 14, Color("#ecc178"))
 
 	if result_win:
-		draw_string(font, Vector2(62, 509), "Огонь возвращается по частям. Поселение изменится после возвращения.", HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#9eb09f"))
+		draw_string(font, Vector2(62, 535), "Возвращайся домой: изменения поселения уже ждут тебя.", HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#9eb09f"))
 	else:
-		draw_string(font, Vector2(62, 509), "Следующая попытка может пойти по другому пути.", HORIZONTAL_ALIGNMENT_CENTER, 356, 11, Color("#9eb09f"))
+		var retry_note := "Другой путь может дать союзника или усиление к следующей ночи."
+		draw_string(font, Vector2(62, 535), retry_note, HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#9eb09f"))
 
-	draw_rect(Rect2(Vector2(93, 544), Vector2(294, 42)), Color("#2a382e"))
-	draw_string(font, Vector2(105, 570), "КОСНИСЬ | ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 11, Color("#f0d7a1"))
-
+	draw_rect(Rect2(Vector2(93, 568), Vector2(294, 42)), Color("#2a382e"))
+	draw_string(font, Vector2(105, 594), "КОСНИСЬ | ВЕРНУТЬСЯ К ОЧАГУ", HORIZONTAL_ALIGNMENT_CENTER, 270, 11, Color("#f0d7a1"))
 
 func _draw_ellipse_custom(center: Vector2, radii: Vector2, color: Color) -> void:
 	var points := PackedVector2Array()
