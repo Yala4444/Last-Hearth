@@ -101,6 +101,13 @@ jobs:
           godot --headless --path . -s res://tests/v015_clarity_sanity.gd 2>&1 | tee /tmp/v015-clarity.log
           grep -q "V015_CLARITY_SANITY_OK" /tmp/v015-clarity.log
 
+      - name: v0.16 region memory sanity test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . -s res://tests/v016_region_memory_sanity.gd 2>&1 | tee /tmp/v016-region-memory.log
+          grep -q "V016_REGION_MEMORY_SANITY_OK" /tmp/v016-region-memory.log
+
       - name: Export Web build
         shell: bash
         run: |
