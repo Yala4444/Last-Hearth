@@ -2696,7 +2696,10 @@ func _finish_run(win: bool, reason: String = "") -> void:
 			result_subtitle = "Ты не вернулся к свету. Угли и постоянные улучшения остались."
 		else:
 			result_title = "ОЧАГ ПОГАС"
-			result_subtitle = "Временные усиления потеряны. Угли и постоянные улучшения остались."
+			if survivors <= 1:
+				result_subtitle = "Ты дошёл до ночи один. Ищи союзников: они стреляют рядом с тобой и сильно меняют шанс выжить."
+			else:
+				result_subtitle = "Временные усиления потеряны. Угли и постоянные улучшения остались."
 
 	_save_meta()
 	_stop_joystick()
@@ -2945,14 +2948,14 @@ func _draw_hub() -> void:
 			_draw_hub_construction_site(site)
 
 	if int(meta.get("carry_level", 0)) > 0:
-		_draw_hub_building(HUB_CARRY_POS, "store", "СНАРЯЖЕНИЕ", "рюкзак")
+		_draw_hub_building(HUB_CARRY_POS, "store", "РЮКЗАК", "+слоты")
 	else:
-		_draw_hub_site(HUB_CARRY_POS, "СНАРЯЖЕНИЕ")
+		_draw_hub_site(HUB_CARRY_POS, "РЮКЗАК")
 
 	if int(meta.get("damage_level", 0)) > 0:
-		_draw_hub_building(HUB_DAMAGE_POS, "forge", "КУЗНИЦА", "оружие")
+		_draw_hub_building(HUB_DAMAGE_POS, "forge", "ОРУЖЕЙНАЯ", "+урон")
 	else:
-		_draw_hub_site(HUB_DAMAGE_POS, "КУЗНИЦА")
+		_draw_hub_site(HUB_DAMAGE_POS, "ОРУЖЕЙНАЯ")
 
 	if bool(meta.get("watch_restored", false)):
 		_draw_hub_building(HUB_WATCH_POS, "watch", "ДОЗОР", "")
@@ -2967,13 +2970,13 @@ func _draw_hub() -> void:
 
 	var resident_index := 0
 	if fires >= 1:
-		_draw_humanoid(HUB_FORESTER_HOME_POS + Vector2(38, 68), Color("#71866a"), float(resident_index), "civilian", 1.0)
+		_draw_humanoid(HUB_FORESTER_HOME_POS + Vector2(30, 92), Color("#71866a"), float(resident_index), "civilian", 1.0)
 		resident_index += 1
 	if bool(meta.get("rescued_hunter", false)):
-		_draw_humanoid(HUB_HUNTER_HOME_POS + Vector2(-36, 72), Color("#7f886a"), float(resident_index), "hunter", 1.0)
+		_draw_humanoid(HUB_HUNTER_HOME_POS + Vector2(-34, 94), Color("#7f886a"), float(resident_index), "hunter", 1.0)
 		resident_index += 1
 	if bool(meta.get("rescued_worker", false)):
-		_draw_humanoid(HUB_WORKER_HOME_POS + Vector2(-42, 70), Color("#9b7856"), float(resident_index), "worker", 1.0)
+		_draw_humanoid(HUB_WORKER_HOME_POS + Vector2(-30, 92), Color("#9b7856"), float(resident_index), "worker", 1.0)
 		resident_index += 1
 	if fires >= 2:
 		_draw_humanoid(Vector2(310, 676), Color("#758597"), float(resident_index), "guard", 1.0)
@@ -3089,7 +3092,7 @@ func _draw_hub_resource_area() -> void:
 
 func _draw_hub_site(pos: Vector2, label: String) -> void:
 	_draw_ellipse_custom(pos + Vector2(0, 22), Vector2(32, 9), Color(0.01, 0.02, 0.015, 0.22))
-	if label == "СНАРЯЖЕНИЕ":
+	if label == "РЮКЗАК":
 		draw_rect(Rect2(pos + Vector2(-20, -8), Vector2(40, 27)), Color("#4d4435"))
 		draw_line(pos + Vector2(-12, -8), pos + Vector2(-12, 18), Color("#8d6c45"), 4.0)
 		draw_line(pos + Vector2(12, -8), pos + Vector2(12, 18), Color("#8d6c45"), 4.0)
@@ -4472,7 +4475,7 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(426, 55), "v0.14", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(426, 55), "v0.14.1", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
