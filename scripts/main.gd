@@ -1965,6 +1965,12 @@ func _update_resource_pickups(delta: float) -> void:
 			continue
 		var pickup_pos: Vector2 = pickup["pos"]
 		var distance := hero_pos.distance_to(pickup_pos)
+		if distance < 82.0 and distance > HERO_PICKUP_RADIUS:
+			var magnet_strength := clampf(1.0 - (distance - HERO_PICKUP_RADIUS) / (82.0 - HERO_PICKUP_RADIUS), 0.0, 1.0)
+			pickup_pos = pickup_pos.move_toward(hero_pos, delta * lerpf(42.0, 150.0, magnet_strength))
+			pickup["pos"] = pickup_pos
+			resource_pickups[i] = pickup
+			distance = hero_pos.distance_to(pickup_pos)
 		if distance <= HERO_PICKUP_RADIUS and distance < nearest_distance:
 			nearest_distance = distance
 			nearest_index = i
@@ -3070,6 +3076,7 @@ func _draw_hub() -> void:
 	var hearth_bonus := int(meta.get("hearth_bonus", 0))
 	var hub_light := 185.0 + float(fires) * 34.0 + float(hearth_bonus) * 15.0
 	_draw_light_field(HEARTH_POS, hub_light)
+	_draw_hub_growth_props(fires)
 
 	# Homes no longer appear magically: rescued people wait while the player builds them.
 	for site: Dictionary in _hub_build_sites():
@@ -3138,6 +3145,40 @@ func _draw_hub() -> void:
 	draw_arc(HUB_MAP_POS, 46.0 * pulse, 0.0, TAU, 44, Color(0.78, 0.88, 0.70, 0.55), 2.0)
 	var map_label := "ПЕРВАЯ ВЫЛАЗКА" if fires <= 0 else "КАРТА ВЫЛАЗОК"
 	draw_string(font, HUB_MAP_POS + Vector2(-90, 57), map_label, HORIZONTAL_ALIGNMENT_CENTER, 180, 12, Color("#f3e4c8"))
+
+func _draw_hub_growth_props(fires: int) -> void:
+	# Non-interactive set dressing: the settlement itself becomes the progression reward.
+	if fires >= 1:
+		# Woodpile and supply crate.
+		for i in range(3):
+			var y := 370.0 + float(i) * 7.0
+			draw_line(Vector2(58, y), Vector2(96, y - 2.0), Color("#775237"), 6.0, true)
+			draw_circle(Vector2(58, y), 3.0, Color("#a2754a"))
+			draw_circle(Vector2(96, y - 2.0), 3.0, Color("#a2754a"))
+		draw_rect(Rect2(Vector2(388, 360), Vector2(26, 22)), Color("#5f503d"))
+		draw_line(Vector2(388, 370), Vector2(414, 370), Color("#88704f"), 3.0)
+		# One warm path lantern.
+		draw_line(Vector2(326, 360), Vector2(326, 397), Color("#5e4a34"), 4.0)
+		draw_circle(Vector2(326, 356), 5.0, Color("#e29a43"))
+		draw_circle(Vector2(326, 356), 14.0, Color(0.93, 0.58, 0.24, 0.06))
+
+	if fires >= 2:
+		# The camp becomes an outpost: crates and defensive stakes occupy the perimeter.
+		for x in [28.0, 452.0]:
+			for y in [350.0, 405.0, 460.0]:
+				var inward := 1.0 if x < 240.0 else -1.0
+				draw_line(Vector2(x, y + 16), Vector2(x + inward * 14.0, y - 12), Color("#61472f"), 5.0, true)
+		draw_rect(Rect2(Vector2(52, 630), Vector2(25, 20)), Color("#514739"))
+		draw_rect(Rect2(Vector2(82, 637), Vector2(20, 16)), Color("#65523c"))
+		draw_line(Vector2(54, 639), Vector2(75, 639), Color("#877052"), 2.0)
+
+	if fires >= 3:
+		# Three recovered signals are echoed by three small perimeter lights.
+		for p: Vector2 in [Vector2(155, 600), Vector2(325, 600), Vector2(240, 705)]:
+			draw_line(p + Vector2(0, 14), p + Vector2(0, -10), Color("#655039"), 3.0)
+			draw_circle(p + Vector2(0, -13), 4.5, Color("#e8a24c"))
+			draw_circle(p + Vector2(0, -13), 12.0, Color(0.95, 0.61, 0.25, 0.055))
+
 
 func _draw_hub_construction_site(site: Dictionary) -> void:
 	var pos: Vector2 = site["pos"]
