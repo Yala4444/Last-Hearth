@@ -5275,6 +5275,32 @@ func _draw_region_map_connection(a: Vector2, b: Vector2, lit: bool, phase_offset
 	draw_circle(glow_pos, 3.2, Color(0.96, 0.73, 0.37, 0.78))
 
 
+func _future_region_visible() -> bool:
+	return int(meta.get("forest_fires", 0)) >= 3
+
+
+func _draw_future_region_silhouette() -> void:
+	if not _future_region_visible():
+		return
+	var center := Vector2(387, 258)
+	var silhouette := PackedVector2Array([
+		center + Vector2(-27, -18),
+		center + Vector2(-9, -29),
+		center + Vector2(18, -23),
+		center + Vector2(29, -5),
+		center + Vector2(20, 18),
+		center + Vector2(-4, 25),
+		center + Vector2(-28, 9)
+	])
+	draw_colored_polygon(silhouette, Color(0.20, 0.18, 0.16, 0.42))
+	draw_polyline(PackedVector2Array([
+		silhouette[0], silhouette[1], silhouette[2], silhouette[3],
+		silhouette[4], silhouette[5], silhouette[6], silhouette[0]
+	]), Color(0.46, 0.39, 0.32, 0.46), 2.0, true)
+	draw_circle(center + Vector2(7, 1), 4.0, Color(0.69, 0.43, 0.25, 0.28))
+	draw_string(font, center + Vector2(-39, 47), "НЕИЗВЕСТНЫЙ КРАЙ", HORIZONTAL_ALIGNMENT_CENTER, 78, 7, Color("#776d64"))
+
+
 func _draw_region_map_overlay() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.80))
 	var panel := Rect2(Vector2(28, 132), Vector2(424, 548))
@@ -5298,6 +5324,7 @@ func _draw_region_map_overlay() -> void:
 
 	for index in range(1, 4):
 		_draw_region_fire_node(index)
+	_draw_future_region_silhouette()
 
 	if region_map_selected_fire <= 0 or _forest_fire_state(region_map_selected_fire) == "unknown":
 		region_map_selected_fire = _default_region_map_selection()
@@ -5310,7 +5337,7 @@ func _draw_region_map_overlay() -> void:
 		for i in range(mini(detail_lines.size(), 2)):
 			draw_string(font, Vector2(60, 454 + i * 17), detail_lines[i], HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#aebcaf"))
 
-	if fires >= 3:
+	if _future_region_visible():
 		draw_string(font, Vector2(60, 503), "ЗА ГРАНИЦЕЙ ЛЕСА ВИДЕН НОВЫЙ СИГНАЛ", HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#aa947a"))
 		draw_string(font, Vector2(60, 520), "Мёртвые поля пока скрыты тьмой.", HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#766e66"))
 	else:
