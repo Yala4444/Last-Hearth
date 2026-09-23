@@ -3382,9 +3382,11 @@ func _draw_small_building(pos: Vector2, _kind: String) -> void:
 
 func _draw_stockpile() -> void:
 	var storage_center := _workshop_pos() if stage == Stage.DAY2_BUILD else HEARTH_POS
-	if camp_wood > 0:
+	var visible_wood := maxi(0, camp_wood - current_stage_wood_start) if stage == Stage.DAY2_BUILD else camp_wood
+	var visible_stone := maxi(0, camp_stone - current_stage_stone_start) if stage == Stage.DAY2_BUILD else camp_stone
+	if visible_wood > 0:
 		var wood_pos := storage_center + Vector2(-76, 47)
-		var shown := mini(camp_wood, 6)
+		var shown := mini(visible_wood, 6)
 		for i in range(shown):
 			var row := i / 3
 			var col := i % 3
@@ -3392,17 +3394,17 @@ func _draw_stockpile() -> void:
 			draw_line(p + Vector2(-6, 0), p + Vector2(6, 0), Color("#8f5d33"), 5.0, true)
 			draw_circle(p + Vector2(-6, 0), 2.3, Color("#c58b54"))
 			draw_circle(p + Vector2(6, 0), 2.3, Color("#c58b54"))
-		draw_string(font, wood_pos + Vector2(-24, 19), "%d" % camp_wood, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#d9bf91"))
+		draw_string(font, wood_pos + Vector2(-24, 19), "%d" % visible_wood, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#d9bf91"))
 
-	if camp_stone > 0:
+	if visible_stone > 0:
 		var stone_pos := storage_center + Vector2(76, 48)
-		var shown := mini(camp_stone, 6)
+		var shown := mini(visible_stone, 6)
 		for i in range(shown):
 			var row := i / 3
 			var col := i % 3
 			var p := stone_pos + Vector2(float(col) * 10.0 - 10.0, -float(row) * 7.0)
 			draw_circle(p, 4.2, Color("#858f8c"))
-		draw_string(font, stone_pos + Vector2(-24, 19), "%d" % camp_stone, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#c5ccc8"))
+		draw_string(font, stone_pos + Vector2(-24, 19), "%d" % visible_stone, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#c5ccc8"))
 
 
 func _draw_world_progress() -> void:
