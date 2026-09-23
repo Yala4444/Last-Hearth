@@ -2890,6 +2890,8 @@ func _finish_run(win: bool, reason: String = "") -> void:
 			result_title = "%s ВОССТАНОВЛЕН" % _forest_fire_name(fire_index)
 			if fire_index == 1 and String(meta.get("hunter_fate", "")) == "keeper_fire_1":
 				result_subtitle = "Охотник остаётся у первого огня и будет держать тропу. На карте замечен следующий сигнал."
+			elif fire_index == 2 and String(meta.get("forest_fire_2_keeper", "")) == "Мастер":
+				result_subtitle = "Мастер остаётся у старой дороги, пока цепь огней не восстановлена. Последний сигнал уже виден глубже в лесу."
 			else:
 				result_subtitle = "Этот огонь остаётся в лесу. На карте замечен следующий сигнал глубже во тьме."
 		else:
