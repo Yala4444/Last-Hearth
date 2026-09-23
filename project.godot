@@ -5,7 +5,7 @@ config_version=5
 
 [application]
 
-config/name="Last Hearth v0.15 — Smoother Light & Purposeful World"
+config/name="Last Hearth v0.16 — Region Memory & Real Residents"
 run/main_scene="res://main.tscn"
 
 [display]
