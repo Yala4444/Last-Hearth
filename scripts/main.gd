@@ -3123,6 +3123,8 @@ func _draw_hub() -> void:
 	_draw_hub_build_guidance()
 	_draw_resource_flights()
 	_draw_hero(hero_pos)
+	for site: Dictionary in _hub_build_sites():
+		_draw_hub_construction_info(site)
 
 	if _active_notice_priority() == 0:
 		var settlement_status := "УБЕЖИЩЕ • ОГНИ ЛЕСА 0/3"
@@ -3241,16 +3243,31 @@ func _draw_hub_construction_site(site: Dictionary) -> void:
 		var roof := PackedVector2Array([pos + Vector2(-31, -8), pos + Vector2(0, -31), pos + Vector2(31, -8)])
 		draw_colored_polygon(roof, Color("#7b6243"))
 
-	var label := String(site["label"])
-	var plate := Rect2(pos + Vector2(-57, 38), Vector2(114, 18))
-	draw_rect(plate, Color(0.025, 0.04, 0.032, 0.88))
-	draw_string(font, plate.position + Vector2(4, 13), label, HORIZONTAL_ALIGNMENT_CENTER, 106, 8, Color("#e5d8c0"))
+	# Labels and required materials are drawn later, after characters,
+	# so nobody can stand on top of the construction information.
 
-	# Material numbers are contextual, not three permanent lines fighting each other.
-	if hero_pos.distance_to(pos) < 96.0:
-		var detail := Rect2(pos + Vector2(-67, 58), Vector2(134, 18))
-		draw_rect(detail, Color(0.025, 0.04, 0.032, 0.90))
-		draw_string(font, detail.position + Vector2(3, 13), "дер %d/%d  •  кам %d/%d" % [wood, wood_cost, stone, stone_cost], HORIZONTAL_ALIGNMENT_CENTER, 128, 8, Color("#c8b58f"))
+func _draw_hub_construction_info(site: Dictionary) -> void:
+	if _hub_site_built(site):
+		return
+	var pos: Vector2 = site["pos"]
+	var wood := _hub_site_progress(site, "wood")
+	var stone := _hub_site_progress(site, "stone")
+	var wood_cost := int(site["wood_cost"])
+	var stone_cost := int(site["stone_cost"])
+	var label := String(site["label"])
+
+	# Persistent two-line card: the player can always see what this house needs.
+	var plate := Rect2(pos + Vector2(-66, 38), Vector2(132, 36))
+	draw_rect(plate, Color(0.015, 0.026, 0.021, 0.97))
+	draw_rect(Rect2(plate.position, Vector2(3, plate.size.y)), Color("#b9874d"))
+	draw_string(font, plate.position + Vector2(7, 13), label, HORIZONTAL_ALIGNMENT_CENTER, 118, 8, Color("#eee2cc"))
+
+	var wood_color := Color("#8fb382") if wood >= wood_cost else Color("#d7b477")
+	var stone_color := Color("#8fb382") if stone >= stone_cost else Color("#b9c2bf")
+	var mid_x := plate.position.x + plate.size.x * 0.5
+	draw_string(font, Vector2(plate.position.x + 5, plate.position.y + 29), "ДЕР %d/%d" % [wood, wood_cost], HORIZONTAL_ALIGNMENT_CENTER, 58, 8, wood_color)
+	draw_string(font, Vector2(mid_x + 2, plate.position.y + 29), "КАМ %d/%d" % [stone, stone_cost], HORIZONTAL_ALIGNMENT_CENTER, 58, 8, stone_color)
+
 
 func _draw_hub_area_gate(pos: Vector2, title: String, subtitle: String, points_left: bool) -> void:
 	var left_side := points_left
@@ -4920,8 +4937,10 @@ func _draw_banner() -> void:
 	if banner_timer <= 0.0 or banner_text == "" or story_hint_timer > 0.0:
 		return
 	var alpha := clampf(banner_timer * 1.5, 0.0, 1.0)
-	draw_rect(Rect2(Vector2(56, 120), Vector2(368, 54)), Color(0.02, 0.03, 0.025, 0.82 * alpha))
-	draw_string(font, Vector2(70, 153), banner_text, HORIZONTAL_ALIGNMENT_CENTER, 340, 15, Color(0.96, 0.91, 0.80, alpha))
+	var box := Rect2(Vector2(46, 91), Vector2(388, 58))
+	draw_rect(box, Color(0.012, 0.022, 0.018, 0.97 * alpha))
+	draw_rect(Rect2(box.position, Vector2(box.size.x, 3)), Color(0.76, 0.55, 0.31, alpha))
+	draw_string(font, Vector2(64, 127), banner_text, HORIZONTAL_ALIGNMENT_CENTER, 352, 14, Color(0.96, 0.91, 0.80, alpha))
 
 
 func _wrap_story_lines(text: String, max_chars: int = 42) -> Array[String]:
@@ -4953,13 +4972,14 @@ func _draw_story_card() -> void:
 	var lines := _wrap_story_lines(story_hint, 44)
 	var count := mini(lines.size(), 4)
 	var height := 30.0 + float(count) * 18.0
-	var y := 94.0
-	draw_rect(Rect2(Vector2(48, y), Vector2(384, height)), Color(0.015, 0.025, 0.020, 0.88))
-	draw_rect(Rect2(Vector2(48, y), Vector2(4, height)), Color("#c18d50"))
+	var y := 90.0
+	var box := Rect2(Vector2(38, y), Vector2(404, height))
+	draw_rect(box, Color(0.010, 0.019, 0.016, 0.975))
+	draw_rect(Rect2(box.position, Vector2(4, height)), Color("#c18d50"))
 	for i in range(count):
 		var color := Color("#ead7ae") if i == 0 else Color("#c8d1c8")
 		var size := 12 if i == 0 else 11
-		draw_string(font, Vector2(64, y + 25.0 + float(i) * 18.0), lines[i], HORIZONTAL_ALIGNMENT_LEFT, 350, size, color)
+		draw_string(font, Vector2(56, y + 25.0 + float(i) * 18.0), lines[i], HORIZONTAL_ALIGNMENT_LEFT, 368, size, color)
 
 
 func _draw_hub_feedback() -> void:
@@ -4967,10 +4987,10 @@ func _draw_hub_feedback() -> void:
 		return
 	if story_hint_timer > 0.0:
 		return
-	var box := Rect2(Vector2(86, 91), Vector2(308, 34))
-	draw_rect(box, Color(0.02, 0.03, 0.025, 0.94))
+	var box := Rect2(Vector2(58, 92), Vector2(364, 40))
+	draw_rect(box, Color(0.010, 0.019, 0.016, 0.975))
 	draw_rect(Rect2(box.position, Vector2(4, box.size.y)), Color("#c18d50"))
-	draw_string(font, box.position + Vector2(8, 23), hub_feedback_text, HORIZONTAL_ALIGNMENT_CENTER, 292, 10, Color("#f0d7a1"))
+	draw_string(font, box.position + Vector2(9, 26), hub_feedback_text, HORIZONTAL_ALIGNMENT_CENTER, 346, 10, Color("#f0d7a1"))
 
 func _draw_area_transition() -> void:
 	if area_fade_timer <= 0.0:
