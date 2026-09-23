@@ -15,6 +15,9 @@ const HUB_WORKER_HOME_POS := Vector2(402.0, 238.0)
 const HUB_WATCH_POS := Vector2(394.0, 650.0)
 
 const HERO_SPEED := 178.0
+const HERO_ACCEL := 12.0
+const HERO_DECEL := 16.0
+const HERO_ARRIVAL_RADIUS := 52.0
 const HERO_INTERACT_RADIUS := 46.0
 const HERO_PICKUP_RADIUS := 34.0
 const JOYSTICK_RADIUS := 64.0
@@ -87,7 +90,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 14,
+	"build_version": 15,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -114,6 +117,7 @@ var meta: Dictionary = {
 
 var hero_pos := Vector2(240.0, 650.0)
 var hero_target := Vector2(240.0, 650.0)
+var hero_velocity := Vector2.ZERO
 var hero_walk_phase := 0.0
 var hero_facing := Vector2(1.0, 0.0)
 var hero_damage := 22.0
@@ -318,7 +322,7 @@ func _load_meta() -> void:
 	meta["worker_home_built"] = bool(meta.get("worker_home_built", false))
 	for key: String in ["forester_home_wood", "forester_home_stone", "hunter_home_wood", "hunter_home_stone", "worker_home_wood", "worker_home_stone"]:
 		meta[key] = int(meta.get(key, 0))
-	meta["build_version"] = 14
+	meta["build_version"] = 15
 
 
 func _save_meta() -> void:
@@ -594,9 +598,6 @@ func _generate_layout() -> void:
 				Vector2(130, 300), Vector2(355, 305), Vector2(135, 505),
 				Vector2(345, 505), Vector2(240, 655), Vector2(420, 455)
 			]
-			_add_event("dead_camp", Vector2(92, 205))
-			_add_event("altar", Vector2(392, 610))
-			_add_event("tracks", Vector2(350, 315))
 		1:
 			map_variant_name = "Разорённая дорога"
 			tree_slots = [
@@ -608,9 +609,6 @@ func _generate_layout() -> void:
 				Vector2(115, 320), Vector2(365, 335), Vector2(105, 520),
 				Vector2(380, 510), Vector2(225, 620), Vector2(430, 445)
 			]
-			_add_event("wagon", Vector2(95, 315))
-			_add_event("wounded", Vector2(386, 330))
-			_add_event("broken_watch", Vector2(372, 585))
 		2:
 			map_variant_name = "Каменная низина"
 			tree_slots = [
@@ -622,10 +620,6 @@ func _generate_layout() -> void:
 				Vector2(120, 300), Vector2(350, 290), Vector2(155, 470),
 				Vector2(325, 465), Vector2(225, 585), Vector2(420, 520)
 			]
-			_add_event("altar", Vector2(98, 520))
-			_add_event("black_tree", Vector2(390, 535))
-			_add_event("tracks", Vector2(105, 645))
-			_add_event("whisper", Vector2(398, 230))
 		_:
 			map_variant_name = "Сгоревшая усадьба"
 			tree_slots = [
@@ -637,11 +631,6 @@ func _generate_layout() -> void:
 				Vector2(125, 300), Vector2(355, 300), Vector2(140, 505),
 				Vector2(340, 500), Vector2(240, 640), Vector2(425, 455)
 			]
-			_add_event("dead_camp", Vector2(105, 345))
-			_add_event("wagon", Vector2(382, 345))
-			_add_event("wounded", Vector2(390, 610))
-			_add_event("broken_watch", Vector2(110, 615))
-			_add_event("whisper", Vector2(390, 225))
 
 	var tree_count := 9
 	if int(meta.get("attempts", 1)) <= 1 and map_variant == 0:
@@ -691,7 +680,9 @@ func _generate_layout() -> void:
 			"hit_flash": 0.0
 		})
 
-	for i in range(56):
+	# v0.15: the main clearing tells its story through scenery only.
+	# Interactable landmarks belong to explicit routes, so the player never mistakes filler for a choice.
+	for i in range(62):
 		var dpos := Vector2(rng.randf_range(26.0, 454.0), rng.randf_range(128.0, 770.0))
 		if dpos.distance_to(HEARTH_POS) < 80.0:
 			continue
@@ -701,7 +692,11 @@ func _generate_layout() -> void:
 			kind = "pebble"
 		if roll > 0.88:
 			kind = "branch"
-		if map_variant == 3 and roll > 0.78:
+		if map_variant == 1 and roll > 0.80:
+			kind = "branch"
+		if map_variant == 2 and roll > 0.72:
+			kind = "pebble"
+		if map_variant == 3 and roll > 0.72:
 			kind = "ash"
 		decor_points.append({
 			"pos": dpos,
@@ -966,7 +961,7 @@ func _update_day1_route() -> void:
 			hearth_max_hp += 38.0
 			hearth_hp = hearth_max_hp
 			run_embers += 1
-			_story("ЛЕСОПИЛКА ОЧИЩЕНА\nСлоты %d → %d • прочность огня %d → %d. Союзника здесь нет." % [old_slots, carry_limit, roundi(old_hearth_hp), roundi(hearth_max_hp)], 4.2)
+			_story("ЛЕСОПИЛКА ОЧИЩЕНА\nСлоты %d > %d • прочность огня %d > %d. Союзника здесь нет." % [old_slots, carry_limit, roundi(old_hearth_hp), roundi(hearth_max_hp)], 4.2)
 		return
 
 	var event_kind := _day1_route_event_kind(day1_route)
@@ -981,12 +976,12 @@ func _update_day1_route() -> void:
 			hearth_hp = hearth_max_hp
 			_add_survivor("guard", Vector2(240.0, 220.0))
 			run_embers += 1
-			_story("ВОЗНИЦА СПАСЁН\nСоюзник +1 • слоты %d → %d • прочность огня +20. Он идёт с тобой." % [old_slots, carry_limit], 4.1)
+			_story("ВОЗНИЦА СПАСЁН\nСоюзник +1 • слоты %d > %d • прочность огня +20. Он идёт с тобой." % [old_slots, carry_limit], 4.1)
 		"nest":
 			var old_damage := hero_damage
 			hero_damage *= 1.18
 			run_embers += 2
-			_story("ЛОГОВО УНИЧТОЖЕНО\nУрон %d → %d (+18%%). Союзника ты не нашёл — поздние ночи будут опаснее." % [roundi(old_damage), roundi(hero_damage)], 4.2)
+			_story("ЛОГОВО УНИЧТОЖЕНО\nУрон %d > %d (+18%%). Союзника ты не нашёл — поздние ночи будут опаснее." % [roundi(old_damage), roundi(hero_damage)], 4.2)
 		"signal":
 			run_embers += 1
 			_story("РАЗВЕДЧИК СПАСЁН\n«Я видел ещё один огонь глубже в лесу. Покажу дорогу.»", 3.4)
@@ -995,7 +990,7 @@ func _update_day1_route() -> void:
 			hearth_max_hp += 32.0
 			hearth_hp = hearth_max_hp
 			run_embers += 1
-			_story("ЖАР СОХРАНЁН\nПрочность огня %d → %d. Союзника здесь нет." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
+			_story("ЖАР СОХРАНЁН\nПрочность огня %d > %d. Союзника здесь нет." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
 	day1_route_complete = true
 
 func _update_area_transitions() -> void:
@@ -1117,7 +1112,7 @@ func _update_worker_route() -> void:
 		hero_hp = hero_max_hp
 		run_embers += 2
 		var solo_note := " Ты всё ещё один — вторая ночь будет очень тяжёлой." if survivors <= 1 else ""
-		_story("СКЛАД РАЗОБРАН\nСлоты %d → %d • здоровье %d → %d.%s" % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp), solo_note], 4.5)
+		_story("СКЛАД РАЗОБРАН\nСлоты %d > %d • здоровье %d > %d.%s" % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp), solo_note], 4.5)
 	else:
 		survivor_two_found = true
 		_add_survivor("guard", survivor_two_pos)
@@ -1219,14 +1214,14 @@ func _update_day3_route() -> void:
 		hero_damage *= 1.55
 		day3_route_complete = true
 		run_embers += 1
-		_story("ОГОНЬ ПРИНЯТ\nУрон %d → %d (+55%%). Огненная метка усилила каждый выстрел." % [roundi(old_damage), roundi(hero_damage)], 3.9)
+		_story("ОГОНЬ ПРИНЯТ\nУрон %d > %d (+55%%). Огненная метка усилила каждый выстрел." % [roundi(old_damage), roundi(hero_damage)], 3.9)
 	elif day3_route == "barricade" and watch_repair_started and enemies.is_empty():
 		var old_hearth_hp := hearth_max_hp
 		hearth_max_hp += 85.0
 		hearth_hp = hearth_max_hp
 		day3_route_complete = true
 		run_embers += 1
-		_story("ПРОХОД УКРЕПЛЁН\nПрочность огня %d → %d. Это чисто защитная подготовка." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
+		_story("ПРОХОД УКРЕПЛЁН\nПрочность огня %d > %d. Это чисто защитная подготовка." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
 	elif day3_route == "shrine" and final_altar_claimed and enemies.is_empty():
 		var old_damage := hero_damage
 		var old_hp := hero_max_hp
@@ -1235,7 +1230,7 @@ func _update_day3_route() -> void:
 		hero_hp = hero_max_hp
 		day3_route_complete = true
 		run_embers += 1
-		_story("ЗНАК ПРИНЯТ\nУрон %d → %d • здоровье %d → %d." % [roundi(old_damage), roundi(hero_damage), roundi(old_hp), roundi(hero_max_hp)], 3.8)
+		_story("ЗНАК ПРИНЯТ\nУрон %d > %d • здоровье %d > %d." % [roundi(old_damage), roundi(hero_damage), roundi(old_hp), roundi(hero_max_hp)], 3.8)
 	elif day3_route == "beacon" and watch_repair_started and enemies.is_empty():
 		tower_built = true
 		hero_fire_rate *= 0.90
@@ -1250,7 +1245,7 @@ func _update_day3_route() -> void:
 		hero_hp = hero_max_hp
 		day3_route_complete = true
 		run_embers += 1
-		_story("ТАЙНИК РАЗОБРАН\nСлоты %d → %d • здоровье %d → %d." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 3.7)
+		_story("ТАЙНИК РАЗОБРАН\nСлоты %d > %d • здоровье %d > %d." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 3.7)
 
 
 func _return_from_day3_route() -> void:
@@ -1462,24 +1457,52 @@ func _complete_black_tree_event(index: int) -> void:
 
 
 func _update_movement(delta: float) -> void:
-	var movement := Vector2.ZERO
-	var strength := 0.0
+	var desired_velocity := Vector2.ZERO
+	var input_strength := 0.0
+	var target_mode := false
+	var target_distance := 0.0
 
 	if joystick_active and joystick_vector.length() > JOYSTICK_DEADZONE:
-		strength = clampf(joystick_vector.length(), 0.0, 1.0)
-		movement = joystick_vector.normalized() * HERO_SPEED * strength
+		input_strength = clampf(joystick_vector.length(), 0.0, 1.0)
+		desired_velocity = joystick_vector.normalized() * HERO_SPEED * input_strength
 	else:
 		var to_target := hero_target - hero_pos
-		if to_target.length() > 3.0:
-			movement = to_target.normalized() * HERO_SPEED
+		target_distance = to_target.length()
+		if target_distance > 2.0:
+			target_mode = true
+			var arrival := clampf(target_distance / HERO_ARRIVAL_RADIUS, 0.18, 1.0)
+			desired_velocity = to_target.normalized() * HERO_SPEED * arrival
+			input_strength = arrival
 
-	if movement.length() > 0.0:
-		hero_facing = movement.normalized()
-		hero_pos += movement * delta
+	var response := HERO_ACCEL if desired_velocity.length() > 0.1 else HERO_DECEL
+	var blend := 1.0 - exp(-delta * response)
+	hero_velocity = hero_velocity.lerp(desired_velocity, blend)
+
+	if desired_velocity.length() <= 0.1 and hero_velocity.length() < 4.0:
+		hero_velocity = Vector2.ZERO
+
+	if hero_velocity.length() > 0.1:
+		var desired_facing := hero_velocity.normalized()
+		var facing_blend := 1.0 - exp(-delta * 10.0)
+		hero_facing = hero_facing.lerp(desired_facing, facing_blend)
+		if hero_facing.length() > 0.01:
+			hero_facing = hero_facing.normalized()
+
+		var step := hero_velocity * delta
+		if target_mode and target_distance > 0.0 and step.length() >= target_distance:
+			hero_pos = hero_target
+			hero_velocity = Vector2.ZERO
+		else:
+			hero_pos += step
+
 		hero_pos.x = clampf(hero_pos.x, 22.0, VIEW_SIZE.x - 22.0)
 		hero_pos.y = clampf(hero_pos.y, 118.0, VIEW_SIZE.y - 24.0)
-		hero_walk_phase += delta * (6.0 + strength * 5.0)
+		var speed_ratio := clampf(hero_velocity.length() / HERO_SPEED, 0.0, 1.0)
+		hero_walk_phase += delta * lerpf(5.6, 10.5, speed_ratio)
 
+	if target_mode and hero_pos.distance_to(hero_target) <= 2.5:
+		hero_pos = hero_target
+		hero_velocity = Vector2.ZERO
 
 func _hub_build_sites() -> Array[Dictionary]:
 	var sites: Array[Dictionary] = []
@@ -1733,7 +1756,7 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["carry_level"] = level + 1
 			_save_meta()
-			_hub_feedback("РЮКЗАК: СЛОТЫ %d → %d" % [5 + level, 6 + level], HUB_CARRY_POS, 2.2)
+			_hub_feedback("РЮКЗАК: СЛОТЫ %d > %d" % [5 + level, 6 + level], HUB_CARRY_POS, 2.2)
 		else:
 			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_CARRY_POS, 1.8)
 
@@ -1745,7 +1768,7 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["damage_level"] = level + 1
 			_save_meta()
-			_hub_feedback("УРОН В ВЫЛАЗКАХ: +%d%% → +%d%%" % [level * 10, (level + 1) * 10], HUB_DAMAGE_POS, 2.2)
+			_hub_feedback("УРОН В ВЫЛАЗКАХ: +%d%% > +%d%%" % [level * 10, (level + 1) * 10], HUB_DAMAGE_POS, 2.2)
 		else:
 			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_DAMAGE_POS, 1.8)
 
@@ -2097,7 +2120,7 @@ func _update_workshop_choice() -> void:
 		hero_damage *= 1.28
 		_start_night(2)
 		_banner("ОРУЖЕЙНЫЙ СТОЛ", 2.0)
-		_story("ОРУЖЕЙНЫЙ СТОЛ\nУрон %d → %d (+28%%). Каждый твой выстрел теперь сильнее." % [roundi(old_damage), roundi(hero_damage)], 4.0)
+		_story("ОРУЖЕЙНЫЙ СТОЛ\nУрон %d > %d (+28%%). Каждый твой выстрел теперь сильнее." % [roundi(old_damage), roundi(hero_damage)], 4.0)
 	elif hero_pos.distance_to(right_choice_pos) < 48.0:
 		workshop_choice = "gear"
 		var old_slots := carry_limit
@@ -2108,7 +2131,7 @@ func _update_workshop_choice() -> void:
 		hero_hp = hero_max_hp
 		_start_night(2)
 		_banner("ПОХОДНЫЙ НАБОР", 2.0)
-		_story("ПОХОДНЫЙ НАБОР\nСлоты %d → %d • здоровье %d → %d. Добыча ресурсов стала быстрее." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 4.4)
+		_story("ПОХОДНЫЙ НАБОР\nСлоты %d > %d • здоровье %d > %d. Добыча ресурсов стала быстрее." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 4.4)
 
 
 func _spawn_rescue_guards() -> void:
@@ -2797,6 +2820,7 @@ func _banner(text: String, duration: float = 1.8) -> void:
 func _stop_joystick() -> void:
 	joystick_active = false
 	joystick_vector = Vector2.ZERO
+	hero_velocity = Vector2.ZERO
 	joystick_touch_index = -1
 	mouse_dragging = false
 	hero_target = hero_pos
@@ -3928,7 +3952,7 @@ func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
 
 
 func _draw_hero(pos: Vector2) -> void:
-	var moving := hero_pos.distance_to(hero_target) > 3.0 or joystick_vector.length() > JOYSTICK_DEADZONE
+	var moving := hero_velocity.length() > 7.0 or hero_pos.distance_to(hero_target) > 3.0 or joystick_vector.length() > JOYSTICK_DEADZONE
 	var work_kind := _nearby_resource_kind()
 	var texture: Texture2D = TEX_HERO_IDLE
 	var size := Vector2(64, 64)
@@ -4475,7 +4499,7 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(426, 55), "v0.14.1", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(426, 55), "v0.15", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
