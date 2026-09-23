@@ -220,8 +220,8 @@ func _init() -> void:
 	if String(game.meta.get("master_relationship_state", "")) != "waiting_forest":
 		fail("v0.15 Master migration joined the hub too early")
 		return
-	if int(game.meta.get("build_version", 0)) != 16:
-		fail("v0.15 save was not upgraded to v0.16 schema")
+	if int(game.meta.get("build_version", 0)) != 17:
+		fail("v0.15 save was not upgraded to the current schema")
 		return
 
 	print("V016_REGION_MEMORY_SANITY_OK")
