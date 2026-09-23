@@ -568,7 +568,8 @@ func _start_expedition() -> void:
 		_banner("ПЕРВЫЙ СВЕТ", 2.2)
 		_story("Сруби ближайшее дерево. Подними брёвна и принеси их к полевому огню — каждый груз оттолкнёт тьму.", 5.0)
 	else:
-		_banner("Вылазка #%d | %s" % [int(meta.get("attempts", 1)), map_variant_name], 2.4)
+		var sector_name := ["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"][expedition_sector]
+		_banner("%s | %s" % [sector_name, map_variant_name], 2.4)
 
 
 func _generate_layout() -> void:
@@ -2031,7 +2032,7 @@ func _check_day_progress() -> void:
 		camera_shake = 4.8
 		_burst_typed(HEARTH_POS, 24, "ember")
 		_banner("СВЕТ РАСШИРИЛСЯ | ОТКРЫТЫ ДВЕ ТРОПЫ", 2.4)
-		_story("Полевой огонь разгорелся. Тьма отступила: слева слышен крик, справа тянется дым.", 4.2)
+		_story("Тьма отступила. Слева: %s. Справа: %s. До ночи хватит времени только на один путь." % [_day1_route_label(day1_left_offer).to_lower(), _day1_route_label(day1_right_offer).to_lower()], 4.4)
 		stage_transition_lock = false
 
 	elif stage == Stage.DAY2_BUILD and camp_wood >= current_stage_wood_start + WORKSHOP_WOOD_COST and camp_stone >= current_stage_stone_start + WORKSHOP_STONE_COST:
@@ -4147,7 +4148,7 @@ func _nearest_enemy_pos() -> Vector2:
 func _guidance_info() -> Dictionary:
 	if stage == Stage.DAY1_GATHER:
 		if carried_wood + carried_stone > 0:
-			return {"pos": HEARTH_POS, "text": "ВЕРНИСЬ К ОЧАГУ"}
+			return {"pos": HEARTH_POS, "text": "НЕСИ К ОГНЮ"}
 		if resource_pickups.size() > 0:
 			var best: Dictionary = resource_pickups[0]
 			var best_d := hero_pos.distance_to(best["pos"])
@@ -4160,19 +4161,15 @@ func _guidance_info() -> Dictionary:
 		return {"pos": _nearest_resource_pos("wood"), "text": "СРУБИ ДЕРЕВО"}
 
 	if stage == Stage.DAY1_RESCUE:
-		if area == Area.HUNTER_TRAIL:
-			if day1_route_complete:
-				return {"pos": route_return_gate_pos, "text": "К ОЧАГУ"}
-			if enemies.size() > 0:
-				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
+		if area == Area.CAMP:
+			return {}
+		if day1_route_complete:
+			return {"pos": route_return_gate_pos, "text": "К ОГНЮ"}
+		if enemies.size() > 0:
+			return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
+		if day1_route == "hunter":
 			return {"pos": survivor_one_pos, "text": "ОХОТНИК"}
-		if area == Area.SAWMILL:
-			if day1_route_complete:
-				return {"pos": route_return_gate_pos, "text": "К ОЧАГУ"}
-			if enemies.size() > 0:
-				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
-			return {"pos": Vector2(240, 220), "text": "ЛЕСОПИЛКА"}
-		return {}
+		return {"pos": Vector2(240, 220), "text": _day1_route_label(day1_route)}
 
 	if stage == Stage.DAY2_BUILD:
 		if carried_wood + carried_stone > 0:
@@ -4188,27 +4185,22 @@ func _guidance_info() -> Dictionary:
 	if stage == Stage.DAY2_RESCUE:
 		if area == Area.CAMP:
 			return {}
-		if area == Area.WORKER_RUINS and worker_route_complete:
-			return {"pos": route_return_gate_pos, "text": "К ОЧАГУ"}
-		if area == Area.WORKER_RUINS and enemies.size() > 0:
+		if worker_route_complete:
+			return {"pos": route_return_gate_pos, "text": "К ОГНЮ"}
+		if enemies.size() > 0:
 			return {"pos": _nearest_enemy_pos(), "text": "СТРАЖИ"}
-		if area == Area.WORKER_RUINS:
-			return {"pos": survivor_two_pos, "text": "РАБОЧИЙ"}
+		if day2_mission == "storehouse":
+			return {"pos": survivor_two_pos, "text": "ТАЙНИК"}
+		return {"pos": survivor_two_pos, "text": "РАБОЧИЙ" if day2_mission == "worker" else "РАЗВЕДЧИК"}
 
 	if stage == Stage.DAY3_TOWER:
-		if area == Area.WATCH_RIDGE:
-			if day3_route_complete:
-				return {"pos": route_return_gate_pos, "text": "К ОЧАГУ"}
-			if enemies.size() > 0:
-				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
-			return {"pos": Vector2(240, 205), "text": "ДОЗОР"}
-		if area == Area.ALTAR_GLADE:
-			if day3_route_complete:
-				return {"pos": route_return_gate_pos, "text": "К ОЧАГУ"}
-			if enemies.size() > 0:
-				return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
-			return {"pos": Vector2(240, 210), "text": "АЛТАРЬ"}
-		return {}
+		if area == Area.CAMP:
+			return {}
+		if day3_route_complete:
+			return {"pos": route_return_gate_pos, "text": "К ОГНЮ"}
+		if enemies.size() > 0:
+			return {"pos": _nearest_enemy_pos(), "text": "ТВАРИ"}
+		return {"pos": Vector2(240, 210), "text": _day3_route_label(day3_route)}
 
 	if stage == Stage.EXPEDITION_CHOICE:
 		return {"pos": (left_choice_pos + right_choice_pos) * 0.5, "text": "ВЫБЕРИ СИЛУ"}
@@ -4219,7 +4211,6 @@ func _guidance_info() -> Dictionary:
 		if core_active:
 			return {"pos": core_pos, "text": "ЗАБЕРИ ЯДРО"}
 	return {}
-
 
 func _draw_guidance_marker() -> void:
 	var info := _guidance_info()
@@ -4322,7 +4313,7 @@ func _draw_hud() -> void:
 			if not _hub_has_pending_construction():
 				hub_hint = "Поселение обустроено. Карта — новая вылазка."
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 408, 9, Color("#98a89c"))
-		draw_string(font, Vector2(426, 55), "v0.12", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(426, 55), "v0.13", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
