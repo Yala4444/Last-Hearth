@@ -2387,7 +2387,8 @@ func _add_survivor(role: String, spawn_pos: Vector2) -> void:
 		"vel": Vector2.ZERO,
 		"facing": 1.0,
 		"phase": float(index) * 1.7,
-		"shot_cd": rng.randf_range(0.08, 0.35)
+		"shot_cd": rng.randf_range(0.08, 0.35),
+		"repair_cd": rng.randf_range(0.35, 0.85)
 	})
 	survivors = 1 + survivor_agents.size()
 	_burst(spawn_pos, 8)
@@ -2491,25 +2492,37 @@ func _update_survivor_agents(delta: float) -> void:
 		agent["phase"] = float(agent.get("phase", 0.0)) + delta * phase_speed
 
 		var cd := maxf(0.0, float(agent.get("shot_cd", 0.0)) - delta)
-		var can_fight := enemies.size() > 0 and (night or role == "hunter" or role == "guard")
-		if can_fight and cd <= 0.0:
-			var attack_range := 330.0 if role == "hunter" else (290.0 if role == "guard" else 220.0)
-			var targets := _nearest_enemy_indices(pos, attack_range, 1)
-			if targets.size() > 0:
-				var damage_scale := 0.70 if role == "hunter" else (0.55 if role == "guard" else 0.35)
-				shots.append({
-					"pos": pos + Vector2(0, -7),
-					"target": targets[0],
-					"damage": hero_damage * damage_scale,
-					"speed": 500.0,
-					"tower": false,
-					"ally": true
-				})
-				cd = 0.72 if role == "hunter" else (0.88 if role == "guard" else 1.15)
+		var repair_cd := maxf(0.0, float(agent.get("repair_cd", 0.0)) - delta)
+
+		# Roles now matter instead of every companion behaving like a weaker copy of the hero.
+		if night and role == "worker":
+			if hearth_hp < hearth_max_hp - 0.5 and repair_cd <= 0.0:
+				var repaired := minf(4.0, hearth_max_hp - hearth_hp)
+				hearth_hp += repaired
+				hearth_pulse = maxf(hearth_pulse, 0.28)
+				_float_text(pos + Vector2(0, -34), "+%d ОЧАГ" % roundi(repaired), Color("#b8c68d"))
+				repair_cd = 1.55
+		else:
+			var can_fight := enemies.size() > 0 and (night or role == "hunter" or role == "guard")
+			if can_fight and cd <= 0.0:
+				var attack_range := 330.0 if role == "hunter" else (290.0 if role == "guard" else 220.0)
+				var targets := _nearest_enemy_indices(pos, attack_range, 1)
+				if targets.size() > 0:
+					var damage_scale := 0.70 if role == "hunter" else (0.55 if role == "guard" else 0.35)
+					shots.append({
+						"pos": pos + Vector2(0, -7),
+						"target": targets[0],
+						"damage": hero_damage * damage_scale,
+						"speed": 500.0,
+						"tower": false,
+						"ally": true
+					})
+					cd = 0.72 if role == "hunter" else (0.88 if role == "guard" else 1.15)
 
 		agent["pos"] = pos
 		agent["vel"] = vel
 		agent["shot_cd"] = cd
+		agent["repair_cd"] = repair_cd
 		survivor_agents[i] = agent
 
 	survivors = 1 + survivor_agents.size()
@@ -3377,11 +3390,18 @@ func _draw_day1_route_navigation() -> void:
 		if area == Area.CAMP and day1_route == "":
 			_draw_route_gate(ROUTE_HUNTER_GATE, _day1_route_label(day1_left_offer), Color("#d8b06b"), true)
 			_draw_route_gate(ROUTE_SAWMILL_GATE, _day1_route_label(day1_right_offer), Color("#91a977"), false)
+			if survivors <= 1:
+				if day1_left_offer not in ["hunter", "caravan", "signal"]:
+					_draw_solo_risk(ROUTE_HUNTER_GATE)
+				if day1_right_offer not in ["hunter", "caravan", "signal"]:
+					_draw_solo_risk(ROUTE_SAWMILL_GATE)
 		elif area != Area.CAMP and day1_route_complete:
 			_draw_route_gate(route_return_gate_pos, "ВЕРНУТЬСЯ К ОГНЮ", Color("#e0bc73"), route_return_gate_pos.x < VIEW_SIZE.x * 0.5)
 	elif stage == Stage.DAY2_RESCUE:
 		if area == Area.CAMP and not worker_route_complete:
 			_draw_route_gate(ROUTE_WORKER_GATE, _day2_mission_label(), Color("#b3a177"), false)
+			if survivors <= 1 and day2_mission == "storehouse":
+				_draw_solo_risk(ROUTE_WORKER_GATE)
 		elif area == Area.WORKER_RUINS and worker_route_complete:
 			var return_label := "НАЗАД С РАБОЧИМ" if day2_mission == "worker" else ("НАЗАД С ДОБЫЧЕЙ" if day2_mission == "storehouse" else "НАЗАД С РАЗВЕДЧИКОМ")
 			_draw_route_gate(route_return_gate_pos, return_label, Color("#e0bc73"), route_return_gate_pos.x < VIEW_SIZE.x * 0.5)
@@ -3404,6 +3424,11 @@ func _draw_route_gate(pos: Vector2, label: String, color: Color, points_left: bo
 	var text_x := clampf(pos.x - 88.0, 8.0, VIEW_SIZE.x - 184.0)
 	var text_pos := Vector2(text_x, pos.y - 38.0)
 	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, 176, 10, Color("#ead9b6"))
+
+
+func _draw_solo_risk(pos: Vector2) -> void:
+	var text_x := clampf(pos.x - 88.0, 8.0, VIEW_SIZE.x - 184.0)
+	draw_string(font, Vector2(text_x, pos.y + 43.0), "РИСК: НОЧЬ В ОДИНОЧКУ", HORIZONTAL_ALIGNMENT_CENTER, 176, 8, Color("#d59472"))
 
 
 func _draw_route_area_decor() -> void:
