@@ -88,6 +88,11 @@ const REGION_PROFILES := {
 		"fires": ["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"],
 		"modifier": "Свет постепенно открывает живой лес и его развилки.",
 		"resident": "Мастер",
+		"people": [
+			{"id": "hunter", "name": "Охотник", "fate": "local_keeper", "home": ""},
+			{"id": "master", "name": "Мастер", "fate": "chapter_resident", "home": "Дом мастера"},
+			{"id": "forest_scout", "name": "Разведчик", "fate": "temporary_companion", "home": ""}
+		],
 		"settlement_unlock": "Строительство",
 		"final_boss": "forest_guardian"
 	},
@@ -96,6 +101,12 @@ const REGION_PROFILES := {
 		"fires": ["ПЕРЕКРЁСТОК", "РАЗОРЁННЫЙ ХУТОР", "ЧЁРНЫЙ КУРГАН"],
 		"modifier": "Открытое пространство, редкие укрытия и опасные простреливаемые участки.",
 		"resident": "Лекарь",
+		"people": [
+			{"id": "field_scout", "name": "Полевой разведчик", "fate": "local_keeper", "home": ""},
+			{"id": "wounded_soldier", "name": "Раненый страж", "fate": "temporary_companion", "home": ""},
+			{"id": "trader", "name": "Странствующий торговец", "fate": "visitor", "home": ""},
+			{"id": "healer", "name": "Лекарь", "fate": "chapter_resident", "home": "Лазарет"}
+		],
 		"settlement_unlock": "Лазарет",
 		"final_boss": "field_watcher"
 	},
@@ -104,6 +115,11 @@ const REGION_PROFILES := {
 		"fires": ["СУХОЙ ОСТРОВ", "СТАРАЯ ПЕРЕПРАВА", "ЗАТОПЛЕННАЯ ЧАСОВНЯ"],
 		"modifier": "Вода меняет скорость и доступные маршруты; переправы приходится открывать.",
 		"resident": "Картограф",
+		"people": [
+			{"id": "ferryman", "name": "Перевозчик", "fate": "local_keeper", "home": ""},
+			{"id": "lowland_survivor", "name": "Житель низин", "fate": "temporary_companion", "home": ""},
+			{"id": "cartographer", "name": "Картограф", "fate": "chapter_resident", "home": "Дом картографа"}
+		],
 		"settlement_unlock": "Разведданные карты",
 		"final_boss": "drowned_keeper"
 	},
@@ -112,6 +128,11 @@ const REGION_PROFILES := {
 		"fires": ["ПОДНОЖИЕ", "РУДНЫЙ ПЕРЕВАЛ", "ВЕРШИННЫЙ ОЧАГ"],
 		"modifier": "Ветер раскачивает свет и заставляет выбирать между огнём и добычей.",
 		"resident": "Кузнец",
+		"people": [
+			{"id": "miner", "name": "Рудокоп", "fate": "local_keeper", "home": ""},
+			{"id": "prospector", "name": "Искатель руды", "fate": "temporary_companion", "home": ""},
+			{"id": "smith", "name": "Кузнец", "fate": "chapter_resident", "home": "Кузница"}
+		],
 		"settlement_unlock": "Оружейные ветви",
 		"final_boss": "ash_colossus"
 	},
@@ -120,6 +141,11 @@ const REGION_PROFILES := {
 		"fires": ["ВОРОТА", "РЫНОЧНАЯ ПЛОЩАДЬ", "БАШНЯ СЕТИ"],
 		"modifier": "Несколько целей существуют одновременно; спасти всё невозможно.",
 		"resident": "Архивариус",
+		"people": [
+			{"id": "gate_keeper", "name": "Смотритель ворот", "fate": "local_keeper", "home": ""},
+			{"id": "scavenger", "name": "Сборщик", "fate": "temporary_companion", "home": ""},
+			{"id": "archivist", "name": "Архивариус", "fate": "chapter_resident", "home": "Архив"}
+		],
 		"settlement_unlock": "Архив старой сети",
 		"final_boss": "city_warden"
 	}
