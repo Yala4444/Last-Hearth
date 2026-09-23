@@ -87,17 +87,46 @@ func _init() -> void:
 		fail("Completing Fire 1 revealed too much of the map")
 		return
 
+	# Fire 2 temporarily remembers the Master as its keeper so the middle chapter has continuity.
+	game.mode = game.Mode.EXPEDITION
+	game.meta["forest_fires"] = 1
+	game.meta["master_relationship_state"] = "waiting_forest"
+	game.meta["forest_fire_2_keeper"] = ""
+	game.run_embers = 0
+	game._finish_run(true)
+	if String(game.meta.get("forest_fire_2_keeper", "")) != "Мастер":
+		fail("Fire 2 did not remember the Master as its temporary keeper")
+		return
+	if "Мастер" not in game._forest_fire_detail(2):
+		fail("Fire 2 map detail does not explain where the Master stayed")
+		return
+
 	# Three completed fires resolve the chapter and allow the Master to join.
 	game.mode = game.Mode.EXPEDITION
 	game.meta["forest_fires"] = 2
 	game.meta["master_relationship_state"] = "waiting_forest"
+	game.meta["forest_fire_2_keeper"] = "Мастер"
 	game.run_embers = 0
 	game._finish_run(true)
 	if String(game.meta.get("master_relationship_state", "")) != "joining_home":
 		fail("Master did not choose the Last Hearth after 3/3")
 		return
+	if String(game.meta.get("forest_fire_2_keeper", "")) != "":
+		fail("Master stayed assigned to Fire 2 after choosing the Last Hearth")
+		return
 	if game._forest_fire_state(3) != "restored":
 		fail("Final forest fire did not persist as restored")
+		return
+
+	game.expedition_sector = 1
+	game.meta["hunter_fate"] = "keeper_fire_1"
+	if "Охотник" not in game._forest_chapter_intro():
+		fail("Second expedition intro did not reference the Hunter keeping Fire 1")
+		return
+	game.expedition_sector = 2
+	game.meta["master_relationship_state"] = "waiting_forest"
+	if "Мастер" not in game._forest_chapter_intro():
+		fail("Third expedition intro did not connect the Master's chapter arc")
 		return
 
 	# Hearth Book is multi-page and no longer closes on any random tap.
