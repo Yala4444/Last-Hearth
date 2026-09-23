@@ -2521,7 +2521,8 @@ func _update_survivor_agents(delta: float) -> void:
 						"damage": hero_damage * damage_scale,
 						"speed": 500.0,
 						"tower": false,
-						"ally": true
+						"ally": true,
+						"ally_role": role
 					})
 					cd = 0.72 if role == "hunter" else (0.88 if role == "guard" else 1.15)
 
@@ -3374,7 +3375,7 @@ func _draw_expedition() -> void:
 	var night_stage := stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]
 	var night_mix := 0.0
 	if night_stage:
-		night_mix = 1.0 - clampf(twilight_timer / TWILIGHT_DURATION, 0.0, 1.0)
+		night_mix = clampf(1.0 - twilight_timer / TWILIGHT_DURATION, 0.0, 1.0)
 
 	var day_bg := Color("#1a2a21")
 	var night_bg := Color("#0a1211")
@@ -3441,6 +3442,8 @@ func _draw_expedition() -> void:
 	_draw_hero(hero_pos)
 	_draw_guidance_marker()
 
+	if night_stage and twilight_timer > 0.0:
+		_draw_night_edge_warnings()
 	if night_mix > 0.0:
 		draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.015, 0.03, 0.035, 0.10 * night_mix))
 		_draw_night_edge_eyes(night_mix)
@@ -3877,6 +3880,41 @@ func _draw_ruined_shelter(pos: Vector2, color: Color) -> void:
 	draw_line(pos + Vector2(-22, -4), pos + Vector2(-4, -22), Color("#76634a"), 4.0)
 	draw_line(pos + Vector2(-4, -22), pos + Vector2(20, -5), Color("#76634a"), 4.0)
 	draw_line(pos + Vector2(4, -18), pos + Vector2(22, -10), Color("#4c4438"), 3.0)
+
+
+func _draw_night_edge_warnings() -> void:
+	if active_night_sides.is_empty():
+		return
+	var pulse := 0.55 + 0.22 * sin(Time.get_ticks_msec() * 0.010)
+	var color := Color(0.91, 0.56, 0.31, pulse)
+	for side_variant: Variant in active_night_sides:
+		var side := int(side_variant)
+		var center := Vector2.ZERO
+		var inward := Vector2.ZERO
+		match side:
+			0:
+				center = Vector2(240, 98)
+				inward = Vector2(0, 1)
+			1:
+				center = Vector2(466, 430)
+				inward = Vector2(-1, 0)
+			2:
+				center = Vector2(240, 770)
+				inward = Vector2(0, -1)
+			3:
+				center = Vector2(14, 430)
+				inward = Vector2(1, 0)
+			_:
+				continue
+		var side_axis := Vector2(-inward.y, inward.x)
+		var tip := center + inward * 18.0
+		var base := center - inward * 2.0
+		draw_colored_polygon(PackedVector2Array([
+			tip,
+			base + side_axis * 9.0,
+			base - side_axis * 9.0
+		]), color)
+		draw_circle(center, 25.0, Color(color.r, color.g, color.b, 0.045 + pulse * 0.035))
 
 
 func _draw_night_edge_eyes(alpha: float) -> void:
@@ -4354,7 +4392,16 @@ func _draw_enemy(enemy: Dictionary) -> void:
 func _draw_shot(shot: Dictionary) -> void:
 	var pos: Vector2 = shot["pos"]
 	var tower := bool(shot.get("tower", false))
-	draw_circle(pos, 3.0 if not tower else 4.0, Color("#fff0b2") if not tower else Color("#f0bd68"))
+	var ally := bool(shot.get("ally", false))
+	if tower:
+		draw_circle(pos, 4.0, Color("#f0bd68"))
+	elif ally:
+		var role := String(shot.get("ally_role", "guard"))
+		var color := Color("#d9cf8c") if role == "hunter" else Color("#9db9c8")
+		draw_circle(pos, 2.6, color)
+		draw_circle(pos, 5.5, Color(color.r, color.g, color.b, 0.08))
+	else:
+		draw_circle(pos, 3.0, Color("#fff0b2"))
 
 
 func _draw_workshop_construction() -> void:
