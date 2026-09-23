@@ -82,6 +82,49 @@ enum Stage {
 	CORE_RETURN
 }
 
+const REGION_PROFILES := {
+	"forgotten_forest": {
+		"name": "ЗАБЫТЫЙ ЛЕС",
+		"fires": ["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"],
+		"modifier": "Свет постепенно открывает живой лес и его развилки.",
+		"resident": "Мастер",
+		"settlement_unlock": "Строительство",
+		"final_boss": "forest_guardian"
+	},
+	"dead_fields": {
+		"name": "МЁРТВЫЕ ПОЛЯ",
+		"fires": ["ПЕРЕКРЁСТОК", "РАЗОРЁННЫЙ ХУТОР", "ЧЁРНЫЙ КУРГАН"],
+		"modifier": "Открытое пространство, редкие укрытия и опасные простреливаемые участки.",
+		"resident": "Лекарь",
+		"settlement_unlock": "Лазарет",
+		"final_boss": "field_watcher"
+	},
+	"flooded_lowlands": {
+		"name": "ЗАТОПЛЕННЫЕ НИЗИНЫ",
+		"fires": ["СУХОЙ ОСТРОВ", "СТАРАЯ ПЕРЕПРАВА", "ЗАТОПЛЕННАЯ ЧАСОВНЯ"],
+		"modifier": "Вода меняет скорость и доступные маршруты; переправы приходится открывать.",
+		"resident": "Картограф",
+		"settlement_unlock": "Разведданные карты",
+		"final_boss": "drowned_keeper"
+	},
+	"ashen_ridge": {
+		"name": "ПЕПЕЛЬНЫЙ ХРЕБЕТ",
+		"fires": ["ПОДНОЖИЕ", "РУДНЫЙ ПЕРЕВАЛ", "ВЕРШИННЫЙ ОЧАГ"],
+		"modifier": "Ветер раскачивает свет и заставляет выбирать между огнём и добычей.",
+		"resident": "Кузнец",
+		"settlement_unlock": "Оружейные ветви",
+		"final_boss": "ash_colossus"
+	},
+	"old_city": {
+		"name": "СТАРЫЙ ГОРОД",
+		"fires": ["ВОРОТА", "РЫНОЧНАЯ ПЛОЩАДЬ", "БАШНЯ СЕТИ"],
+		"modifier": "Несколько целей существуют одновременно; спасти всё невозможно.",
+		"resident": "Архивариус",
+		"settlement_unlock": "Архив старой сети",
+		"final_boss": "city_warden"
+	}
+}
+
 var rng := RandomNumberGenerator.new()
 var font: Font
 
@@ -90,7 +133,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 16,
+	"build_version": 17,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -369,7 +412,7 @@ func _load_meta() -> void:
 	for key: String in ["forester_home_wood", "forester_home_stone", "hunter_home_wood", "hunter_home_stone", "worker_home_wood", "worker_home_stone"]:
 		meta[key] = int(meta.get(key, 0))
 	_sync_forest_discovery_from_progress()
-	meta["build_version"] = 16
+	meta["build_version"] = 17
 
 func _save_meta() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
@@ -717,6 +760,49 @@ func _start_expedition() -> void:
 		var sector_name: String = String(["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"][expedition_sector])
 		_banner("%s | %s" % [sector_name, map_variant_name], 2.4)
 		_story(_forest_chapter_intro(), 4.6)
+
+
+func _region_profile(region_id: String) -> Dictionary:
+	return REGION_PROFILES.get(region_id, {})
+
+
+func _forest_final_enemy_kind() -> String:
+	match expedition_sector:
+		0:
+			return "black_boar"
+		1:
+			return "rootborn"
+		_:
+			return "forest_guardian"
+
+
+func _is_chapter_boss(kind: String) -> bool:
+	return kind in ["black_boar", "rootborn", "forest_guardian", "boss"]
+
+
+func _boss_display_name(kind: String) -> String:
+	match kind:
+		"black_boar":
+			return "ЧЁРНЫЙ ВЕПРЬ"
+		"rootborn":
+			return "КОРНЕВИК"
+		"forest_guardian", "boss":
+			return "ХРАНИТЕЛЬ ЛЕСА"
+	return "НЕИЗВЕСТНАЯ ТВАРЬ"
+
+
+func _boss_ember_reward(kind: String) -> int:
+	return 4 if kind in ["forest_guardian", "boss"] else 2
+
+
+func _boss_arrival_story(kind: String) -> String:
+	match kind:
+		"black_boar":
+			return "Земля дрожит. Из темноты несётся тяжёлое дыхание — что-то большое разгоняется прямо к свету."
+		"rootborn":
+			return "Корни вокруг огня начинают двигаться. Из старой земли поднимается то, что слишком долго притворялось деревом."
+		_:
+			return "Тишина. Даже мелкие твари отступили от края света. Лесной Страж идёт закрыть последний огонь."
 
 
 func _forest_chapter_intro() -> String:
@@ -2346,14 +2432,18 @@ func _start_night(number: int) -> void:
 				night_queue.append("fast")
 			else:
 				night_queue.append("basic")
-		night_queue.append("boss")
+		night_queue.append(_forest_final_enemy_kind())
 		_banner("СУМЕРКИ", 1.8)
-		if day1_route == "hunter":
-			_story("Охотник: «Слышишь?.. Лес затих. Он идёт за огнём.»", 3.2)
-		elif survivors > 1:
-			_story("Кто-то из спутников шепчет: «Лес затих… Это хуже любого рёва.»", 3.2)
-		else:
-			_story("Лес внезапно стих. Даже ветер остановился. Что-то идёт за огнём.", 3.2)
+		match expedition_sector:
+			0:
+				_story("Охотник вслушивается в чащу: «Это не стая. Слышишь землю? Вепрь идёт на свет.»", 3.2)
+			1:
+				_story("Под ногами проходят тяжёлые толчки. Старая дорога будто прорастает корнями прямо к огню.", 3.2)
+			_:
+				if survivors > 1:
+					_story("Кто-то из спутников шепчет: «Лес затих… Страж знает, что это последний огонь.»", 3.2)
+				else:
+					_story("Лес внезапно стих. Последний разрыв в цепи заметил тот, кто охраняет сердце леса.", 3.2)
 
 
 func _update_night_spawner(delta: float) -> void:
@@ -2382,17 +2472,17 @@ func _update_night_spawner(delta: float) -> void:
 	night_spawn_cd -= delta
 	if night_queue.size() > 0 and night_spawn_cd <= 0.0:
 		var next_kind := String(night_queue[0])
-		if next_kind == "boss" and not boss_announced:
+		if _is_chapter_boss(next_kind) and not boss_announced:
 			boss_announced = true
 			boss_delay_timer = 2.6
-			_story("Тишина. Даже твари отступили от края света.", 2.5)
+			_story(_boss_arrival_story(next_kind), 2.8)
 			return
 
 		var kind: String = night_queue.pop_front()
 		_spawn_enemy(kind)
-		if kind == "boss":
+		if _is_chapter_boss(kind):
 			night_spawn_cd = 2.2
-			_banner("ХРАНИТЕЛЬ ЛЕСА", 2.2)
+			_banner(_boss_display_name(kind), 2.2)
 			camera_shake = 3.0
 		else:
 			night_spawn_cd = 0.92 if current_night >= 2 else 1.12
@@ -2441,7 +2531,7 @@ func _complete_night_two() -> void:
 
 func _spawn_enemy(kind: String) -> void:
 	var side := 0
-	if kind == "boss":
+	if _is_chapter_boss(kind):
 		side = 0
 	elif active_night_sides.size() > 0:
 		side = active_night_sides[rng.randi_range(0, active_night_sides.size() - 1)]
@@ -2477,11 +2567,21 @@ func _spawn_enemy_at(kind: String, pos: Vector2) -> void:
 			speed = 31.0
 			damage = 13.0
 			radius = 20.0
-		"boss":
-			hp = 720.0
+		"black_boar":
+			hp = 430.0
+			speed = 30.0
+			damage = 16.0
+			radius = 27.0
+		"rootborn":
+			hp = 560.0
+			speed = 18.0
+			damage = 15.0
+			radius = 31.0
+		"forest_guardian", "boss":
+			hp = 760.0
 			speed = 21.0
 			damage = 18.0
-			radius = 32.0
+			radius = 33.0
 		"guard":
 			hp = 58.0
 			speed = 34.0
@@ -2498,7 +2598,8 @@ func _spawn_enemy_at(kind: String, pos: Vector2) -> void:
 		"radius": radius,
 		"hit_cd": 0.0,
 		"hit_flash": 0.0,
-		"move_phase": rng.randf_range(0.0, TAU)
+		"move_phase": rng.randf_range(0.0, TAU),
+		"boss_phase": 1
 	})
 
 
@@ -2738,7 +2839,7 @@ func _update_shots(delta: float) -> void:
 			if distance > 0.001:
 				enemy["pos"] = enemy_pos + to_enemy.normalized() * 3.5
 			enemies[target_index] = enemy
-			if String(enemy.get("kind", "basic")) in ["elite", "boss"]:
+			if String(enemy.get("kind", "basic")) == "elite" or _is_chapter_boss(String(enemy.get("kind", "basic"))):
 				camera_shake = maxf(camera_shake, 1.2)
 			shots.remove_at(i)
 		else:
@@ -2771,8 +2872,46 @@ func _update_enemies(delta: float) -> void:
 		var enemy_kind := String(enemy.get("kind", "basic"))
 		if enemy_kind == "fast":
 			speed_scale = 0.78 + maxf(0.0, sin(move_phase)) * 0.52
-		elif enemy_kind == "boss":
+		elif enemy_kind == "black_boar":
+			# Long readable pauses followed by a real charge.
+			speed_scale = 0.48 + pow(maxf(0.0, sin(move_phase * 0.72)), 4.0) * 2.25
+		elif enemy_kind == "rootborn":
+			speed_scale = 0.58 + maxf(0.0, sin(move_phase * 0.35)) * 0.22
+		elif enemy_kind in ["forest_guardian", "boss"]:
 			speed_scale = 0.80 + maxf(0.0, sin(move_phase)) * 0.28
+
+		if _is_chapter_boss(enemy_kind):
+			var hp_ratio := hp / maxf(1.0, float(enemy.get("max_hp", hp)))
+			var boss_phase := int(enemy.get("boss_phase", 1))
+			if enemy_kind == "black_boar" and boss_phase == 1 and hp_ratio <= 0.50:
+				enemy["boss_phase"] = 2
+				enemy["speed"] = 38.0
+				enemy["damage"] = 18.0
+				_banner("ВЕПРЬ В ЯРОСТИ | РЫВКИ БЫСТРЕЕ", 1.8)
+				camera_shake = 3.2
+			elif enemy_kind == "rootborn" and boss_phase == 1 and hp_ratio <= 0.50:
+				enemy["boss_phase"] = 2
+				light_radius = maxf(215.0, light_radius - 42.0)
+				night_queue.push_front("guard")
+				night_queue.push_front("fast")
+				_story("КОРНИ СЖАЛИ СВЕТ\nКорневик укоренился у границы огня. Радиус света уменьшился, из чащи полезли новые твари.", 3.2)
+				camera_shake = 3.6
+			elif enemy_kind in ["forest_guardian", "boss"] and boss_phase == 1 and hp_ratio <= 0.66:
+				enemy["boss_phase"] = 2
+				enemy["speed"] = 27.0
+				enemy["damage"] = 20.0
+				night_queue.push_front("fast")
+				night_queue.push_front("fast")
+				_story("ХРАНИТЕЛЬ ЛЕСА — ФАЗА II\nКора на его теле треснула. Из тьмы отвечают две быстрые тени.", 3.2)
+				camera_shake = 4.0
+			elif enemy_kind in ["forest_guardian", "boss"] and boss_phase == 2 and hp_ratio <= 0.33:
+				enemy["boss_phase"] = 3
+				enemy["speed"] = 34.0
+				enemy["damage"] = 23.0
+				light_radius = maxf(230.0, light_radius - 30.0)
+				night_queue.push_front("elite")
+				_story("ХРАНИТЕЛЬ ЛЕСА — ПОСЛЕДНЯЯ ФАЗА\nСвет сжимается. Страж бросает всё, чтобы не дать третьему огню зажечься.", 3.4)
+				camera_shake = 5.2
 
 		if route_combat and route_grace_timer > 0.0:
 			enemy["hit_cd"] = hit_cd
@@ -2821,16 +2960,16 @@ func _on_enemy_killed(enemy: Dictionary) -> void:
 		"life": 0.34,
 		"max_life": 0.34
 	})
-	_burst(pos, 10 if kind != "boss" else 34)
+	_burst(pos, 34 if _is_chapter_boss(kind) else 10)
 	if kind == "elite":
 		camera_shake = maxf(camera_shake, 3.0)
-	elif kind == "boss":
+	elif _is_chapter_boss(kind):
 		camera_shake = 6.0
 
 	if kind == "elite":
 		_float_text(pos + Vector2(0, -25), "ЭЛИТА ПОВЕРЖЕНА", Color(1.0, 0.72, 0.38))
-	elif kind == "boss":
-		run_embers += 3
+	elif _is_chapter_boss(kind):
+		run_embers += _boss_ember_reward(kind)
 		core_active = true
 		core_carried = false
 		core_pos = pos
@@ -2839,7 +2978,8 @@ func _on_enemy_killed(enemy: Dictionary) -> void:
 		enemies.clear()
 		shots.clear()
 		flash_timer = 0.7
-		_banner("Хранитель пал | забери его ядро", 2.6)
+		var fallen_name := _boss_display_name(kind)
+		_banner("%s ПОВЕРЖЕН | ЗАБЕРИ ЯДРО" % fallen_name, 2.6)
 
 
 func _update_core_return() -> void:
@@ -2921,7 +3061,7 @@ func _finish_run(win: bool, reason: String = "") -> void:
 				result_subtitle = "Временные усиления потеряны. Угли и постоянные улучшения остались."
 
 	_sync_forest_discovery_from_progress()
-	meta["build_version"] = 16
+	meta["build_version"] = 17
 	_save_meta()
 	_stop_joystick()
 
