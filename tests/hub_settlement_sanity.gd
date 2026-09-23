@@ -47,6 +47,21 @@ func _init() -> void:
 		fail("The grove is not a playable gathering area")
 		return
 
+	# Entering beside the return gate must NOT bounce back on the next frame.
+	game._update_hub_area_transitions()
+	if game.hub_area != "grove":
+		fail("The grove immediately bounced back to the Last Hearth")
+		return
+	if bool(game.hub_return_armed):
+		fail("The grove exit armed before the player walked into the area")
+		return
+
+	game.hero_pos = Vector2(280.0, 535.0)
+	game._update_hub_area_transitions()
+	if not bool(game.hub_return_armed):
+		fail("Walking into the grove did not arm the return path")
+		return
+
 	game.hero_pos = game.hub_area_return_gate
 	game._update_hub_area_transitions()
 	if game.hub_area != "center":
