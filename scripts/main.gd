@@ -355,6 +355,8 @@ func _load_meta() -> void:
 	meta["worker_home_built"] = bool(meta.get("worker_home_built", false))
 	meta["hunter_fate"] = String(meta.get("hunter_fate", "unknown"))
 	meta["master_relationship_state"] = String(meta.get("master_relationship_state", "unknown"))
+	if bool(meta.get("worker_home_built", false)) and String(meta.get("master_relationship_state", "unknown")) == "joining_home":
+		meta["master_relationship_state"] = "resident"
 	for index in range(1, 4):
 		var state_key := "forest_fire_%d_state" % index
 		var keeper_key := "forest_fire_%d_keeper" % index
@@ -1753,8 +1755,6 @@ func _generate_hub_resource_area(kind: String) -> void:
 	var positions: Array[Vector2] = []
 	if kind == "grove":
 		positions = [Vector2(95, 210), Vector2(205, 250), Vector2(340, 205), Vector2(390, 365), Vector2(130, 500), Vector2(300, 565)]
-		if bool(meta.get("forester_home_built", false)):
-			positions.append(Vector2(410, 640))
 		for p: Vector2 in positions:
 			resource_nodes.append({
 				"kind": "tree", "pos": p, "hits": 3, "max_hits": 3, "alive": true,
@@ -3417,9 +3417,6 @@ func _draw_hub_resource_area() -> void:
 		if _active_notice_priority() == 0:
 			draw_string(font, Vector2(18, 118), "РОЩА ПОСЛЕДНЕГО ОЧАГА", HORIZONTAL_ALIGNMENT_LEFT, 350, 17, Color("#e8dec9"))
 			draw_string(font, Vector2(18, 140), "Древесина для домов и построек.", HORIZONTAL_ALIGNMENT_LEFT, 340, 10, Color("#9fb0a2"))
-		if bool(meta.get("forester_home_built", false)):
-			_draw_humanoid(Vector2(310, 185), Color("#71866a"), 0.0, "civilian", 1.0)
-			draw_string(font, Vector2(254, 226), "ЛЕСНИК", HORIZONTAL_ALIGNMENT_CENTER, 112, 9, Color("#cbbd9d"))
 	else:
 		if _active_notice_priority() == 0:
 			draw_string(font, Vector2(18, 118), "КАМЕННЫЙ СКЛОН", HORIZONTAL_ALIGNMENT_LEFT, 300, 17, Color("#e8dec9"))
