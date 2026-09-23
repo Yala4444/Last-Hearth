@@ -410,6 +410,42 @@ func _day1_route_title(route_name: String) -> String:
 	return "неизвестная тропа"
 
 
+func _day2_mission_label() -> String:
+	match day2_mission:
+		"worker": return "СЛЕД К РУИНАМ"
+		"storehouse": return "СТАРЫЙ СКЛАД"
+		_: return "СИГНАЛ РАЗВЕДЧИКА"
+
+
+func _day2_mission_title() -> String:
+	match day2_mission:
+		"worker": return "руины мастерской"
+		"storehouse": return "старый склад"
+		_: return "сигнал разведчика"
+
+
+func _day3_route_label(route_name: String) -> String:
+	match route_name:
+		"watch": return "СЛОМАННЫЙ ДОЗОР"
+		"altar": return "ДРЕВНИЙ АЛТАРЬ"
+		"barricade": return "ЗАВАЛ У МОСТА"
+		"shrine": return "КАМЕННЫЙ КРУГ"
+		"beacon": return "СИГНАЛЬНЫЙ МАЯК"
+		"cache": return "ТАЙНИК СТРАЖИ"
+	return "НЕИЗВЕСТНЫЙ ПУТЬ"
+
+
+func _day3_route_title(route_name: String) -> String:
+	match route_name:
+		"watch": return "сломанный дозор"
+		"altar": return "древний алтарь"
+		"barricade": return "завал у моста"
+		"shrine": return "каменный круг"
+		"beacon": return "сигнальный маяк"
+		"cache": return "тайник стражи"
+	return "последний путь"
+
+
 func _day1_route_event_kind(route_name: String) -> String:
 	match route_name:
 		"sawmill": return "sawmill"
@@ -975,9 +1011,9 @@ func _update_area_transitions() -> void:
 	if stage == Stage.DAY3_TOWER:
 		if area == Area.CAMP and day3_route == "":
 			if hero_pos.distance_to(ROUTE_WATCH_GATE) < 46.0:
-				_enter_day3_route("watch")
+				_enter_day3_route(day3_left_offer)
 			elif hero_pos.distance_to(ROUTE_ALTAR_GATE) < 46.0:
-				_enter_day3_route("altar")
+				_enter_day3_route(day3_right_offer)
 		elif area in [Area.WATCH_RIDGE, Area.ALTAR_GLADE] and day3_route_complete and hero_pos.distance_to(route_return_gate_pos) < 50.0:
 			_return_from_day3_route()
 
@@ -2079,16 +2115,32 @@ func _start_night(number: int) -> void:
 
 	if number == 1:
 		stage = Stage.NIGHT1
-		if day1_route == "hunter":
-			active_night_sides = [2]
-			for i in range(8):
-				night_queue.append("fast" if i == 6 else "basic")
-			_story("Охотник: «Они придут с юга. Я прикрою край света.»", 2.9)
-		else:
-			active_night_sides = [2, 3]
-			for i in range(10):
-				night_queue.append("fast" if i in [6, 9] else "basic")
-			_story("Баррикады крепки, но без охотника придётся держать две стороны.", 2.9)
+		match day1_route:
+			"hunter":
+				active_night_sides = [2]
+				for i in range(8):
+					night_queue.append("fast" if i == 6 else "basic")
+				_story("Охотник: «Они придут с юга. Я прикрою край света.»", 2.9)
+			"signal":
+				active_night_sides = [1]
+				for i in range(8):
+					night_queue.append("fast" if i in [4, 7] else "basic")
+				_story("Разведчик показывает на восток: «Оттуда идёт стая. Остальные стороны пока тихие.»", 3.0)
+			"nest":
+				active_night_sides = [0, 2, 3]
+				for i in range(11):
+					night_queue.append("fast" if i % 3 == 1 else "basic")
+				_story("Разрушенное логово разозлило лес. Твари идут сразу с трёх сторон.", 3.0)
+			"dead_fire":
+				active_night_sides = [0, 3]
+				for i in range(9):
+					night_queue.append("fast" if i in [5, 8] else "basic")
+				_story("Жар старого костра притянул тени. Они идут на новый свет.", 3.0)
+			_:
+				active_night_sides = [2, 3]
+				for i in range(10):
+					night_queue.append("fast" if i in [6, 9] else "basic")
+				_story("Шум дневной вылазки привёл тварей к огню с двух сторон.", 2.9)
 		_banner("СУМЕРКИ", 1.8)
 	elif number == 2:
 		stage = Stage.NIGHT2
@@ -2108,7 +2160,12 @@ func _start_night(number: int) -> void:
 				night_queue.append("basic")
 		night_queue.append("boss")
 		_banner("СУМЕРКИ", 1.8)
-		_story("Охотник: «Слышишь?.. Лес затих. Он идёт за огнём.»", 3.2)
+		if day1_route == "hunter":
+			_story("Охотник: «Слышишь?.. Лес затих. Он идёт за огнём.»", 3.2)
+		elif survivors > 1:
+			_story("Кто-то из спутников шепчет: «Лес затих… Это хуже любого рёва.»", 3.2)
+		else:
+			_story("Лес внезапно стих. Даже ветер остановился. Что-то идёт за огнём.", 3.2)
 
 
 func _update_night_spawner(delta: float) -> void:
@@ -2161,19 +2218,23 @@ func _update_night_spawner(delta: float) -> void:
 func _complete_night_one() -> void:
 	run_embers += 1
 	hearth_level = 3
-	var route_bonus := 38.0 if day1_route == "sawmill" else 0.0
-	hearth_max_hp = 185.0 + route_bonus
+	var route_bonus := 0.0
+	if day1_route in ["sawmill", "caravan", "dead_fire"]:
+		route_bonus = 38.0
+	hearth_max_hp = maxf(hearth_max_hp, 185.0 + route_bonus)
 	hearth_hp = hearth_max_hp
 	light_radius = 250.0
 	stage = Stage.DAY2_RESCUE
 	current_stage_wood_start = camp_wood
 	current_stage_stone_start = camp_stone
 	flash_timer = 0.45
-	if day1_route == "hunter":
-		_story("РАССВЕТ\nОхотник нашёл свежие следы. Они ведут к руинам старой мастерской.", 3.7)
-	else:
-		_story("РАССВЕТ\nНа досках лесопилки есть тот же знак. След ведёт к старой мастерской.", 3.7)
-
+	match day2_mission:
+		"worker":
+			_story("РАССВЕТ\nНа найденных следах повторяется знак старой мастерской. Кто-то ещё может быть жив.", 3.7)
+		"storehouse":
+			_story("РАССВЕТ\nНа дороге нашли метку старого склада. Там могли сохраниться припасы.", 3.7)
+		_:
+			_story("РАССВЕТ\nВ глубине леса вспыхнул короткий ответный сигнал. Разведчик зовёт на помощь.", 3.7)
 
 
 
@@ -2187,7 +2248,7 @@ func _complete_night_two() -> void:
 	day3_route = ""
 	day3_route_complete = false
 	flash_timer = 0.45
-	_story("РАССВЕТ\nПоследняя ночь близко. Можно успеть только к дозору или к древнему алтарю.", 4.0)
+	_story("РАССВЕТ\nПоследняя ночь близко. Можно успеть только в одно место: %s или %s." % [_day3_route_label(day3_left_offer).to_lower(), _day3_route_label(day3_right_offer).to_lower()], 4.0)
 
 
 func _spawn_enemy(kind: String) -> void:
@@ -3075,7 +3136,7 @@ func _draw_expedition() -> void:
 			_draw_survivor(survivor_one_pos, "?")
 		elif survivor_visibility > 0.18:
 			_draw_survivor_silhouette(survivor_one_pos, survivor_visibility)
-	if stage == Stage.DAY2_RESCUE and area == Area.WORKER_RUINS and not survivor_two_found and _light_visibility(survivor_two_pos) > 0.72:
+	if stage == Stage.DAY2_RESCUE and area == Area.WORKER_RUINS and day2_mission != "storehouse" and not survivor_two_found and _light_visibility(survivor_two_pos) > 0.72:
 		_draw_survivor(survivor_two_pos, "!")
 	if stage == Stage.DAY2_BUILD and area == Area.CAMP and not workshop_built:
 		_draw_workshop_construction()
@@ -3122,22 +3183,22 @@ func _draw_expedition() -> void:
 func _draw_day1_route_navigation() -> void:
 	if stage == Stage.DAY1_RESCUE:
 		if area == Area.CAMP and day1_route == "":
-			_draw_route_gate(ROUTE_HUNTER_GATE, "КРИК О ПОМОЩИ", Color("#d8b06b"), true)
-			_draw_route_gate(ROUTE_SAWMILL_GATE, "ДЫМ ЛЕСОПИЛКИ", Color("#91a977"), false)
+			_draw_route_gate(ROUTE_HUNTER_GATE, _day1_route_label(day1_left_offer), Color("#d8b06b"), true)
+			_draw_route_gate(ROUTE_SAWMILL_GATE, _day1_route_label(day1_right_offer), Color("#91a977"), false)
 		elif area != Area.CAMP and day1_route_complete:
 			_draw_route_gate(route_return_gate_pos, "ВЕРНУТЬСЯ К ОГНЮ", Color("#e0bc73"), route_return_gate_pos.x < VIEW_SIZE.x * 0.5)
 	elif stage == Stage.DAY2_RESCUE:
 		if area == Area.CAMP and not worker_route_complete:
-			_draw_route_gate(ROUTE_WORKER_GATE, "СЛЕД К РУИНАМ", Color("#b3a177"), false)
+			_draw_route_gate(ROUTE_WORKER_GATE, _day2_mission_label(), Color("#b3a177"), false)
 		elif area == Area.WORKER_RUINS and worker_route_complete:
-			_draw_route_gate(route_return_gate_pos, "НАЗАД С РАБОЧИМ", Color("#e0bc73"), route_return_gate_pos.x < VIEW_SIZE.x * 0.5)
+			var return_label := "НАЗАД С РАБОЧИМ" if day2_mission == "worker" else ("НАЗАД С ДОБЫЧЕЙ" if day2_mission == "storehouse" else "НАЗАД С РАЗВЕДЧИКОМ")
+			_draw_route_gate(route_return_gate_pos, return_label, Color("#e0bc73"), route_return_gate_pos.x < VIEW_SIZE.x * 0.5)
 	elif stage == Stage.DAY3_TOWER:
 		if area == Area.CAMP and day3_route == "":
-			_draw_route_gate(ROUTE_WATCH_GATE, "СЛОМАННЫЙ ДОЗОР", Color("#7f98a0"), true)
-			_draw_route_gate(ROUTE_ALTAR_GATE, "ДРЕВНИЙ АЛТАРЬ", Color("#c07a52"), false)
+			_draw_route_gate(ROUTE_WATCH_GATE, _day3_route_label(day3_left_offer), Color("#9aaeb7"), true)
+			_draw_route_gate(ROUTE_ALTAR_GATE, _day3_route_label(day3_right_offer), Color("#c49362"), false)
 		elif area in [Area.WATCH_RIDGE, Area.ALTAR_GLADE] and day3_route_complete:
 			_draw_route_gate(route_return_gate_pos, "К ПОЛЕВОМУ ОГНЮ", Color("#e0bc73"), route_return_gate_pos.x < VIEW_SIZE.x * 0.5)
-
 
 func _draw_route_gate(pos: Vector2, label: String, color: Color, points_left: bool) -> void:
 	var pulse := 0.82 + sin(Time.get_ticks_msec() * 0.006) * 0.12
@@ -4305,17 +4366,15 @@ func _short_objective_text() -> String:
 		Stage.DAY1_RESCUE:
 			if area == Area.CAMP and day1_route == "":
 				return "Выбери один путь до наступления темноты"
-			if area == Area.HUNTER_TRAIL and not day1_route_complete:
-				if enemies.size() > 0:
-					return "Твари на тропе: %d" % enemies.size()
+			if enemies.size() > 0:
+				return "Твари на пути: %d" % enemies.size()
+			if day1_route == "hunter" and not day1_route_complete:
 				return "Подойди к охотнику"
-			if area == Area.SAWMILL and not sawmill_claimed:
+			if day1_route == "sawmill" and not sawmill_claimed:
 				return "Запусти старую лесопилку"
-			if area == Area.SAWMILL and enemies.size() > 0:
-				return "Отбей нападение: %d" % enemies.size()
 			if not day1_route_complete:
-				return "Закончи начатое"
-			return "Вернись к Последнему Очагу"
+				return "Исследуй: %s" % _day1_route_label(day1_route).to_lower()
+			return "Вернись к полевому огню"
 		Stage.NIGHT1: return "Защити огонь"
 		Stage.DAY2_BUILD:
 			if carried_wood + carried_stone > 0:
@@ -4324,25 +4383,23 @@ func _short_objective_text() -> String:
 		Stage.WORKSHOP_CHOICE: return "Выбери развитие мастерской"
 		Stage.DAY2_RESCUE:
 			if area == Area.WORKER_RUINS and worker_route_complete:
-				return "Вернись с рабочим к Очагу"
+				return "Вернись к полевому огню"
 			if area == Area.WORKER_RUINS and enemies.size() > 0:
-				return "Стражи у руин: %d" % enemies.size()
+				return "Очисти путь: %d" % enemies.size()
 			if area == Area.WORKER_RUINS:
-				return "Подойди к рабочему"
-			return "Иди по следам к старой мастерской"
+				if day2_mission == "storehouse":
+					return "Открой тайник в складе"
+				return "Подойди к выжившему"
+			return "Иди к точке: %s" % _day2_mission_label().to_lower()
 		Stage.NIGHT2: return "Защити Очаг от второй волны"
 		Stage.DAY3_TOWER:
 			if area == Area.CAMP and day3_route == "":
 				return "Выбери последнюю подготовку"
-			if area == Area.WATCH_RIDGE and not watch_repair_started:
-				return "Восстанови старый дозор"
-			if area == Area.ALTAR_GLADE and not final_altar_claimed:
-				return "Пробуди древний алтарь"
 			if enemies.size() > 0:
 				return "Переживи нападение: %d" % enemies.size()
 			if not day3_route_complete:
-				return "Заверши выбранный путь"
-			return "Вернись к Очагу"
+				return "Заверши: %s" % _day3_route_label(day3_route).to_lower()
+			return "Вернись к полевому огню"
 		Stage.EXPEDITION_CHOICE: return "Выбери силу перед последней ночью"
 		Stage.NIGHT3: return "Хранитель идёт за огнём"
 		Stage.CORE_RETURN: return "Верни ядро Хранителя в Очаг"
@@ -4353,19 +4410,17 @@ func _stage_title() -> String:
 	match stage:
 		Stage.DAY1_GATHER: return "ДЕНЬ 1 | разожги полевой огонь"
 		Stage.DAY1_RESCUE:
-			if area == Area.HUNTER_TRAIL: return "ДЕНЬ 1 | тропа охотника"
-			if area == Area.SAWMILL: return "ДЕНЬ 1 | старая лесопилка"
+			if area != Area.CAMP: return "ДЕНЬ 1 | %s" % _day1_route_title(day1_route)
 			return "ДЕНЬ 1 | выбери путь"
 		Stage.NIGHT1: return "НОЧЬ 1"
 		Stage.DAY2_BUILD: return "ДЕНЬ 2 | восстанови мастерскую"
 		Stage.WORKSHOP_CHOICE: return "ДЕНЬ 2 | выбери развитие"
 		Stage.DAY2_RESCUE:
-			if area == Area.WORKER_RUINS: return "ДЕНЬ 2 | руины мастерской"
-			return "ДЕНЬ 2 | след к руинам"
+			if area == Area.WORKER_RUINS: return "ДЕНЬ 2 | %s" % _day2_mission_title()
+			return "ДЕНЬ 2 | новый след"
 		Stage.NIGHT2: return "НОЧЬ 2"
 		Stage.DAY3_TOWER:
-			if area == Area.WATCH_RIDGE: return "ДЕНЬ 3 | сломанный дозор"
-			if area == Area.ALTAR_GLADE: return "ДЕНЬ 3 | древний алтарь"
+			if area != Area.CAMP: return "ДЕНЬ 3 | %s" % _day3_route_title(day3_route)
 			return "ДЕНЬ 3 | последний выбор"
 		Stage.EXPEDITION_CHOICE: return "ДЕНЬ 3 | древний алтарь"
 		Stage.NIGHT3: return "НОЧЬ 3 | хранитель идёт"
@@ -4378,7 +4433,7 @@ func _objective_text() -> String:
 		Stage.DAY1_GATHER:
 			return "Сруби одно дерево, подбери топливо и отнеси его к полевому огню."
 		Stage.DAY1_RESCUE:
-			return "Подойди к найденному выжившему."
+			return "Исследуй выбранный сигнал. Каждая тропа даёт другое преимущество перед ночью."
 		Stage.NIGHT1:
 			return "Защити огонь. Чем ближе ты к врагам, тем раньше начнёшь стрелять."
 		Stage.DAY2_BUILD:
@@ -4386,11 +4441,11 @@ func _objective_text() -> String:
 		Stage.WORKSHOP_CHOICE:
 			return "Подойди к одному из двух улучшений."
 		Stage.DAY2_RESCUE:
-			return "Уничтожь стражей и подойди к рабочему."
+			return "Доберись до цели второго дня и реши, что лес скрывал за первой линией тьмы."
 		Stage.NIGHT2:
 			return "Перехватывай быстрых. В конце придёт элита."
 		Stage.DAY3_TOWER:
-			return "Башня: 6 дерева + 6 камня."
+			return "До темноты хватит времени только на одну последнюю подготовку."
 		Stage.EXPEDITION_CHOICE:
 			return "Выбери: больше бойцов или сильнее каждый выстрел."
 		Stage.NIGHT3:
@@ -4546,17 +4601,29 @@ func _draw_flash() -> void:
 
 func _run_choice_line(day: int) -> String:
 	if day == 1:
-		if day1_route == "hunter": return "ДЕНЬ 1  •  Охотник спасён"
-		if day1_route == "sawmill": return "ДЕНЬ 1  •  Лесопилка укреплена"
+		match day1_route:
+			"hunter": return "ДЕНЬ 1  •  Охотник спасён"
+			"sawmill": return "ДЕНЬ 1  •  Лесопилка запущена"
+			"caravan": return "ДЕНЬ 1  •  Обоз найден"
+			"nest": return "ДЕНЬ 1  •  Логово уничтожено"
+			"signal": return "ДЕНЬ 1  •  Разведчик найден"
+			"dead_fire": return "ДЕНЬ 1  •  Жар сохранён"
 		return "ДЕНЬ 1  •  путь не завершён"
 	if day == 2:
-		if workshop_choice == "armory": return "ДЕНЬ 2  •  Оружейный стол"
-		if workshop_choice == "gear": return "ДЕНЬ 2  •  Походный набор"
-		return "ДЕНЬ 2  •  мастерская не выбрана"
-	if day3_route == "watch": return "ДЕНЬ 3  •  Дозор восстановлен"
-	if day3_route == "altar": return "ДЕНЬ 3  •  Огненные стрелы"
+		if day2_mission == "worker":
+			if workshop_choice == "armory": return "ДЕНЬ 2  •  Оружейный стол"
+			if workshop_choice == "gear": return "ДЕНЬ 2  •  Походный набор"
+			return "ДЕНЬ 2  •  мастер спасён"
+		if day2_mission == "storehouse": return "ДЕНЬ 2  •  Старый склад"
+		return "ДЕНЬ 2  •  Разведчик спасён"
+	match day3_route:
+		"watch": return "ДЕНЬ 3  •  Дозор восстановлен"
+		"altar": return "ДЕНЬ 3  •  Огненные стрелы"
+		"barricade": return "ДЕНЬ 3  •  Проход укреплён"
+		"shrine": return "ДЕНЬ 3  •  Каменный знак"
+		"beacon": return "ДЕНЬ 3  •  Маяк зажжён"
+		"cache": return "ДЕНЬ 3  •  Тайник стражи"
 	return "ДЕНЬ 3  •  путь не завершён"
-
 
 func _draw_result_overlay() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.86))
