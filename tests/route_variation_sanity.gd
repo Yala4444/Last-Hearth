@@ -49,7 +49,7 @@ func _init() -> void:
 		return
 
 	# Spatial continuity still applies whichever side the randomized offer lands on.
-	var chosen_left := game.day1_left_offer
+	var chosen_left: String = String(game.day1_left_offer)
 	game.stage = game.Stage.DAY1_RESCUE
 	game.area = game.Area.CAMP
 	game.day1_route = ""
