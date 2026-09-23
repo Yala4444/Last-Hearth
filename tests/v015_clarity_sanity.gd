@@ -32,7 +32,7 @@ func _init() -> void:
 	game.hero_velocity = Vector2.ZERO
 	game.joystick_active = false
 	game._update_movement(0.016)
-	var first_speed := game.hero_velocity.length()
+	var first_speed: float = game.hero_velocity.length()
 	if first_speed <= 0.0:
 		fail("Smoothed movement did not start")
 		return
