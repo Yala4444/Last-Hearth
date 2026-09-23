@@ -850,12 +850,8 @@ func _generate_layout() -> void:
 	var second_index: int = rng.randi_range(0, second_rescue_slots.size() - 1)
 	survivor_two_pos = second_rescue_slots[second_index] + Vector2(rng.randf_range(-10.0, 10.0), rng.randf_range(-8.0, 8.0))
 
-	if rng.randf() < 0.5:
-		left_choice_pos = Vector2(130.0, 285.0)
-		right_choice_pos = Vector2(350.0, 285.0)
-	else:
-		left_choice_pos = Vector2(125.0, 540.0)
-		right_choice_pos = Vector2(355.0, 540.0)
+	left_choice_pos = Vector2(118.0, 505.0)
+	right_choice_pos = Vector2(362.0, 505.0)
 
 
 func _add_event(kind: String, pos: Vector2) -> void:
@@ -1226,7 +1222,7 @@ func _update_worker_route() -> void:
 		worker_clear_announced = true
 		if day2_mission == "worker":
 			_banner("РУИНЫ ОЧИЩЕНЫ", 1.5)
-			_story("Твари стихли. За завалом снова слышен стук — рабочий ещё жив.", 2.8)
+			_story("Твари стихли. За завалом снова слышен стук — мастер ещё жив.", 2.8)
 		elif day2_mission == "storehouse":
 			_banner("ДВОР ОЧИЩЕН", 1.5)
 			_story("За дверью виден старый походный тайник. Осталось открыть его.", 2.8)
@@ -1271,15 +1267,15 @@ func _return_from_worker_ruins() -> void:
 	if day2_mission == "worker":
 		workshop_built = false
 		stage = Stage.DAY2_BUILD
-		left_choice_pos = Vector2(135.0, 285.0)
-		right_choice_pos = Vector2(345.0, 285.0)
+		left_choice_pos = Vector2(118.0, 505.0)
+		right_choice_pos = Vector2(362.0, 505.0)
 		current_stage_wood_start = camp_wood
 		current_stage_stone_start = camp_stone
 		light_radius = maxf(light_radius, 255.0)
 		hearth_level = maxi(hearth_level, 3)
 		camera_shake = 1.4
 		flash_timer = 0.32
-		_story("Рабочий: «Каркас уцелел. Принеси немного дерева и камня — я восстановлю мастерскую.»", 4.2)
+		_story("Мастер: «Каркас уцелел. Принеси немного дерева и камня — я восстановлю мастерскую.»", 4.2)
 		_banner("СТРОИМ МАСТЕРСКУЮ", 1.9)
 	else:
 		_start_night(2)
@@ -1397,7 +1393,7 @@ func _return_from_day3_route() -> void:
 	_restore_camp_area()
 	match day3_route:
 		"watch":
-			_story("Рабочий остаётся у механизма башни. Что-то огромное движется за деревьями.", 3.0)
+			_story("Мастер остаётся у механизма башни. Что-то огромное движется за деревьями.", 3.0)
 		"barricade":
 			_story("За спиной трещат свежие брёвна баррикады. Впереди лес внезапно стих.", 3.0)
 		"beacon":
@@ -2209,7 +2205,7 @@ func _check_day_progress() -> void:
 		flash_timer = 0.55
 		camera_shake = 2.0
 		_banner("МАСТЕРСКАЯ ГОТОВА", 2.0)
-		_story("Рабочий закончил каркас. Теперь реши, что собрать первым.", 2.8)
+		_story("Мастер закончил каркас. Теперь реши, что собрать первым.", 2.8)
 		stage_transition_lock = false
 
 	elif stage == Stage.DAY3_TOWER and day3_route == "legacy_build" and camp_wood >= current_stage_wood_start + 6 and camp_stone >= current_stage_stone_start + 6:
@@ -3632,7 +3628,7 @@ func _draw_day1_route_navigation() -> void:
 			if survivors <= 1 and day2_mission == "storehouse":
 				_draw_solo_risk(ROUTE_WORKER_GATE)
 		elif area == Area.WORKER_RUINS and worker_route_complete:
-			var return_label := "НАЗАД С РАБОЧИМ" if day2_mission == "worker" else ("НАЗАД С ДОБЫЧЕЙ" if day2_mission == "storehouse" else "НАЗАД С РАЗВЕДЧИКОМ")
+			var return_label := "НАЗАД С МАСТЕРОМ" if day2_mission == "worker" else ("НАЗАД С ДОБЫЧЕЙ" if day2_mission == "storehouse" else "НАЗАД С РАЗВЕДЧИКОМ")
 			_draw_route_gate(route_return_gate_pos, return_label, Color("#e0bc73"), route_return_gate_pos.x < VIEW_SIZE.x * 0.5)
 	elif stage == Stage.DAY3_TOWER:
 		if area == Area.CAMP and day3_route == "":
@@ -4782,7 +4778,7 @@ func _guidance_info() -> Dictionary:
 			return {"pos": _nearest_enemy_pos(), "text": "СТРАЖИ"}
 		if day2_mission == "storehouse":
 			return {"pos": survivor_two_pos, "text": "ТАЙНИК"}
-		return {"pos": survivor_two_pos, "text": "РАБОЧИЙ" if day2_mission == "worker" else "РАЗВЕДЧИК"}
+		return {"pos": survivor_two_pos, "text": "МАСТЕР" if day2_mission == "worker" else "РАЗВЕДЧИК"}
 
 	if stage == Stage.DAY3_TOWER:
 		if area == Area.CAMP:
@@ -5026,7 +5022,7 @@ func _objective_text() -> String:
 		Stage.NIGHT1:
 			return "Защити огонь. Чем ближе ты к врагам, тем раньше начнёшь стрелять."
 		Stage.DAY2_BUILD:
-			return "Рабочий строит мастерскую. Принеси %d дерева и %d камня прямо к стройке." % [WORKSHOP_WOOD_COST, WORKSHOP_STONE_COST]
+			return "Мастер строит мастерскую. Принеси %d дерева и %d камня прямо к стройке." % [WORKSHOP_WOOD_COST, WORKSHOP_STONE_COST]
 		Stage.WORKSHOP_CHOICE:
 			return "Подойди к одному из двух улучшений."
 		Stage.DAY2_RESCUE:
