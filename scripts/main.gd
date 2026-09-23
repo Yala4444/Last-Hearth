@@ -6,7 +6,13 @@ const HUB_MAP_POS := Vector2(240.0, 160.0)
 const HUB_CARRY_POS := Vector2(115.0, 430.0)
 const HUB_DAMAGE_POS := Vector2(365.0, 430.0)
 const HUB_HEARTH_UPGRADE_POS := Vector2(240.0, 590.0)
-const HUB_BOOK_POS := Vector2(60.0, 650.0)
+const HUB_BOOK_POS := Vector2(58.0, 690.0)
+const HUB_GROVE_GATE := Vector2(42.0, 535.0)
+const HUB_QUARRY_GATE := Vector2(438.0, 535.0)
+const HUB_FORESTER_HOME_POS := Vector2(78.0, 238.0)
+const HUB_HUNTER_HOME_POS := Vector2(240.0, 230.0)
+const HUB_WORKER_HOME_POS := Vector2(402.0, 238.0)
+const HUB_WATCH_POS := Vector2(394.0, 650.0)
 
 const HERO_SPEED := 178.0
 const HERO_INTERACT_RADIUS := 46.0
@@ -81,7 +87,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 11,
+	"build_version": 12,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -93,6 +99,15 @@ var meta: Dictionary = {
 	"rescued_hunter": false,
 	"rescued_worker": false,
 	"watch_restored": false,
+	"forester_home_built": false,
+	"hunter_home_built": false,
+	"worker_home_built": false,
+	"forester_home_wood": 0,
+	"forester_home_stone": 0,
+	"hunter_home_wood": 0,
+	"hunter_home_stone": 0,
+	"worker_home_wood": 0,
+	"worker_home_stone": 0,
 	"hearth_rank": 1,
 	"guide_seen": false
 }
@@ -156,6 +171,9 @@ var hub_feedback_pos := Vector2.ZERO
 var hub_feedback_timer := 0.0
 var region_map_open := false
 var help_open := false
+var hub_area := "center"
+var hub_area_return_gate := Vector2.ZERO
+var hub_center_return_pos := Vector2.ZERO
 var dawn_timer := 0.0
 var dawn_pending := 0
 var boss_delay_timer := 0.0
@@ -245,7 +263,13 @@ func _process(delta: float) -> void:
 
 	if mode == Mode.HUB:
 		_update_movement(delta)
-		_update_hub_interactions()
+		if hub_area == "center":
+			_update_hub_construction(delta)
+			_update_hub_interactions()
+		else:
+			_update_resource_gathering()
+			_update_resource_pickups(delta)
+		_update_hub_area_transitions()
 	elif mode == Mode.EXPEDITION:
 		_update_movement(delta)
 		_update_expedition(delta)
@@ -281,7 +305,12 @@ func _load_meta() -> void:
 	meta["rescued_hunter"] = bool(meta.get("rescued_hunter", false))
 	meta["rescued_worker"] = bool(meta.get("rescued_worker", false))
 	meta["watch_restored"] = bool(meta.get("watch_restored", false))
-	meta["build_version"] = 11
+	meta["forester_home_built"] = bool(meta.get("forester_home_built", false))
+	meta["hunter_home_built"] = bool(meta.get("hunter_home_built", false))
+	meta["worker_home_built"] = bool(meta.get("worker_home_built", false))
+	for key: String in ["forester_home_wood", "forester_home_stone", "hunter_home_wood", "hunter_home_stone", "worker_home_wood", "worker_home_stone"]:
+		meta[key] = int(meta.get(key, 0))
+	meta["build_version"] = 12
 
 
 func _save_meta() -> void:
@@ -292,8 +321,12 @@ func _save_meta() -> void:
 
 func _enter_hub(message: String = "") -> void:
 	mode = Mode.HUB
+	hub_area = "center"
 	hero_pos = Vector2(240.0, 690.0)
 	hero_target = hero_pos
+	carried_wood = 0
+	carried_stone = 0
+	carry_limit = 5 + int(meta.get("carry_level", 0))
 	_stop_joystick()
 	enemies.clear()
 	shots.clear()
@@ -610,12 +643,18 @@ func _add_event(kind: String, pos: Vector2) -> void:
 
 
 func _active_light_center() -> Vector2:
+	if mode == Mode.HUB:
+		return HEARTH_POS if hub_area == "center" else hero_pos
 	if area == Area.CAMP:
 		return HEARTH_POS
 	return hero_pos
 
 
 func _active_light_radius() -> float:
+	if mode == Mode.HUB:
+		if hub_area == "center":
+			return 185.0 + float(int(meta.get("forest_fires", 0))) * 34.0 + float(int(meta.get("hearth_bonus", 0))) * 15.0
+		return 158.0
 	if area == Area.CAMP:
 		return light_display_radius
 	return 142.0
@@ -1121,8 +1160,216 @@ func _update_movement(delta: float) -> void:
 		hero_walk_phase += delta * (6.0 + strength * 5.0)
 
 
-func _update_hub_interactions() -> void:
+func _hub_build_sites() -> Array[Dictionary]:
+	var sites: Array[Dictionary] = []
+	var fires := int(meta.get("forest_fires", 0))
+	if fires >= 1:
+		sites.append({
+			"id": "forester_home",
+			"pos": HUB_FORESTER_HOME_POS,
+			"label": "ДОМ ЛЕСНИКА",
+			"role": "civilian",
+			"wood_cost": 3,
+			"stone_cost": 1
+		})
+	if bool(meta.get("rescued_hunter", false)):
+		sites.append({
+			"id": "hunter_home",
+			"pos": HUB_HUNTER_HOME_POS,
+			"label": "ДОМ ОХОТНИКА",
+			"role": "hunter",
+			"wood_cost": 4,
+			"stone_cost": 1
+		})
+	if bool(meta.get("rescued_worker", false)):
+		sites.append({
+			"id": "worker_home",
+			"pos": HUB_WORKER_HOME_POS,
+			"label": "ДОМ МАСТЕРА",
+			"role": "worker",
+			"wood_cost": 5,
+			"stone_cost": 3
+		})
+	return sites
+
+
+func _hub_site_built(site: Dictionary) -> bool:
+	return bool(meta.get(String(site["id"]) + "_built", false))
+
+
+func _hub_site_progress(site: Dictionary, kind: String) -> int:
+	return int(meta.get(String(site["id"]) + "_" + kind, 0))
+
+
+func _hub_has_pending_construction() -> bool:
+	for site: Dictionary in _hub_build_sites():
+		if not _hub_site_built(site):
+			return true
+	return false
+
+
+func _hub_remaining_material(kind: String) -> int:
+	var total := 0
+	for site: Dictionary in _hub_build_sites():
+		if _hub_site_built(site):
+			continue
+		var cost := int(site["wood_cost"] if kind == "wood" else site["stone_cost"])
+		total += maxi(0, cost - _hub_site_progress(site, kind))
+	return total
+
+
+func _hub_site_complete(site: Dictionary) -> bool:
+	return _hub_site_progress(site, "wood") >= int(site["wood_cost"]) and _hub_site_progress(site, "stone") >= int(site["stone_cost"])
+
+
+func _finish_hub_site(site: Dictionary) -> void:
+	var id := String(site["id"])
+	meta[id + "_built"] = true
+	_save_meta()
+	camera_shake = 2.4
+	flash_timer = 0.28
+	_banner(String(site["label"]) + " ГОТОВ", 2.0)
+	if id == "forester_home":
+		_story("Лесник остаётся у Последнего Очагa. Теперь у поселения есть человек, который следит за древесиной.", 3.5)
+	elif id == "hunter_home":
+		_story("Охотник впервые оставляет оружие у двери. У него появилось место, куда можно вернуться.", 3.5)
+	else:
+		_story("Мастер раскладывает инструменты у нового дома. Поселение становится настоящим.", 3.5)
+
+
+func _update_hub_construction(delta: float) -> void:
+	if hub_area != "center" or region_map_open or help_open:
+		return
+	var nearest: Dictionary = {}
+	var nearest_distance := INF
+	for site: Dictionary in _hub_build_sites():
+		if _hub_site_built(site):
+			continue
+		var distance := hero_pos.distance_to(site["pos"])
+		if distance < 72.0 and distance < nearest_distance:
+			nearest = site
+			nearest_distance = distance
+	if nearest.is_empty():
+		unload_active = false
+		unload_cd = 0.0
+		return
+	if carried_wood <= 0 and carried_stone <= 0:
+		unload_active = false
+		return
+
+	var needs_wood := _hub_site_progress(nearest, "wood") < int(nearest["wood_cost"])
+	var needs_stone := _hub_site_progress(nearest, "stone") < int(nearest["stone_cost"])
+	var kind := ""
+	if needs_wood and carried_wood > 0:
+		kind = "wood"
+	elif needs_stone and carried_stone > 0:
+		kind = "stone"
+	if kind == "":
+		unload_active = false
+		return
+
+	unload_active = true
+	unload_cd -= delta
+	if unload_cd > 0.0:
+		return
+	if kind == "wood":
+		carried_wood -= 1
+	else:
+		carried_stone -= 1
+	var key := String(nearest["id"]) + "_" + kind
+	meta[key] = int(meta.get(key, 0)) + 1
+	_save_meta()
+	var site_pos: Vector2 = nearest["pos"]
+	resource_flights.append({
+		"kind": kind,
+		"mode": "unload",
+		"from": hero_pos + Vector2(0, -16),
+		"to": site_pos + Vector2(rng.randf_range(-16.0, 16.0), rng.randf_range(-8.0, 10.0)),
+		"t": 0.0,
+		"duration": 0.22
+	})
+	_burst_typed(site_pos, 4, kind)
+	_float_text(site_pos + Vector2(0, -48), "СТРОЙКА +", Color("#dfc38d"))
+	unload_cd = UNLOAD_INTERVAL
+	if _hub_site_complete(nearest):
+		_finish_hub_site(nearest)
+
+
+func _generate_hub_resource_area(kind: String) -> void:
+	resource_nodes.clear()
+	resource_pickups.clear()
+	resource_flights.clear()
+	decor_points.clear()
+	var positions: Array[Vector2] = []
+	if kind == "grove":
+		positions = [Vector2(95, 210), Vector2(205, 250), Vector2(340, 205), Vector2(390, 365), Vector2(130, 500), Vector2(300, 565)]
+		if bool(meta.get("forester_home_built", false)):
+			positions.append(Vector2(410, 640))
+		for p: Vector2 in positions:
+			resource_nodes.append({
+				"kind": "tree", "pos": p, "hits": 3, "max_hits": 3, "alive": true,
+				"fall_timer": 0.0, "drop_spawned": false, "variant": rng.randi_range(0, 2), "hit_flash": 0.0
+			})
+	else:
+		positions = [Vector2(105, 220), Vector2(220, 270), Vector2(365, 220), Vector2(395, 405), Vector2(135, 530), Vector2(310, 610)]
+		for p: Vector2 in positions:
+			resource_nodes.append({
+				"kind": "rock", "pos": p, "hits": 4, "max_hits": 4, "alive": true,
+				"fall_timer": 0.0, "drop_spawned": false, "hit_flash": 0.0
+			})
+	for i in range(44):
+		decor_points.append({
+			"pos": Vector2(rng.randf_range(28.0, 452.0), rng.randf_range(130.0, 765.0)),
+			"kind": "branch" if kind == "grove" and i % 5 == 0 else ("pebble" if kind == "quarry" and i % 3 == 0 else "grass"),
+			"scale": rng.randf_range(0.72, 1.22)
+		})
+
+
+func _enter_hub_area(next_area: String, from_gate: Vector2) -> void:
+	if hub_area != "center":
+		return
+	hub_area = next_area
+	if from_gate.x < VIEW_SIZE.x * 0.5:
+		hero_pos = Vector2(VIEW_SIZE.x - 48.0, from_gate.y)
+		hub_area_return_gate = Vector2(VIEW_SIZE.x - 38.0, from_gate.y)
+		hub_center_return_pos = from_gate + Vector2(52.0, 0.0)
+	else:
+		hero_pos = Vector2(48.0, from_gate.y)
+		hub_area_return_gate = Vector2(38.0, from_gate.y)
+		hub_center_return_pos = from_gate - Vector2(52.0, 0.0)
+	hero_target = hero_pos
+	area_fade_timer = AREA_FADE_DURATION
+	_generate_hub_resource_area(next_area)
+	_stop_joystick()
+
+
+func _return_to_hub_center() -> void:
+	hub_area = "center"
+	resource_nodes.clear()
+	resource_pickups.clear()
+	resource_flights.clear()
+	decor_points.clear()
+	hero_pos = hub_center_return_pos
+	hero_target = hero_pos
+	area_fade_timer = AREA_FADE_DURATION
+	_stop_joystick()
+
+
+func _update_hub_area_transitions() -> void:
 	if region_map_open or help_open:
+		return
+	if hub_area == "center":
+		if hero_pos.distance_to(HUB_GROVE_GATE) < 48.0:
+			_enter_hub_area("grove", HUB_GROVE_GATE)
+		elif hero_pos.distance_to(HUB_QUARRY_GATE) < 48.0:
+			_enter_hub_area("quarry", HUB_QUARRY_GATE)
+	else:
+		if hero_pos.distance_to(hub_area_return_gate) < 48.0:
+			_return_to_hub_center()
+
+
+func _update_hub_interactions() -> void:
+	if hub_area != "center" or region_map_open or help_open:
 		return
 
 	var near_map := hero_pos.distance_to(HUB_MAP_POS) < 54.0
@@ -1231,11 +1478,16 @@ func _update_expedition(delta: float) -> void:
 
 
 func _gathering_enabled() -> bool:
+	if mode == Mode.HUB:
+		return hub_area in ["grove", "quarry"] and _hub_has_pending_construction()
 	# v0.9 deliberately removes the old Day 3 resource grind.
 	return stage in [Stage.DAY1_GATHER, Stage.DAY2_BUILD]
 
 
 func _resource_kind_needed(kind: String) -> bool:
+	if mode == Mode.HUB:
+		var wanted := "wood" if kind == "tree" else "stone"
+		return _hub_remaining_material(wanted) > (carried_wood if wanted == "wood" else carried_stone)
 	if stage == Stage.DAY1_GATHER:
 		return kind == "tree" and camp_wood + carried_wood < FIELD_FIRE_WOOD_COST
 	if stage == Stage.DAY2_BUILD:
@@ -2314,6 +2566,9 @@ func _draw() -> void:
 
 
 func _draw_hub() -> void:
+	if hub_area != "center":
+		_draw_hub_resource_area()
+		return
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color("#111c17"))
 	_draw_ground_texture(Color("#1a2a21"), 58)
 
@@ -2322,11 +2577,12 @@ func _draw_hub() -> void:
 	var hub_light := 185.0 + float(fires) * 34.0 + float(hearth_bonus) * 15.0
 	_draw_light_field(HEARTH_POS, hub_light)
 
-	# The permanent home grows only from things the player actually brought back or built.
-	if bool(meta.get("rescued_hunter", false)):
-		_draw_hub_building(Vector2(92, 226), "home", "УКРЫТИЕ ОХОТНИКА", "")
-	elif fires >= 1:
-		_draw_hub_site(Vector2(92, 226), "МЕСТО ДЛЯ УКРЫТИЯ")
+	# Homes no longer appear magically: rescued people wait while the player builds them.
+	for site: Dictionary in _hub_build_sites():
+		if _hub_site_built(site):
+			_draw_hub_building(site["pos"], "home", String(site["label"]), "")
+		else:
+			_draw_hub_construction_site(site)
 
 	if int(meta.get("carry_level", 0)) > 0:
 		_draw_hub_building(HUB_CARRY_POS, "store", "СНАРЯЖЕНИЕ", "рюкзак")
@@ -2338,15 +2594,10 @@ func _draw_hub() -> void:
 	else:
 		_draw_hub_site(HUB_DAMAGE_POS, "КУЗНИЦА")
 
-	if bool(meta.get("rescued_worker", false)):
-		_draw_hub_building(Vector2(374, 226), "home", "УКРЫТИЕ МАСТЕРА", "")
-	elif fires >= 2:
-		_draw_hub_site(Vector2(374, 226), "МЕСТО ДЛЯ МАСТЕРА")
-
 	if bool(meta.get("watch_restored", false)):
-		_draw_hub_building(Vector2(390, 620), "watch", "ДОЗОР", "")
+		_draw_hub_building(HUB_WATCH_POS, "watch", "ДОЗОР", "")
 	elif fires >= 2:
-		_draw_hub_site(Vector2(390, 620), "БУДУЩИЙ ДОЗОР")
+		_draw_hub_site(HUB_WATCH_POS, "БУДУЩИЙ ДОЗОР")
 
 	_draw_map_table(HUB_MAP_POS)
 	_draw_book_stand(HUB_BOOK_POS)
@@ -2355,11 +2606,14 @@ func _draw_hub() -> void:
 	_draw_hearth_altar(HUB_HEARTH_UPGRADE_POS)
 
 	var resident_index := 0
+	if fires >= 1:
+		_draw_humanoid(HUB_FORESTER_HOME_POS + Vector2(38, 68), Color("#71866a"), float(resident_index), "civilian", 1.0)
+		resident_index += 1
 	if bool(meta.get("rescued_hunter", false)):
-		_draw_humanoid(Vector2(145, 332), Color("#7f886a"), float(resident_index), "hunter", 1.0)
+		_draw_humanoid(HUB_HUNTER_HOME_POS + Vector2(-36, 72), Color("#7f886a"), float(resident_index), "hunter", 1.0)
 		resident_index += 1
 	if bool(meta.get("rescued_worker", false)):
-		_draw_humanoid(Vector2(338, 336), Color("#9b7856"), float(resident_index), "worker", 1.0)
+		_draw_humanoid(HUB_WORKER_HOME_POS + Vector2(-42, 70), Color("#9b7856"), float(resident_index), "worker", 1.0)
 		resident_index += 1
 	if fires >= 2:
 		_draw_humanoid(Vector2(310, 676), Color("#758597"), float(resident_index), "guard", 1.0)
@@ -2367,6 +2621,9 @@ func _draw_hub() -> void:
 	if fires >= 3:
 		_draw_humanoid(Vector2(178, 676), Color("#758597"), float(resident_index), "guard", 1.0)
 
+	_draw_route_gate(HUB_GROVE_GATE, "РОЩА | ДЕРЕВО", Color("#7f9b71"), true)
+	_draw_route_gate(HUB_QUARRY_GATE, "СКЛОН | КАМЕНЬ", Color("#8c918d"), false)
+	_draw_resource_flights()
 	_draw_hero(hero_pos)
 
 	draw_string(font, Vector2(18, 116), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 300, 22, Color("#f4ead4"))
@@ -2392,6 +2649,56 @@ func _draw_hub() -> void:
 	draw_arc(HUB_MAP_POS, 46.0 * pulse, 0.0, TAU, 44, Color(0.78, 0.88, 0.70, 0.55), 2.0)
 	var map_label := "ПЕРВАЯ ВЫЛАЗКА" if fires <= 0 else "КАРТА ВЫЛАЗОК"
 	draw_string(font, HUB_MAP_POS + Vector2(-90, 69), map_label, HORIZONTAL_ALIGNMENT_CENTER, 180, 13, Color("#f3e4c8"))
+
+func _draw_hub_construction_site(site: Dictionary) -> void:
+	var pos: Vector2 = site["pos"]
+	var wood := _hub_site_progress(site, "wood")
+	var stone := _hub_site_progress(site, "stone")
+	var wood_cost := int(site["wood_cost"])
+	var stone_cost := int(site["stone_cost"])
+	var progress := clampf((float(wood) / maxf(1.0, float(wood_cost)) + float(stone) / maxf(1.0, float(stone_cost))) * 0.5, 0.0, 1.0)
+	_draw_ellipse_custom(pos + Vector2(0, 25), Vector2(38, 11), Color(0.01, 0.02, 0.015, 0.26))
+	draw_line(pos + Vector2(-30, 22), pos + Vector2(-26, -12), Color("#624d34"), 5.0)
+	draw_line(pos + Vector2(30, 22), pos + Vector2(26, -12), Color("#624d34"), 5.0)
+	draw_line(pos + Vector2(-27, -10), pos + Vector2(27, -10), Color("#775a38"), 5.0)
+	if progress > 0.28:
+		draw_line(pos + Vector2(-26, 8), pos + Vector2(26, 8), Color("#80613d"), 5.0)
+	if progress > 0.55:
+		var roof := PackedVector2Array([pos + Vector2(-35, -10), pos + Vector2(0, -35), pos + Vector2(35, -10)])
+		draw_polyline(roof, Color("#8b6a43"), 5.0)
+	if progress > 0.82:
+		draw_rect(Rect2(pos + Vector2(-22, -7), Vector2(44, 27)), Color(0.38, 0.30, 0.21, 0.35))
+	draw_string(font, pos + Vector2(-74, 48), String(site["label"]), HORIZONTAL_ALIGNMENT_CENTER, 148, 9, Color("#d9ccb4"))
+	draw_string(font, pos + Vector2(-82, 64), "дерево %d/%d | камень %d/%d" % [wood, wood_cost, stone, stone_cost], HORIZONTAL_ALIGNMENT_CENTER, 164, 8, Color("#bca982"))
+
+
+func _draw_hub_resource_area() -> void:
+	var grove := hub_area == "grove"
+	var bg := Color("#16271e") if grove else Color("#202625")
+	var ground := Color("#20352a") if grove else Color("#303735")
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), bg)
+	_draw_ground_texture(ground, 62)
+	_draw_environment_decor()
+	_draw_light_field(hero_pos, 158.0)
+	for node: Dictionary in resource_nodes:
+		_draw_resource(node)
+	for pickup: Dictionary in resource_pickups:
+		_draw_resource_pickup(pickup)
+	_draw_resource_flights()
+	var return_left := hub_area_return_gate.x < VIEW_SIZE.x * 0.5
+	_draw_route_gate(hub_area_return_gate, "К ПОСЛЕДНЕМУ ОЧАГУ", Color("#d6bd82"), return_left)
+	if grove:
+		draw_string(font, Vector2(18, 118), "РОЩА ПОСЛЕДНЕГО ОЧАГА", HORIZONTAL_ALIGNMENT_LEFT, 350, 17, Color("#e8dec9"))
+		draw_string(font, Vector2(18, 140), "Древесина для домов и построек.", HORIZONTAL_ALIGNMENT_LEFT, 340, 10, Color("#9fb0a2"))
+		if bool(meta.get("forester_home_built", false)):
+			_draw_humanoid(Vector2(310, 185), Color("#71866a"), 0.0, "civilian", 1.0)
+			draw_string(font, Vector2(254, 226), "ЛЕСНИК", HORIZONTAL_ALIGNMENT_CENTER, 112, 9, Color("#cbbd9d"))
+	else:
+		draw_string(font, Vector2(18, 118), "КАМЕННЫЙ СКЛОН", HORIZONTAL_ALIGNMENT_LEFT, 300, 17, Color("#e8dec9"))
+		draw_string(font, Vector2(18, 140), "Камень для более крепких построек.", HORIZONTAL_ALIGNMENT_LEFT, 340, 10, Color("#9fa9a5"))
+	_draw_explorer_lantern()
+	_draw_hero(hero_pos)
+
 
 func _draw_hub_site(pos: Vector2, label: String) -> void:
 	_draw_ellipse_custom(pos + Vector2(0, 24), Vector2(34, 10), Color(0.01, 0.02, 0.015, 0.22))
@@ -3110,8 +3417,8 @@ func _draw_centered_texture(texture: Texture2D, pos: Vector2, size: Vector2, mod
 
 func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
 	var visibility := maxf(minimum_visibility, _light_visibility(pos))
-	var distance := pos.distance_to(HEARTH_POS)
-	var warmth := clampf(1.0 - distance / maxf(1.0, light_display_radius), 0.0, 1.0)
+	var distance := pos.distance_to(_active_light_center())
+	var warmth := clampf(1.0 - distance / maxf(1.0, _active_light_radius()), 0.0, 1.0)
 	var base := Color(0.60, 0.68, 0.70, visibility)
 	var warm := Color(1.0, 0.91, 0.75, visibility)
 	return base.lerp(warm, warmth * 0.58)
@@ -3653,11 +3960,27 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(Vector2(0, 0), Vector2(480, 82)), Color(0.025, 0.04, 0.032, 0.92))
 
 	if mode == Mode.HUB:
-		draw_string(font, Vector2(14, 28), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 245, 17, Color("#f0e4cd"))
+		var hub_title := "ПОСЛЕДНИЙ ОЧАГ"
+		if hub_area == "grove":
+			hub_title = "ТЕРРИТОРИЯ ОЧАГА | роща"
+		elif hub_area == "quarry":
+			hub_title = "ТЕРРИТОРИЯ ОЧАГА | склон"
+		draw_string(font, Vector2(14, 28), hub_title, HORIZONTAL_ALIGNMENT_LEFT, 300, 16, Color("#f0e4cd"))
 		_draw_icon_ember(Vector2(387, 22), Color("#d99b50"))
 		draw_string(font, Vector2(400, 27), "%d" % int(meta.get("embers", 0)), HORIZONTAL_ALIGNMENT_LEFT, 52, 14, Color("#e6c57e"))
-		draw_string(font, Vector2(14, 55), "Карта — новая вылазка. Здания — постоянные улучшения.", HORIZONTAL_ALIGNMENT_LEFT, 410, 10, Color("#98a89c"))
-		draw_string(font, Vector2(426, 55), "v0.11", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		if carried_wood + carried_stone > 0:
+			_draw_icon_log(Vector2(286, 52), Color("#9f6b3c"))
+			draw_string(font, Vector2(298, 56), "%d" % carried_wood, HORIZONTAL_ALIGNMENT_LEFT, 28, 10, Color("#d6c19a"))
+			_draw_icon_stone(Vector2(342, 52), Color("#8f9996"))
+			draw_string(font, Vector2(354, 56), "%d" % carried_stone, HORIZONTAL_ALIGNMENT_LEFT, 28, 10, Color("#ccd0ca"))
+			_draw_icon_cargo(Vector2(404, 52), Color("#b6a57f"))
+			draw_string(font, Vector2(416, 56), "%d/%d" % [carried_wood + carried_stone, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 48, 10, Color("#d9c39a"))
+		else:
+			var hub_hint := "Слева — древесина. Справа — камень. Неси материалы к стройкам."
+			if not _hub_has_pending_construction():
+				hub_hint = "Поселение обустроено. Карта — новая вылазка."
+			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 408, 9, Color("#98a89c"))
+		draw_string(font, Vector2(426, 55), "v0.12", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
@@ -3873,10 +4196,11 @@ func _draw_help_overlay() -> void:
 	draw_string(font, Vector2(58, 438), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 364, 12, Color("#e1c994"))
 	draw_string(font, Vector2(58, 466), "Это твой дом. Кузница, снаряжение, дозор и новые", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
 	draw_string(font, Vector2(58, 486), "жители появляются здесь по мере возвращения света.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 528), "УГЛИ", HORIZONTAL_ALIGNMENT_LEFT, 364, 12, Color("#e1c994"))
-	draw_string(font, Vector2(58, 556), "Это жар восстановленных огней. Трать его на постоянные", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 576), "улучшения перед следующей вылазкой.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 620), "КОСНИСЬ ЭКРАНА, ЧТОБЫ ЗАКРЫТЬ", HORIZONTAL_ALIGNMENT_CENTER, 364, 10, Color("#d4bd8d"))
+	draw_string(font, Vector2(58, 516), "СТРОИТЕЛЬСТВО", HORIZONTAL_ALIGNMENT_LEFT, 364, 12, Color("#e1c994"))
+	draw_string(font, Vector2(58, 542), "Слева от Очагa есть роща, справа — каменный склон.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
+	draw_string(font, Vector2(58, 562), "Добывай материалы и неси их прямо к каркасам домов.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
+	draw_string(font, Vector2(58, 594), "УГЛИ — жар восстановленных огней для постоянных улучшений.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
+	draw_string(font, Vector2(58, 628), "КОСНИСЬ ЭКРАНА, ЧТОБЫ ЗАКРЫТЬ", HORIZONTAL_ALIGNMENT_CENTER, 364, 10, Color("#d4bd8d"))
 
 
 func _draw_region_map_overlay() -> void:
