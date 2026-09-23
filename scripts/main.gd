@@ -87,7 +87,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 12,
+	"build_version": 13,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -307,6 +307,7 @@ func _load_meta() -> void:
 			migrated_fires = 1
 		meta["forest_fires"] = migrated_fires
 		meta["forest_cleared"] = migrated_fires >= 3
+	if loaded_version < 13:
 		meta["guide_seen"] = false
 	meta["rescued_hunter"] = bool(meta.get("rescued_hunter", false))
 	meta["rescued_worker"] = bool(meta.get("rescued_worker", false))
@@ -316,7 +317,7 @@ func _load_meta() -> void:
 	meta["worker_home_built"] = bool(meta.get("worker_home_built", false))
 	for key: String in ["forester_home_wood", "forester_home_stone", "hunter_home_wood", "hunter_home_stone", "worker_home_wood", "worker_home_stone"]:
 		meta[key] = int(meta.get(key, 0))
-	meta["build_version"] = 12
+	meta["build_version"] = 13
 
 
 func _save_meta() -> void:
