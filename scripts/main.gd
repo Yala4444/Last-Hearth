@@ -569,7 +569,7 @@ func _start_expedition() -> void:
 		_banner("ПЕРВЫЙ СВЕТ", 2.2)
 		_story("Сруби ближайшее дерево. Подними брёвна и принеси их к полевому огню — каждый груз оттолкнёт тьму.", 5.0)
 	else:
-		var sector_name := ["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"][expedition_sector]
+		var sector_name: String = String(["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"][expedition_sector])
 		_banner("%s | %s" % [sector_name, map_variant_name], 2.4)
 
 
