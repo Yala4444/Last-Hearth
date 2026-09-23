@@ -586,7 +586,7 @@ func _start_expedition() -> void:
 	_generate_layout()
 	if int(meta.get("attempts", 1)) == 1:
 		_banner("ПЕРВЫЙ СВЕТ", 2.2)
-		_story("Сруби ближайшее дерево. Подними брёвна и принеси их к полевому огню — каждый груз оттолкнёт тьму.", 5.0)
+		_story("Тьма погасила старые огни. Последний Очаг — твой дом. Разжигай новые огни и возвращай людей к свету. Начни с дерева перед тобой.", 5.4)
 	else:
 		var sector_name: String = String(["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"][expedition_sector])
 		_banner("%s | %s" % [sector_name, map_variant_name], 2.4)
