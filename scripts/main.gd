@@ -334,7 +334,7 @@ func _load_meta() -> void:
 	if loaded_version < 15:
 		meta["hub_intro_seen"] = false
 	if loaded_version < 16:
-		# v0.16 treated every rescued person as a future hub resident.
+		# v0.15 treated every rescued person as a future hub resident.
 		# v0.16 preserves progress but converts people into explicit chapter fates.
 		meta["hub_intro_seen"] = false
 		meta["master_arrival_seen"] = false
@@ -438,10 +438,10 @@ func _forest_fire_detail(index: int) -> String:
 	if state == "seen":
 		return "Сигнал замечен, но путь к нему ещё лежит во тьме."
 	var keeper := _forest_fire_keeper(index)
+	if keeper != "":
+		return "%s остаётся здесь и удерживает восстановленный огонь." % keeper
 	match index:
 		1:
-			if keeper != "":
-				return "%s держит тропу у восстановленного огня." % keeper
 			return "Первый огонь снова освещает край леса."
 		2:
 			return "Старая дорога снова связана светом с опушкой."
@@ -710,6 +710,21 @@ func _start_expedition() -> void:
 	else:
 		var sector_name: String = String(["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"][expedition_sector])
 		_banner("%s | %s" % [sector_name, map_variant_name], 2.4)
+		_story(_forest_chapter_intro(), 4.6)
+
+
+func _forest_chapter_intro() -> String:
+	match expedition_sector:
+		1:
+			if String(meta.get("hunter_fate", "")) == "keeper_fire_1":
+				return "ВТОРОЙ СИГНАЛ\nОгонь на опушке остался позади. Охотник держит тропу, а Мастер указал на старую дорогу глубже в лес."
+			return "ВТОРОЙ СИГНАЛ\nПервый огонь удерживает край леса. Дальше, за старой дорогой, заметен ещё один слабый свет."
+		2:
+			if String(meta.get("master_relationship_state", "")) == "waiting_forest":
+				return "ТРЕТИЙ СИГНАЛ\nДва огня уже видят друг друга. Мастер остаётся у старой дороги, пока последний разрыв в цепи не будет закрыт."
+			return "ТРЕТИЙ СИГНАЛ\nДва восстановленных огня держат дорогу. Последний сигнал идёт из самого сердца леса."
+		_:
+			return "СИГНАЛ ВО ТЬМЕ\nСвет впереди ещё слабый. Доберись до него и восстанови следующую точку цепи."
 
 
 func _generate_layout() -> void:
@@ -2855,6 +2870,9 @@ func _finish_run(win: bool, reason: String = "") -> void:
 			if day2_mission == "worker" and survivor_two_found:
 				meta["rescued_worker"] = true
 				meta["master_relationship_state"] = "waiting_forest"
+		elif completed_sector == 1:
+			if String(meta.get("master_relationship_state", "")) == "waiting_forest":
+				meta["forest_fire_2_keeper"] = "Мастер"
 		elif day1_route == "hunter":
 			meta["rescued_hunter"] = true
 
@@ -2878,6 +2896,7 @@ func _finish_run(win: bool, reason: String = "") -> void:
 			if String(meta.get("master_relationship_state", "unknown")) in ["waiting_forest", "met"]:
 				meta["master_relationship_state"] = "joining_home"
 				meta["master_arrival_seen"] = false
+				meta["forest_fire_2_keeper"] = ""
 			result_title = "ЗАБЫТЫЙ ЛЕС ВОССТАНОВЛЕН"
 			result_subtitle = "Три огня снова видят друг друга. Теперь люди могут удерживать этот путь без тебя."
 	else:
@@ -5205,7 +5224,8 @@ func _draw_region_fire_node(index: int) -> void:
 	])
 	draw_colored_polygon(flame, Color("#e69a45"))
 	draw_circle(pos + Vector2(0, 1), 4.5, Color("#ffd078"))
-	draw_string(font, pos + Vector2(-58, 39), "%d/3" % index, HORIZONTAL_ALIGNMENT_CENTER, 116, 8, Color("#e6d4ad"))
+	var short_name := "ОПУШКА" if index == 1 else ("СТАРАЯ ДОРОГА" if index == 2 else "СЕРДЦЕ ЛЕСА")
+	draw_string(font, pos + Vector2(-64, 39), short_name, HORIZONTAL_ALIGNMENT_CENTER, 128, 8, Color("#e6d4ad"))
 
 
 func _draw_region_map_overlay() -> void:
