@@ -65,7 +65,7 @@ func _init() -> void:
 		game.day1_route = "hunter"
 		game.survivors = 2
 		game._start_night(3)
-		var expected := ["black_boar", "rootborn", "forest_guardian"][sector]
+		var expected: String = String(["black_boar", "rootborn", "forest_guardian"][sector])
 		if game.night_queue.is_empty() or String(game.night_queue.back()) != expected:
 			fail("Night 3 queued the wrong boss for sector %d" % sector)
 			return
