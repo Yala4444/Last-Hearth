@@ -213,6 +213,12 @@ func _init() -> void:
 	game.mode = game.Mode.EXPEDITION
 	game.meta["forest_fires"] = 0
 	game.meta["forest_cleared"] = false
+	game.meta["rescued_hunter"] = false
+	game.meta["rescued_worker"] = false
+	game.meta["watch_restored"] = false
+	game.day1_route = "hunter"
+	game.survivor_two_found = true
+	game.day3_route = "watch"
 	game.run_embers = 0
 	game._finish_run(true)
 	if int(game.meta.get("forest_fires", 0)) != 1:
@@ -220,6 +226,12 @@ func _init() -> void:
 		return
 	if bool(game.meta.get("forest_cleared", false)):
 		fail("Dead Fields must not unlock after only one restored fire")
+		return
+	if not bool(game.meta.get("rescued_hunter", false)) or not bool(game.meta.get("rescued_worker", false)):
+		fail("People rescued during a successful run were not persisted into the Last Hearth")
+		return
+	if not bool(game.meta.get("watch_restored", false)):
+		fail("Restored watch was not persisted into the Last Hearth")
 		return
 
 	print("CHAPTER1_ADVENTURE_SANITY_OK")
