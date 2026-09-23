@@ -404,11 +404,11 @@ func _configure_expedition_sector() -> void:
 func _day1_route_label(route_name: String) -> String:
 	match route_name:
 		"hunter": return "ОХОТНИК • СОЮЗНИК"
-		"sawmill": return "ЛЕСОПИЛКА • ЗАЩИТА"
-		"caravan": return "РАЗБИТЫЙ ОБОЗ • СОЮЗНИК"
-		"nest": return "ЛОГОВО • УРОН"
+		"sawmill": return "ЛЕСОПИЛКА • СЛОТ + ОЧАГ"
+		"caravan": return "ОБОЗ • СОЮЗНИК + СЛОТ"
+		"nest": return "ЛОГОВО • УРОН +18%"
 		"signal": return "РАЗВЕДЧИК • СОЮЗНИК"
-		"dead_fire": return "СТАРЫЙ ОГОНЬ • ОЧАГ"
+		"dead_fire": return "УГАСШИЙ МАЯК • ОЧАГ +32"
 	return "НЕИЗВЕСТНЫЙ СЛЕД"
 
 func _day1_route_title(route_name: String) -> String:
@@ -418,14 +418,14 @@ func _day1_route_title(route_name: String) -> String:
 		"caravan": return "разбитый обоз"
 		"nest": return "логово у чёрного дерева"
 		"signal": return "сигнал разведчика"
-		"dead_fire": return "потухший костёр"
+		"dead_fire": return "угасший маяк"
 	return "неизвестная тропа"
 
 
 func _day2_mission_label() -> String:
 	match day2_mission:
 		"worker": return "МАСТЕР • СОЮЗНИК"
-		"storehouse": return "СТАРЫЙ СКЛАД • СНАРЯЖ."
+		"storehouse": return "СКЛАД • СЛОТ + ЗДР."
 		_: return "РАЗВЕДЧИК • СОЮЗНИК"
 
 
@@ -439,18 +439,18 @@ func _day2_mission_title() -> String:
 func _day3_route_label(route_name: String) -> String:
 	match route_name:
 		"watch": return "ДОЗОР • АВТООГОНЬ"
-		"altar": return "АЛТАРЬ • УРОН"
-		"barricade": return "БАРРИКАДА • ПРОЧНОСТЬ"
-		"shrine": return "КРУГ • УРОН + ЗДОРОВЬЕ"
-		"beacon": return "МАЯК • АВТООГОНЬ"
-		"cache": return "ТАЙНИК • ЗДОРОВЬЕ"
+		"altar": return "ОГНЕННАЯ МЕТКА • УРОН +55%"
+		"barricade": return "БАРРИКАДА • ОЧАГ +85"
+		"shrine": return "КРУГ • УРОН + ЗДР."
+		"beacon": return "МАЯК • ДОЗОР + СКОРОСТЬ"
+		"cache": return "ТАЙНИК • СЛОТ + ЗДР."
 	return "НЕИЗВЕСТНЫЙ ПУТЬ"
 
 
 func _day3_route_title(route_name: String) -> String:
 	match route_name:
 		"watch": return "сломанный дозор"
-		"altar": return "древний алтарь"
+		"altar": return "огненная метка"
 		"barricade": return "завал у моста"
 		"shrine": return "каменный круг"
 		"beacon": return "сигнальный маяк"
@@ -936,7 +936,7 @@ func _enter_day1_route(route_name: String) -> void:
 			_story("СИГНАЛ С ХОЛМА\nКто-то трижды поднял факел над деревьями. Потом свет исчез.", 3.6)
 		"dead_fire":
 			_add_event("dead_fire_route", Vector2(240.0, 220.0))
-			_story("ПОТУХШИЙ ОГОНЬ\nКамни ещё тёплые. Значит, этот костёр погас совсем недавно.", 3.6)
+			_story("УГАСШИЙ МАЯК\nСтарый сигнальный столб ещё хранит тепло. Внутри может остаться жаровый камень.", 3.6)
 
 func _return_from_day1_route() -> void:
 	if area == Area.CAMP or not day1_route_complete:
@@ -1000,7 +1000,7 @@ func _update_day1_route() -> void:
 			hearth_max_hp += 32.0
 			hearth_hp = hearth_max_hp
 			run_embers += 1
-			_story("ЖАР СОХРАНЁН\nПрочность огня %d > %d. Союзника здесь нет." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
+			_story("ЖАРОВЫЙ КАМЕНЬ СНЯТ\nПрочность огня %d > %d. Союзника здесь нет." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
 	day1_route_complete = true
 
 func _update_area_transitions() -> void:
@@ -1194,7 +1194,7 @@ func _enter_day3_route(route_name: String) -> void:
 			_story("СЛОМАННЫЙ ДОЗОР\nЕсли поднять башню, она прикроет огонь в последнюю ночь.", 3.6)
 		"altar":
 			_add_event("final_altar", Vector2(240.0, 210.0))
-			_story("ДРЕВНИЙ АЛТАРЬ\nПламя здесь старше нашего огня. Оно может изменить оружие.", 3.6)
+			_story("ОГНЕННАЯ МЕТКА\nНа камнях остался знак старого пламени. Он может усилить оружие перед последней ночью.", 3.6)
 		"barricade":
 			_add_event("barricade_repair", Vector2(240.0, 210.0))
 			_story("ЗАВАЛ У МОСТА\nЕсли укрепить проход, часть ночной волны не доберётся до огня.", 3.6)
@@ -1246,7 +1246,7 @@ func _update_day3_route() -> void:
 		hero_fire_rate *= 0.90
 		day3_route_complete = true
 		run_embers += 2
-		_story("МАЯК ГОРИТ\nСвет видит дальше нас. Последнюю волну встретим подготовленными.", 3.5)
+		_story("МАЯК ГОРИТ\nАвтоогонь дозора включён • скорость твоей стрельбы +11%.", 3.7)
 	elif day3_route == "cache" and _route_event_triggered("supply_cache") and enemies.is_empty():
 		var old_slots := carry_limit
 		var old_hp := hero_max_hp
@@ -1403,7 +1403,7 @@ func _update_world_events(delta: float) -> void:
 				_spawn_enemy_at("fast", pos + Vector2(-48, 62))
 				_spawn_enemy_at("fast", pos + Vector2(54, 66))
 				route_grace_timer = 0.8
-				_story("ЗОЛА ШЕВЕЛЬНУЛАСЬ\nВместе с жаром проснулись две тени.", 3.0)
+				_story("МАЯК ОЖИЛ\nСтарый механизм вспыхнул — и свет разбудил две тени.", 3.0)
 			"supply_cache":
 				event["outcome"] = "opened"
 				_spawn_enemy_at("fast", pos + Vector2(-46, 56))
@@ -3697,7 +3697,7 @@ func _draw_world_events() -> void:
 			"signal_survivor":
 				_draw_event_signal_survivor(pos, alpha, triggered)
 			"dead_fire_route":
-				_draw_event_dead_camp(pos, alpha, triggered)
+				_draw_event_dead_signal(pos, alpha, triggered)
 			"supply_cache":
 				_draw_event_supply_cache(pos, alpha, triggered)
 			"barricade_repair":
@@ -3800,7 +3800,7 @@ func _draw_event_altar(pos: Vector2, alpha: float, triggered: bool) -> void:
 		draw_circle(pos + Vector2(cos(a), sin(a)) * 18.0, 4.0, Color(0.38, 0.40, 0.36, alpha))
 	var glow := 0.05 if triggered else 0.15 + 0.05 * sin(Time.get_ticks_msec() * 0.005)
 	draw_circle(pos, 12.0, Color(0.62, 0.50, 0.34, glow * alpha))
-	draw_string(font, pos + Vector2(-54, -31), "СТАРЫЙ АЛТАРЬ", HORIZONTAL_ALIGNMENT_CENTER, 108, 9, Color(0.82, 0.76, 0.63, 0.76 * alpha))
+	draw_string(font, pos + Vector2(-62, -31), "ОГНЕННАЯ МЕТКА", HORIZONTAL_ALIGNMENT_CENTER, 124, 9, Color(0.82, 0.76, 0.63, 0.76 * alpha))
 
 
 func _draw_event_black_tree(pos: Vector2, alpha: float, triggered: bool) -> void:
@@ -3823,6 +3823,17 @@ func _draw_event_dead_camp(pos: Vector2, alpha: float, triggered: bool) -> void:
 	draw_line(pos + Vector2(-12, 7), pos + Vector2(12, -7), Color(0.26, 0.18, 0.13, alpha), 4.0)
 	if not triggered:
 		draw_string(font, pos + Vector2(-62, -29), "ПОТУХШИЙ КОСТЁР", HORIZONTAL_ALIGNMENT_CENTER, 124, 9, Color(0.78, 0.73, 0.64, 0.80))
+
+
+func _draw_event_dead_signal(pos: Vector2, alpha: float, triggered: bool) -> void:
+	# A route-specific signal device, not another random dead campfire.
+	draw_line(pos + Vector2(0, 24), pos + Vector2(0, -18), Color(0.34, 0.27, 0.19, alpha), 6.0)
+	draw_line(pos + Vector2(-18, -4), pos + Vector2(18, -15), Color(0.41, 0.32, 0.22, alpha), 5.0)
+	draw_circle(pos + Vector2(14, -16), 7.0, Color(0.18, 0.14, 0.11, alpha))
+	var glow := 0.05 if triggered else 0.12 + 0.04 * sin(Time.get_ticks_msec() * 0.006)
+	draw_circle(pos + Vector2(14, -16), 13.0, Color(0.88, 0.48, 0.22, glow * alpha))
+	if not triggered:
+		draw_string(font, pos + Vector2(-64, -38), "УГАСШИЙ МАЯК", HORIZONTAL_ALIGNMENT_CENTER, 128, 9, Color(0.80, 0.74, 0.63, 0.82 * alpha))
 
 
 func _draw_event_tracks(pos: Vector2, alpha: float, triggered: bool) -> void:
@@ -5022,7 +5033,7 @@ func _run_choice_line(day: int) -> String:
 			"caravan": return "ДЕНЬ 1  •  Обоз найден"
 			"nest": return "ДЕНЬ 1  •  Логово уничтожено"
 			"signal": return "ДЕНЬ 1  •  Разведчик найден"
-			"dead_fire": return "ДЕНЬ 1  •  Жар сохранён"
+			"dead_fire": return "ДЕНЬ 1  •  Маяк разобран"
 		return "ДЕНЬ 1  •  путь не завершён"
 	if day == 2:
 		if day2_mission == "worker":
