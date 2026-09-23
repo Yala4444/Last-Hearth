@@ -18,9 +18,9 @@ func _init() -> void:
 	game.meta["attempts"] = 1
 	game._start_expedition()
 
-	# Five logs should still unlock the exploration decision.
+	# One teaching tree (three logs) should unlock the first exploration decision fast.
 	game.stage = game.Stage.DAY1_GATHER
-	game.camp_wood = 5
+	game.camp_wood = game.FIELD_FIRE_WOOD_COST
 	game.carried_wood = 0
 	game.stage_transition_lock = false
 	game._check_day_progress()
