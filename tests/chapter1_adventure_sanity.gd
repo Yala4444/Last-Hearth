@@ -16,6 +16,7 @@ func _init() -> void:
 	await process_frame
 
 	game.meta["attempts"] = 1
+	game.meta["forest_fires"] = 0
 	game._start_expedition()
 
 	# One teaching tree (three logs) should unlock the first exploration decision fast.
