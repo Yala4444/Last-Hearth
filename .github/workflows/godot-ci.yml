@@ -80,6 +80,13 @@ jobs:
           godot --headless --path . -s res://tests/chapter1_adventure_sanity.gd 2>&1 | tee /tmp/chapter1-adventure.log
           grep -q "CHAPTER1_ADVENTURE_SANITY_OK" /tmp/chapter1-adventure.log
 
+      - name: Hub settlement sanity test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . -s res://tests/hub_settlement_sanity.gd 2>&1 | tee /tmp/hub-settlement.log
+          grep -q "HUB_SETTLEMENT_SANITY_OK" /tmp/hub-settlement.log
+
       - name: Export Web build
         shell: bash
         run: |
