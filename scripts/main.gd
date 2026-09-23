@@ -859,6 +859,16 @@ func _start_expedition() -> void:
 		_story(_forest_chapter_intro(), 4.6)
 
 
+func _field_fire_wood_cost() -> int:
+	match expedition_sector:
+		0:
+			return FIELD_FIRE_WOOD_COST
+		1:
+			return 2
+		_:
+			return 1
+
+
 func _region_profile(region_id: String) -> Dictionary:
 	return REGION_PROFILES.get(region_id, {})
 
@@ -2385,9 +2395,9 @@ func _check_day_progress() -> void:
 	if stage_transition_lock:
 		return
 
-	if stage == Stage.DAY1_GATHER and camp_wood >= FIELD_FIRE_WOOD_COST:
+	if stage == Stage.DAY1_GATHER and camp_wood >= _field_fire_wood_cost():
 		stage_transition_lock = true
-		camp_wood -= FIELD_FIRE_WOOD_COST
+		camp_wood -= _field_fire_wood_cost()
 		hearth_level = 2
 		hearth_max_hp = 170.0
 		hearth_hp = hearth_max_hp
@@ -2518,23 +2528,49 @@ func _start_night(number: int) -> void:
 		_banner("СУМЕРКИ", 1.8)
 	elif number == 2:
 		stage = Stage.NIGHT2
-		active_night_sides = [0, 1]
-		for i in range(12):
-			night_queue.append("fast" if i % 3 == 2 else "basic")
-		night_queue.append("elite")
+		match expedition_sector:
+			0:
+				active_night_sides = [0, 1]
+				for i in range(12):
+					night_queue.append("fast" if i % 3 == 2 else "basic")
+				night_queue.append("elite")
+			1:
+				active_night_sides = [0, 2, 3]
+				for i in range(11):
+					night_queue.append("fast" if i % 2 == 1 else "basic")
+				night_queue.append("elite")
+			_:
+				active_night_sides = [0, 1, 2]
+				for i in range(12):
+					night_queue.append("fast" if i in [3, 6, 9] else "basic")
+				night_queue.append("elite")
+				night_queue.append("fast")
 		_banner("СУМЕРКИ", 1.8)
 		if survivors <= 1:
 			_story("ТЫ ОДИН\nВторая ночь рассчитана на помощь союзника. Без него выжить значительно труднее.", 4.0)
+		elif expedition_sector == 1:
+			_story("Старая дорога открыта с трёх сторон. Твари бегут вдоль неё быстрее, чем в чаще.", 3.0)
+		elif expedition_sector == 2:
+			_story("Сердце леса отвечает со всех ближайших троп. Здесь уже знают, зачем ты пришёл.", 3.0)
 		else:
 			_story("Две стороны леса ожили одновременно. Союзников рядом: %d." % (survivors - 1), 3.0)
 	else:
 		stage = Stage.NIGHT3
-		active_night_sides = [0, 1, 3]
-		for i in range(14):
-			if i % 4 == 2:
-				night_queue.append("fast")
-			else:
-				night_queue.append("basic")
+		match expedition_sector:
+			0:
+				active_night_sides = [2, 3]
+				for i in range(10):
+					night_queue.append("fast" if i in [5, 8] else "basic")
+			1:
+				active_night_sides = [0, 1, 3]
+				for i in range(12):
+					night_queue.append("fast" if i % 3 == 1 else "basic")
+				night_queue.append("elite")
+			_:
+				active_night_sides = [0, 1, 2, 3]
+				for i in range(14):
+					night_queue.append("fast" if i % 4 == 2 else "basic")
+				night_queue.append("elite")
 		night_queue.append(_forest_final_enemy_kind())
 		_banner("СУМЕРКИ", 1.8)
 		match expedition_sector:
@@ -5037,8 +5073,9 @@ func _draw_stockpile() -> void:
 
 func _draw_world_progress() -> void:
 	if stage == Stage.DAY1_GATHER:
-		var delivered := mini(camp_wood, FIELD_FIRE_WOOD_COST)
-		draw_string(font, HEARTH_POS + Vector2(-82, -78), "ТОПЛИВО %d/%d" % [delivered, FIELD_FIRE_WOOD_COST], HORIZONTAL_ALIGNMENT_CENTER, 164, 12, Color("#f1d79f"))
+		var opening_cost := _field_fire_wood_cost()
+		var delivered := mini(camp_wood, opening_cost)
+		draw_string(font, HEARTH_POS + Vector2(-82, -78), "ТОПЛИВО %d/%d" % [delivered, opening_cost], HORIZONTAL_ALIGNMENT_CENTER, 164, 12, Color("#f1d79f"))
 	elif stage == Stage.DAY2_BUILD:
 		var pos := _workshop_pos()
 		var wood_progress := clampi(camp_wood - current_stage_wood_start, 0, WORKSHOP_WOOD_COST)
