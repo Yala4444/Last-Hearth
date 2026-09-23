@@ -3434,11 +3434,11 @@ func _draw_expedition() -> void:
 	if stage == Stage.DAY2_BUILD and area == Area.CAMP and not workshop_built:
 		_draw_workshop_construction()
 	if stage == Stage.WORKSHOP_CHOICE:
-		_draw_choice_shrine(left_choice_pos, "ОРУЖИЕ | +28%", Color("#a85949"))
-		_draw_choice_shrine(right_choice_pos, "ПОХОДНЫЙ НАБОР", Color("#567e58"))
+		_draw_choice_shrine(left_choice_pos, "ОРУЖИЕ | УРОН +28%", Color("#a85949"))
+		_draw_choice_shrine(right_choice_pos, "ПОХОДНЫЙ | СЛОТ +1 • ЗДР +18", Color("#567e58"))
 	if stage == Stage.EXPEDITION_CHOICE:
-		_draw_choice_shrine(left_choice_pos, "ДВА БОЙЦА", Color("#6688a0"))
-		_draw_choice_shrine(right_choice_pos, "ОГНЕННЫЕ СТРЕЛЫ", Color("#b75e45"))
+		_draw_choice_shrine(left_choice_pos, "ДВА БОЙЦА | СОЮЗНИКИ +2", Color("#6688a0"))
+		_draw_choice_shrine(right_choice_pos, "ОГНЕННАЯ МЕТКА | УРОН +60%", Color("#b75e45"))
 
 	if area == Area.CAMP and workshop_built:
 		_draw_workshop()
@@ -4498,7 +4498,13 @@ func _draw_choice_shrine(pos: Vector2, label: String, color: Color) -> void:
 	draw_line(pos + Vector2(33, 24), pos + Vector2(33, -25), Color("#7b684a"), 4.0)
 	draw_line(pos + Vector2(-35, -22), pos + Vector2(35, -22), Color("#9d8052"), 4.0)
 	draw_arc(pos, 42.0 * pulse, 0.0, TAU, 36, Color(color.r, color.g, color.b, 0.42), 2.0)
-	draw_string(font, pos + Vector2(-86, 54), label, HORIZONTAL_ALIGNMENT_CENTER, 172, 11, Color("#f0e4cf"))
+
+	var parts := label.split("|", false, 1)
+	var title := String(parts[0]).strip_edges()
+	draw_string(font, pos + Vector2(-86, 52), title, HORIZONTAL_ALIGNMENT_CENTER, 172, 10, Color("#f0e4cf"))
+	if parts.size() > 1:
+		var effect := String(parts[1]).strip_edges()
+		draw_string(font, pos + Vector2(-86, 67), effect, HORIZONTAL_ALIGNMENT_CENTER, 172, 8, Color("#d3bd8f"))
 
 
 func _draw_core(pos: Vector2) -> void:
