@@ -48,7 +48,29 @@ func _init() -> void:
 		fail("Second sector final choice is not varied")
 		return
 
+	# The safer branch in sector two must visibly provide a companion; the nest is the solo damage gamble.
+	game.stage = game.Stage.DAY1_RESCUE
+	game.area = game.Area.CAMP
+	game.day1_route = ""
+	game.day1_left_offer = "caravan"
+	game.day1_right_offer = "nest"
+	game._enter_day1_route("caravan")
+	for i in range(game.events.size()):
+		if String(game.events[i].get("kind", "")) == "wagon":
+			var event: Dictionary = game.events[i]
+			event["triggered"] = true
+			game.events[i] = event
+	game.enemies.clear()
+	var survivors_before := int(game.survivors)
+	game._update_day1_route()
+	if int(game.survivors) != survivors_before + 1:
+		fail("Caravan route did not provide the advertised ally")
+		return
+
 	# Spatial continuity still applies whichever side the randomized offer lands on.
+	game._start_expedition()
+	game.meta["forest_fires"] = 1
+	game._configure_expedition_sector()
 	var chosen_left: String = String(game.day1_left_offer)
 	game.stage = game.Stage.DAY1_RESCUE
 	game.area = game.Area.CAMP
