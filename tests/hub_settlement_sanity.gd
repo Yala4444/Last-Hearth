@@ -15,26 +15,33 @@ func _init() -> void:
 	root.add_child(game)
 	await process_frame
 
+	# v0.16: rescued people do not magically create residential plots.
 	game.meta["forest_fires"] = 1
 	game.meta["rescued_hunter"] = true
 	game.meta["rescued_worker"] = true
-	game.meta["forester_home_built"] = false
-	game.meta["hunter_home_built"] = false
+	game.meta["hunter_fate"] = "keeper_fire_1"
+	game.meta["master_relationship_state"] = "waiting_forest"
 	game.meta["worker_home_built"] = false
-	for key in ["forester_home_wood", "forester_home_stone", "hunter_home_wood", "hunter_home_stone", "worker_home_wood", "worker_home_stone"]:
-		game.meta[key] = 0
-
+	game.meta["worker_home_wood"] = 0
+	game.meta["worker_home_stone"] = 0
 	game._enter_hub()
 	if game.hub_area != "center":
 		fail("Hub did not start in the settlement center")
 		return
-
-	var sites = game._hub_build_sites()
-	if sites.size() != 3:
-		fail("Expected forester, hunter and worker construction sites after the first fire")
+	if game._hub_build_sites().size() != 0:
+		fail("Hub exposed a residential plot before anyone chose to live there")
 		return
 
-	# The settlement must have continuous side areas rather than menu-only resource buttons.
+	# After the forest chapter is complete, the Master can choose the Last Hearth.
+	game.meta["forest_fires"] = 3
+	game.meta["master_relationship_state"] = "joining_home"
+	var sites = game._hub_build_sites()
+	if sites.size() != 1 or String(sites[0]["id"]) != "worker_home":
+		fail("Master arrival did not unlock exactly one real home construction")
+		return
+	var master_site: Dictionary = sites[0]
+
+	# The settlement still has continuous side areas for physical construction resources.
 	game.hero_pos = game.HUB_GROVE_GATE
 	game.hero_target = game.hero_pos
 	game._process(0.016)
@@ -45,10 +52,9 @@ func _init() -> void:
 		fail("Entering the grove from the left gate did not spawn at the right edge")
 		return
 	if game.resource_nodes.size() < 4 or not bool(game._gathering_enabled()):
-		fail("The grove is not a playable gathering area")
+		fail("The grove is not a playable gathering area when a real construction is pending")
 		return
 
-	# Entering beside the return gate must NOT bounce back on the next frame.
 	game._process(0.016)
 	if game.hub_area != "grove":
 		fail("The grove immediately bounced back to the Last Hearth")
@@ -70,31 +76,22 @@ func _init() -> void:
 	if game.hub_area != "center":
 		fail("The grove did not return to the settlement center")
 		return
-	if float(game.hero_pos.x) > 120.0:
-		fail("Returning from the grove did not preserve spatial continuity")
-		return
 
-	# Construction is physical: carried materials must be delivered to the scaffold.
-	var forester_site: Dictionary = {}
-	for site in game._hub_build_sites():
-		if String(site["id"]) == "forester_home":
-			forester_site = site
-			break
-	if forester_site.is_empty():
-		fail("Forester construction site missing")
-		return
-
-	game.hero_pos = forester_site["pos"]
-	game.carried_wood = int(forester_site["wood_cost"])
-	game.carried_stone = int(forester_site["stone_cost"])
-	for i in range(8):
+	# Construction is physical and completing the home changes the Master into a resident.
+	game.hero_pos = master_site["pos"]
+	game.carried_wood = int(master_site["wood_cost"])
+	game.carried_stone = int(master_site["stone_cost"])
+	for i in range(12):
 		game.unload_cd = 0.0
 		game._update_hub_construction(0.2)
-	if not bool(game.meta.get("forester_home_built", false)):
-		fail("Delivering the required materials did not finish the forester home")
+	if not bool(game.meta.get("worker_home_built", false)):
+		fail("Delivering the required materials did not finish the Master home")
+		return
+	if String(game.meta.get("master_relationship_state", "")) != "resident":
+		fail("Building the Master home did not convert him into a permanent resident")
 		return
 
-	# The opposite side of the hub must work the same way for stone.
+	# The opposite side still preserves spatial continuity.
 	game.hero_pos = game.HUB_QUARRY_GATE
 	game._update_hub_area_transitions()
 	if game.hub_area != "quarry":
