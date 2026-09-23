@@ -92,10 +92,10 @@ func _init() -> void:
 		fail("First return still opens a blocking help overlay")
 		return
 	if not bool(game.meta.get("hub_intro_seen", false)):
-		fail("Hub construction intro was not marked as seen")
+		fail("Hub return intro was not marked as seen")
 		return
-	if game.story_hint.find("Спасённым людям нужен дом") < 0:
-		fail("First return did not explain why hub construction matters")
+	if game.story_hint.find("ОГОНЬ ОСТАЛСЯ В ЛЕСУ") < 0:
+		fail("First return did not explain that restored fires persist in the region")
 		return
 
 	print("V015_CLARITY_SANITY_OK")
