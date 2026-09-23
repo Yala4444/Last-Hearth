@@ -87,7 +87,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 13,
+	"build_version": 14,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -180,6 +180,7 @@ var help_open := false
 var hub_area := "center"
 var hub_area_return_gate := Vector2.ZERO
 var hub_center_return_pos := Vector2.ZERO
+var hub_return_armed := false
 var dawn_timer := 0.0
 var dawn_pending := 0
 var boss_delay_timer := 0.0
@@ -317,7 +318,7 @@ func _load_meta() -> void:
 	meta["worker_home_built"] = bool(meta.get("worker_home_built", false))
 	for key: String in ["forester_home_wood", "forester_home_stone", "hunter_home_wood", "hunter_home_stone", "worker_home_wood", "worker_home_stone"]:
 		meta[key] = int(meta.get(key, 0))
-	meta["build_version"] = 13
+	meta["build_version"] = 14
 
 
 func _save_meta() -> void:
@@ -391,14 +392,13 @@ func _configure_expedition_sector() -> void:
 
 func _day1_route_label(route_name: String) -> String:
 	match route_name:
-		"hunter": return "КРИК О ПОМОЩИ"
-		"sawmill": return "ДЫМ ЛЕСОПИЛКИ"
-		"caravan": return "РАЗБИТЫЙ ОБОЗ"
-		"nest": return "ШУМ В ЧАЩЕ"
-		"signal": return "СИГНАЛ С ХОЛМА"
-		"dead_fire": return "ПОТУХШИЙ ОГОНЬ"
+		"hunter": return "ОХОТНИК • СОЮЗНИК"
+		"sawmill": return "ЛЕСОПИЛКА • ЗАЩИТА"
+		"caravan": return "РАЗБИТЫЙ ОБОЗ • СОЮЗНИК"
+		"nest": return "ЛОГОВО • УРОН"
+		"signal": return "РАЗВЕДЧИК • СОЮЗНИК"
+		"dead_fire": return "СТАРЫЙ ОГОНЬ • ОЧАГ"
 	return "НЕИЗВЕСТНЫЙ СЛЕД"
-
 
 func _day1_route_title(route_name: String) -> String:
 	match route_name:
@@ -413,9 +413,9 @@ func _day1_route_title(route_name: String) -> String:
 
 func _day2_mission_label() -> String:
 	match day2_mission:
-		"worker": return "СЛЕД К РУИНАМ"
-		"storehouse": return "СТАРЫЙ СКЛАД"
-		_: return "СИГНАЛ РАЗВЕДЧИКА"
+		"worker": return "МАСТЕР • СОЮЗНИК"
+		"storehouse": return "СТАРЫЙ СКЛАД • СНАРЯЖ."
+		_: return "РАЗВЕДЧИК • СОЮЗНИК"
 
 
 func _day2_mission_title() -> String:
@@ -427,12 +427,12 @@ func _day2_mission_title() -> String:
 
 func _day3_route_label(route_name: String) -> String:
 	match route_name:
-		"watch": return "СЛОМАННЫЙ ДОЗОР"
-		"altar": return "ДРЕВНИЙ АЛТАРЬ"
-		"barricade": return "ЗАВАЛ У МОСТА"
-		"shrine": return "КАМЕННЫЙ КРУГ"
-		"beacon": return "СИГНАЛЬНЫЙ МАЯК"
-		"cache": return "ТАЙНИК СТРАЖИ"
+		"watch": return "ДОЗОР • АВТООГОНЬ"
+		"altar": return "АЛТАРЬ • УРОН"
+		"barricade": return "БАРРИКАДА • ПРОЧНОСТЬ"
+		"shrine": return "КРУГ • УРОН + ЗДОРОВЬЕ"
+		"beacon": return "МАЯК • АВТООГОНЬ"
+		"cache": return "ТАЙНИК • ЗДОРОВЬЕ"
 	return "НЕИЗВЕСТНЫЙ ПУТЬ"
 
 
@@ -960,11 +960,13 @@ func _update_day1_route() -> void:
 	if day1_route == "sawmill":
 		if sawmill_claimed and enemies.is_empty():
 			day1_route_complete = true
+			var old_slots := carry_limit
+			var old_hearth_hp := hearth_max_hp
 			carry_limit += 1
 			hearth_max_hp += 38.0
 			hearth_hp = hearth_max_hp
 			run_embers += 1
-			_story("ЛЕСОПИЛКА ОЧИЩЕНА\nДоски укрепят огонь. Снаряжение +1 слот, прочность выше.", 3.6)
+			_story("ЛЕСОПИЛКА ОЧИЩЕНА\nСлоты %d → %d • прочность огня %d → %d. Союзника здесь нет." % [old_slots, carry_limit, roundi(old_hearth_hp), roundi(hearth_max_hp)], 4.2)
 		return
 
 	var event_kind := _day1_route_event_kind(day1_route)
@@ -973,23 +975,27 @@ func _update_day1_route() -> void:
 
 	match day1_route:
 		"caravan":
+			var old_slots := carry_limit
 			carry_limit += 1
 			hearth_max_hp += 20.0
 			hearth_hp = hearth_max_hp
+			_add_survivor("guard", Vector2(240.0, 220.0))
 			run_embers += 1
-			_story("ОБОЗ ОБЫСКАН\nНашлись ремни, доски и сухое топливо. Нести можно больше.", 3.4)
+			_story("ВОЗНИЦА СПАСЁН\nСоюзник +1 • слоты %d → %d • прочность огня +20. Он идёт с тобой." % [old_slots, carry_limit], 4.1)
 		"nest":
+			var old_damage := hero_damage
 			hero_damage *= 1.18
 			run_embers += 2
-			_story("ЛОГОВО УНИЧТОЖЕНО\nПод корнями нашлись обугленные наконечники. Оружие стало опаснее.", 3.4)
+			_story("ЛОГОВО УНИЧТОЖЕНО\nУрон %d → %d (+18%%). Союзника ты не нашёл — поздние ночи будут опаснее." % [roundi(old_damage), roundi(hero_damage)], 4.2)
 		"signal":
 			run_embers += 1
 			_story("РАЗВЕДЧИК СПАСЁН\n«Я видел ещё один огонь глубже в лесу. Покажу дорогу.»", 3.4)
 		"dead_fire":
+			var old_hearth_hp := hearth_max_hp
 			hearth_max_hp += 32.0
 			hearth_hp = hearth_max_hp
 			run_embers += 1
-			_story("ЖАР СОХРАНЁН\nВ золе ещё осталась сила. Полевой огонь выдержит больше.", 3.4)
+			_story("ЖАР СОХРАНЁН\nПрочность огня %d → %d. Союзника здесь нет." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
 	day1_route_complete = true
 
 func _update_area_transitions() -> void:
@@ -1104,11 +1110,14 @@ func _update_worker_route() -> void:
 		if not _route_event_triggered("supply_cache"):
 			return
 		worker_route_complete = true
+		var old_slots := carry_limit
+		var old_hp := hero_max_hp
 		carry_limit += 1
 		hero_max_hp += 24.0
 		hero_hp = hero_max_hp
 		run_embers += 2
-		_story("СКЛАД РАЗОБРАН\nНашлись ремни, защита и инструменты. Снаряжение стало надёжнее.", 3.6)
+		var solo_note := " Ты всё ещё один — вторая ночь будет очень тяжёлой." if survivors <= 1 else ""
+		_story("СКЛАД РАЗОБРАН\nСлоты %d → %d • здоровье %d → %d.%s" % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp), solo_note], 4.5)
 	else:
 		survivor_two_found = true
 		_add_survivor("guard", survivor_two_pos)
@@ -1205,23 +1214,27 @@ func _update_day3_route() -> void:
 		_story("ДОЗОР ПОДНЯТ\nБашня снова смотрит в темноту. Ночью она будет стрелять сама.", 3.5)
 	elif day3_route == "altar" and final_altar_claimed and enemies.is_empty():
 		expedition_choice = "damage"
+		var old_damage := hero_damage
 		hero_damage *= 1.55
 		day3_route_complete = true
 		run_embers += 1
-		_story("ОГОНЬ ПРИНЯТ\nСтрелы вспыхивают от прикосновения. Урон значительно выше.", 3.5)
+		_story("ОГОНЬ ПРИНЯТ\nУрон %d → %d (+55%%). Огненная метка усилила каждый выстрел." % [roundi(old_damage), roundi(hero_damage)], 3.9)
 	elif day3_route == "barricade" and watch_repair_started and enemies.is_empty():
+		var old_hearth_hp := hearth_max_hp
 		hearth_max_hp += 85.0
 		hearth_hp = hearth_max_hp
 		day3_route_complete = true
 		run_embers += 1
-		_story("ПРОХОД УКРЕПЛЁН\nЧасть тварей упрётся в завал. Огонь выдержит намного больше.", 3.5)
+		_story("ПРОХОД УКРЕПЛЁН\nПрочность огня %d → %d. Это чисто защитная подготовка." % [roundi(old_hearth_hp), roundi(hearth_max_hp)], 3.8)
 	elif day3_route == "shrine" and final_altar_claimed and enemies.is_empty():
+		var old_damage := hero_damage
+		var old_hp := hero_max_hp
 		hero_damage *= 1.28
 		hero_max_hp += 24.0
 		hero_hp = hero_max_hp
 		day3_route_complete = true
 		run_embers += 1
-		_story("ЗНАК ПРИНЯТ\nОружие стало сильнее, а старый жар защищает тебя от ударов.", 3.5)
+		_story("ЗНАК ПРИНЯТ\nУрон %d → %d • здоровье %d → %d." % [roundi(old_damage), roundi(hero_damage), roundi(old_hp), roundi(hero_max_hp)], 3.8)
 	elif day3_route == "beacon" and watch_repair_started and enemies.is_empty():
 		tower_built = true
 		hero_fire_rate *= 0.90
@@ -1229,12 +1242,14 @@ func _update_day3_route() -> void:
 		run_embers += 2
 		_story("МАЯК ГОРИТ\nСвет видит дальше нас. Последнюю волну встретим подготовленными.", 3.5)
 	elif day3_route == "cache" and _route_event_triggered("supply_cache") and enemies.is_empty():
+		var old_slots := carry_limit
+		var old_hp := hero_max_hp
 		carry_limit += 1
 		hero_max_hp += 42.0
 		hero_hp = hero_max_hp
 		day3_route_complete = true
 		run_embers += 1
-		_story("ТАЙНИК РАЗОБРАН\nЩит и ремни делают последний бой безопаснее.", 3.5)
+		_story("ТАЙНИК РАЗОБРАН\nСлоты %d → %d • здоровье %d → %d." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 3.7)
 
 
 func _return_from_day3_route() -> void:
@@ -1634,6 +1649,7 @@ func _enter_hub_area(next_area: String, from_gate: Vector2) -> void:
 	if hub_area != "center":
 		return
 	hub_area = next_area
+	hub_return_armed = false
 	if from_gate.x < VIEW_SIZE.x * 0.5:
 		hero_pos = Vector2(VIEW_SIZE.x - 48.0, from_gate.y)
 		hub_area_return_gate = Vector2(VIEW_SIZE.x - 38.0, from_gate.y)
@@ -1650,6 +1666,7 @@ func _enter_hub_area(next_area: String, from_gate: Vector2) -> void:
 
 func _return_to_hub_center() -> void:
 	hub_area = "center"
+	hub_return_armed = false
 	resource_nodes.clear()
 	resource_pickups.clear()
 	resource_flights.clear()
@@ -1669,7 +1686,13 @@ func _update_hub_area_transitions() -> void:
 		elif hero_pos.distance_to(HUB_QUARRY_GATE) < 48.0:
 			_enter_hub_area("quarry", HUB_QUARRY_GATE)
 	else:
-		if hero_pos.distance_to(hub_area_return_gate) < 48.0:
+		var gate_distance := hero_pos.distance_to(hub_area_return_gate)
+		if not hub_return_armed:
+			# The player must actually walk into the side area before the exit can fire.
+			# This prevents the old enter->instant return loop on the next frame.
+			if gate_distance > 96.0:
+				hub_return_armed = true
+		elif gate_distance < 48.0:
 			_return_to_hub_center()
 
 
@@ -1709,7 +1732,7 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["carry_level"] = level + 1
 			_save_meta()
-			_hub_feedback("СНАРЯЖЕНИЕ +1 СЛОТ", HUB_CARRY_POS, 2.0)
+			_hub_feedback("РЮКЗАК: СЛОТЫ %d → %d" % [5 + level, 6 + level], HUB_CARRY_POS, 2.2)
 		else:
 			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_CARRY_POS, 1.8)
 
@@ -1721,7 +1744,7 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["damage_level"] = level + 1
 			_save_meta()
-			_hub_feedback("УРОН +10%", HUB_DAMAGE_POS, 2.0)
+			_hub_feedback("УРОН В ВЫЛАЗКАХ: +%d%% → +%d%%" % [level * 10, (level + 1) * 10], HUB_DAMAGE_POS, 2.2)
 		else:
 			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_DAMAGE_POS, 1.8)
 
@@ -1737,7 +1760,7 @@ func _update_hub_interactions() -> void:
 			_save_meta()
 			hearth_pulse = 1.0
 			camera_shake = 2.0
-			_hub_feedback("СВЕТ И ПРОЧНОСТЬ +", HUB_HEARTH_UPGRADE_POS, 2.2)
+			_hub_feedback("ОЧАГ: +18 ПРОЧНОСТИ • +8 СВЕТА", HUB_HEARTH_UPGRADE_POS, 2.3)
 		else:
 			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_HEARTH_UPGRADE_POS, 1.8)
 
@@ -2069,18 +2092,21 @@ func _check_day_progress() -> void:
 func _update_workshop_choice() -> void:
 	if hero_pos.distance_to(left_choice_pos) < 48.0:
 		workshop_choice = "armory"
+		var old_damage := hero_damage
 		hero_damage *= 1.28
-		_banner("ОРУЖЕЙНАЯ | урон +28%", 2.0)
-		_story("Рабочий укрепил оружие. Ночью можно встретить врага дальше от огня.", 2.8)
+		_banner("ОРУЖЕЙНЫЙ СТОЛ", 2.0)
+		_story("ОРУЖЕЙНЫЙ СТОЛ\nУрон %d → %d (+28%%). Каждый твой выстрел теперь сильнее." % [roundi(old_damage), roundi(hero_damage)], 3.8)
 		_start_night(2)
 	elif hero_pos.distance_to(right_choice_pos) < 48.0:
 		workshop_choice = "gear"
+		var old_slots := carry_limit
+		var old_hp := hero_max_hp
 		carry_limit += 1
 		gather_interval = 0.34
 		hero_max_hp += 18.0
 		hero_hp = hero_max_hp
-		_banner("ПОХОДНЫЙ НАБОР | +1 СЛОТ", 2.0)
-		_story("Рабочий собрал крепкий рюкзак и защиту. Больше снаряжения и выше запас здоровья.", 3.0)
+		_banner("ПОХОДНЫЙ НАБОР", 2.0)
+		_story("ПОХОДНЫЙ НАБОР\nСлоты %d → %d • здоровье %d → %d. Добыча ресурсов стала быстрее." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 4.2)
 		_start_night(2)
 
 
@@ -2951,8 +2977,8 @@ func _draw_hub() -> void:
 	if fires >= 3:
 		_draw_humanoid(Vector2(178, 676), Color("#758597"), float(resident_index), "guard", 1.0)
 
-	_draw_route_gate(HUB_GROVE_GATE, "РОЩА | ДЕРЕВО", Color("#7f9b71"), true)
-	_draw_route_gate(HUB_QUARRY_GATE, "СКЛОН | КАМЕНЬ", Color("#8c918d"), false)
+	_draw_hub_area_gate(HUB_GROVE_GATE, "РОЩА", "древесина", true)
+	_draw_hub_area_gate(HUB_QUARRY_GATE, "СКЛОН", "камень", false)
 	_draw_resource_flights()
 	_draw_hero(hero_pos)
 
@@ -2987,19 +3013,46 @@ func _draw_hub_construction_site(site: Dictionary) -> void:
 	var wood_cost := int(site["wood_cost"])
 	var stone_cost := int(site["stone_cost"])
 	var progress := clampf((float(wood) / maxf(1.0, float(wood_cost)) + float(stone) / maxf(1.0, float(stone_cost))) * 0.5, 0.0, 1.0)
-	_draw_ellipse_custom(pos + Vector2(0, 25), Vector2(38, 11), Color(0.01, 0.02, 0.015, 0.26))
-	draw_line(pos + Vector2(-30, 22), pos + Vector2(-26, -12), Color("#624d34"), 5.0)
-	draw_line(pos + Vector2(30, 22), pos + Vector2(26, -12), Color("#624d34"), 5.0)
-	draw_line(pos + Vector2(-27, -10), pos + Vector2(27, -10), Color("#775a38"), 5.0)
-	if progress > 0.28:
-		draw_line(pos + Vector2(-26, 8), pos + Vector2(26, 8), Color("#80613d"), 5.0)
-	if progress > 0.55:
-		var roof := PackedVector2Array([pos + Vector2(-35, -10), pos + Vector2(0, -35), pos + Vector2(35, -10)])
-		draw_polyline(roof, Color("#8b6a43"), 5.0)
-	if progress > 0.82:
-		draw_rect(Rect2(pos + Vector2(-22, -7), Vector2(44, 27)), Color(0.38, 0.30, 0.21, 0.35))
-	draw_string(font, pos + Vector2(-74, 48), String(site["label"]), HORIZONTAL_ALIGNMENT_CENTER, 148, 9, Color("#d9ccb4"))
-	draw_string(font, pos + Vector2(-82, 64), "дерево %d/%d | камень %d/%d" % [wood, wood_cost, stone, stone_cost], HORIZONTAL_ALIGNMENT_CENTER, 164, 8, Color("#bca982"))
+
+	# A real footprint first, then the house grows on top of it.
+	_draw_ellipse_custom(pos + Vector2(0, 26), Vector2(38, 10), Color(0.01, 0.02, 0.015, 0.24))
+	for corner: Vector2 in [Vector2(-25, 17), Vector2(25, 17), Vector2(-25, -10), Vector2(25, -10)]:
+		draw_circle(pos + corner, 4.5, Color("#69665b"))
+	draw_rect(Rect2(pos + Vector2(-25, 13), Vector2(50, 7)), Color(0.32, 0.25, 0.17, 0.42))
+	if progress > 0.10:
+		draw_line(pos + Vector2(-23, 15), pos + Vector2(-23, -12), Color("#76563a"), 6.0)
+	if progress > 0.26:
+		draw_line(pos + Vector2(23, 15), pos + Vector2(23, -12), Color("#76563a"), 6.0)
+	if progress > 0.42:
+		draw_line(pos + Vector2(-24, -10), pos + Vector2(24, -10), Color("#8a6844"), 6.0)
+	if progress > 0.58:
+		draw_rect(Rect2(pos + Vector2(-20, -7), Vector2(40, 25)), Color("#5d4e3b"))
+	if progress > 0.76:
+		var roof := PackedVector2Array([pos + Vector2(-31, -8), pos + Vector2(0, -31), pos + Vector2(31, -8)])
+		draw_colored_polygon(roof, Color("#7b6243"))
+
+	var label := String(site["label"])
+	var plate := Rect2(pos + Vector2(-57, 38), Vector2(114, 18))
+	draw_rect(plate, Color(0.025, 0.04, 0.032, 0.88))
+	draw_string(font, plate.position + Vector2(4, 13), label, HORIZONTAL_ALIGNMENT_CENTER, 106, 8, Color("#e5d8c0"))
+
+	# Material numbers are contextual, not three permanent lines fighting each other.
+	if hero_pos.distance_to(pos) < 96.0:
+		var detail := Rect2(pos + Vector2(-67, 58), Vector2(134, 18))
+		draw_rect(detail, Color(0.025, 0.04, 0.032, 0.90))
+		draw_string(font, detail.position + Vector2(3, 13), "дер %d/%d  •  кам %d/%d" % [wood, wood_cost, stone, stone_cost], HORIZONTAL_ALIGNMENT_CENTER, 128, 8, Color("#c8b58f"))
+
+func _draw_hub_area_gate(pos: Vector2, title: String, subtitle: String, points_left: bool) -> void:
+	var left_side := points_left
+	var box_x := 8.0 if left_side else VIEW_SIZE.x - 118.0
+	var box := Rect2(Vector2(box_x, pos.y - 28.0), Vector2(110, 42))
+	draw_rect(box, Color(0.02, 0.035, 0.028, 0.88))
+	var dir := Vector2(-1, 0) if left_side else Vector2(1, 0)
+	var tip := Vector2(23.0 if left_side else VIEW_SIZE.x - 23.0, pos.y + 2.0)
+	var side := Vector2(0, 7)
+	draw_colored_polygon(PackedVector2Array([tip + dir * 7.0, tip - dir * 5.0 + side, tip - dir * 5.0 - side]), Color("#d8c08b"))
+	draw_string(font, box.position + Vector2(6, 15), title, HORIZONTAL_ALIGNMENT_CENTER, 98, 9, Color("#ead9b6"))
+	draw_string(font, box.position + Vector2(6, 31), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 98, 8, Color("#95a799"))
 
 
 func _draw_hub_resource_area() -> void:
@@ -3031,12 +3084,21 @@ func _draw_hub_resource_area() -> void:
 
 
 func _draw_hub_site(pos: Vector2, label: String) -> void:
-	_draw_ellipse_custom(pos + Vector2(0, 24), Vector2(34, 10), Color(0.01, 0.02, 0.015, 0.22))
-	draw_line(pos + Vector2(-26, 18), pos + Vector2(-22, -12), Color("#4f4435"), 4.0)
-	draw_line(pos + Vector2(26, 18), pos + Vector2(22, -12), Color("#4f4435"), 4.0)
-	draw_line(pos + Vector2(-23, -11), pos + Vector2(23, -11), Color("#65523a"), 4.0)
-	draw_string(font, pos + Vector2(-72, 47), label, HORIZONTAL_ALIGNMENT_CENTER, 144, 9, Color("#9e9b8d"))
-
+	_draw_ellipse_custom(pos + Vector2(0, 22), Vector2(32, 9), Color(0.01, 0.02, 0.015, 0.22))
+	if label == "СНАРЯЖЕНИЕ":
+		draw_rect(Rect2(pos + Vector2(-20, -8), Vector2(40, 27)), Color("#4d4435"))
+		draw_line(pos + Vector2(-12, -8), pos + Vector2(-12, 18), Color("#8d6c45"), 4.0)
+		draw_line(pos + Vector2(12, -8), pos + Vector2(12, 18), Color("#8d6c45"), 4.0)
+		draw_line(pos + Vector2(-15, 1), pos + Vector2(15, 1), Color("#aa7a45"), 4.0)
+	elif label == "КУЗНИЦА":
+		draw_line(pos + Vector2(-24, 14), pos + Vector2(23, 14), Color("#5f5547"), 7.0)
+		draw_rect(Rect2(pos + Vector2(-8, -7), Vector2(26, 12)), Color("#777873"))
+		draw_line(pos + Vector2(-8, 5), pos + Vector2(-17, 18), Color("#55534e"), 5.0)
+	else:
+		draw_line(pos + Vector2(-18, 18), pos + Vector2(-12, -15), Color("#514534"), 5.0)
+		draw_line(pos + Vector2(18, 18), pos + Vector2(12, -15), Color("#514534"), 5.0)
+		draw_rect(Rect2(pos + Vector2(-24, -18), Vector2(48, 16)), Color("#65523a"))
+	draw_string(font, pos + Vector2(-64, 48), label, HORIZONTAL_ALIGNMENT_CENTER, 128, 9, Color("#bdb7a5"))
 
 func _draw_book_stand(pos: Vector2) -> void:
 	draw_rect(Rect2(pos + Vector2(-20, -10), Vector2(40, 24)), Color("#554633"))
@@ -4400,11 +4462,13 @@ func _draw_hud() -> void:
 			_draw_icon_cargo(Vector2(404, 52), Color("#b6a57f"))
 			draw_string(font, Vector2(416, 56), "%d/%d" % [carried_wood + carried_stone, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 48, 10, Color("#d9c39a"))
 		else:
-			var hub_hint := "Слева — древесина. Справа — камень. Неси материалы к стройкам."
+			var hub_hint := "Роща слева • камень справа • материалы — к стройкам"
 			if not _hub_has_pending_construction():
-				hub_hint = "Поселение обустроено. Карта — новая вылазка."
-			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 408, 9, Color("#98a89c"))
-		draw_string(font, Vector2(426, 55), "v0.13", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+				hub_hint = "Поселение обустроено • карта — новая вылазка"
+			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
+			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
+			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
+		draw_string(font, Vector2(426, 55), "v0.14", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
@@ -4421,13 +4485,18 @@ func _draw_hud() -> void:
 
 	draw_string(font, Vector2(14, 56), short_goal, HORIZONTAL_ALIGNMENT_LEFT, 252, 11, Color("#aebcaf"))
 
-	_draw_icon_log(Vector2(286, 52), Color("#9f6b3c"))
-	draw_string(font, Vector2(298, 56), "%d" % camp_wood, HORIZONTAL_ALIGNMENT_LEFT, 30, 11, Color("#d6c19a"))
-	_draw_icon_stone(Vector2(342, 52), Color("#8f9996"))
-	draw_string(font, Vector2(354, 56), "%d" % camp_stone, HORIZONTAL_ALIGNMENT_LEFT, 30, 11, Color("#ccd0ca"))
-	_draw_icon_cargo(Vector2(403, 52), Color("#b6a57f"))
-	var cargo := carried_wood + carried_stone
-	draw_string(font, Vector2(415, 56), "%d/%d" % [cargo, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 52, 11, Color("#d9c39a"))
+	var show_materials := stage in [Stage.DAY1_GATHER, Stage.DAY2_BUILD] or carried_wood + carried_stone > 0
+	if show_materials:
+		_draw_icon_log(Vector2(286, 52), Color("#9f6b3c"))
+		draw_string(font, Vector2(298, 56), "%d" % camp_wood, HORIZONTAL_ALIGNMENT_LEFT, 30, 11, Color("#d6c19a"))
+		_draw_icon_stone(Vector2(342, 52), Color("#8f9996"))
+		draw_string(font, Vector2(354, 56), "%d" % camp_stone, HORIZONTAL_ALIGNMENT_LEFT, 30, 11, Color("#ccd0ca"))
+		_draw_icon_cargo(Vector2(403, 52), Color("#b6a57f"))
+		var cargo := carried_wood + carried_stone
+		draw_string(font, Vector2(415, 56), "%d/%d" % [cargo, carry_limit], HORIZONTAL_ALIGNMENT_LEFT, 52, 11, Color("#d9c39a"))
+	else:
+		var stat_text := "УРОН %d  •  ЗДР %d  •  СЛОТЫ %d" % [roundi(hero_damage), roundi(hero_max_hp), carry_limit]
+		draw_string(font, Vector2(272, 56), stat_text, HORIZONTAL_ALIGNMENT_RIGHT, 194, 8, Color("#d7c9aa"))
 
 	if stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]:
 		draw_rect(Rect2(Vector2(14, 70), Vector2(450, 5)), Color("#2b302b"))
@@ -4538,7 +4607,7 @@ func _objective_text() -> String:
 
 
 func _draw_banner() -> void:
-	if banner_timer <= 0.0 or banner_text == "":
+	if banner_timer <= 0.0 or banner_text == "" or story_hint_timer > 0.0:
 		return
 	var alpha := clampf(banner_timer * 1.5, 0.0, 1.0)
 	draw_rect(Rect2(Vector2(56, 120), Vector2(368, 54)), Color(0.02, 0.03, 0.025, 0.82 * alpha))
@@ -4572,7 +4641,7 @@ func _draw_story_card() -> void:
 	if story_hint_timer <= 0.0 or story_hint == "":
 		return
 	var lines := _wrap_story_lines(story_hint, 44)
-	var count := mini(lines.size(), 3)
+	var count := mini(lines.size(), 4)
 	var height := 30.0 + float(count) * 18.0
 	var y := 94.0
 	draw_rect(Rect2(Vector2(48, y), Vector2(384, height)), Color(0.015, 0.025, 0.020, 0.88))
@@ -4586,11 +4655,12 @@ func _draw_story_card() -> void:
 func _draw_hub_feedback() -> void:
 	if mode != Mode.HUB or hub_feedback_timer <= 0.0 or hub_feedback_text == "":
 		return
-	var pos := hub_feedback_pos
-	var box := Rect2(pos + Vector2(-78, -77), Vector2(156, 30))
-	draw_rect(box, Color(0.02, 0.03, 0.025, 0.90))
-	draw_string(font, box.position + Vector2(6, 20), hub_feedback_text, HORIZONTAL_ALIGNMENT_CENTER, 144, 10, Color("#f0d7a1"))
-
+	if story_hint_timer > 0.0:
+		return
+	var box := Rect2(Vector2(86, 91), Vector2(308, 34))
+	draw_rect(box, Color(0.02, 0.03, 0.025, 0.94))
+	draw_rect(Rect2(box.position, Vector2(4, box.size.y)), Color("#c18d50"))
+	draw_string(font, box.position + Vector2(8, 23), hub_feedback_text, HORIZONTAL_ALIGNMENT_CENTER, 292, 10, Color("#f0d7a1"))
 
 func _draw_area_transition() -> void:
 	if area_fade_timer <= 0.0:
