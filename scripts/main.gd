@@ -3136,6 +3136,7 @@ func _draw_hub() -> void:
 
 	_draw_hub_area_gate(HUB_GROVE_GATE, "РОЩА", "древесина", true)
 	_draw_hub_area_gate(HUB_QUARRY_GATE, "СКЛОН", "камень", false)
+	_draw_hub_build_guidance()
 	_draw_resource_flights()
 	_draw_hero(hero_pos)
 
@@ -3204,6 +3205,31 @@ func _draw_hub_growth_props(fires: int) -> void:
 			draw_line(p + Vector2(0, 14), p + Vector2(0, -10), Color("#655039"), 3.0)
 			draw_circle(p + Vector2(0, -13), 4.5, Color("#e8a24c"))
 			draw_circle(p + Vector2(0, -13), 12.0, Color(0.95, 0.61, 0.25, 0.055))
+
+
+func _draw_hub_build_guidance() -> void:
+	if carried_wood + carried_stone <= 0:
+		return
+	var target: Dictionary = {}
+	var best_distance := INF
+	for site: Dictionary in _hub_build_sites():
+		if _hub_site_built(site):
+			continue
+		var needs_wood := carried_wood > 0 and _hub_site_progress(site, "wood") < int(site["wood_cost"])
+		var needs_stone := carried_stone > 0 and _hub_site_progress(site, "stone") < int(site["stone_cost"])
+		if not needs_wood and not needs_stone:
+			continue
+		var distance := hero_pos.distance_to(site["pos"])
+		if distance < best_distance:
+			best_distance = distance
+			target = site
+	if target.is_empty():
+		return
+	var pos: Vector2 = target["pos"]
+	var pulse := 0.72 + 0.16 * sin(Time.get_ticks_msec() * 0.008)
+	draw_arc(pos, 47.0, 0.0, TAU, 36, Color(0.91, 0.74, 0.40, pulse * 0.55), 2.0)
+	if best_distance > 92.0:
+		draw_string(font, pos + Vector2(-66, -48), "НЕСИ К СТРОЙКЕ", HORIZONTAL_ALIGNMENT_CENTER, 132, 9, Color("#e7cd91"))
 
 
 func _draw_hub_construction_site(site: Dictionary) -> void:
