@@ -1144,11 +1144,12 @@ func _return_from_worker_ruins() -> void:
 		_story("Рабочий: «Каркас уцелел. Принеси немного дерева и камня — я восстановлю мастерскую.»", 4.2)
 		_banner("СТРОИМ МАСТЕРСКУЮ", 1.9)
 	else:
-		if day2_mission == "storehouse":
-			_story("Снаряжение из склада разложено у огня. Ночь уже близко.", 2.8)
-		else:
-			_story("Разведчик показывает безопасную тропу назад. В темноте уже слышны шаги.", 2.8)
 		_start_night(2)
+		if day2_mission == "storehouse":
+			var warning := " • ТЫ ОДИН" if survivors <= 1 else ""
+			_story("ДОБЫЧА У ОГНЯ\nТекущие параметры: здоровье %d • слоты %d%s" % [roundi(hero_max_hp), carry_limit, warning], 4.0)
+		else:
+			_story("РАЗВЕДЧИК У ОГНЯ\nСоюзников: %d. Он показывает безопасную тропу перед второй ночью." % survivors, 3.8)
 
 func _enter_day3_route(route_name: String) -> void:
 	if area != Area.CAMP or stage != Stage.DAY3_TOWER or day3_route != "":
@@ -2094,9 +2095,9 @@ func _update_workshop_choice() -> void:
 		workshop_choice = "armory"
 		var old_damage := hero_damage
 		hero_damage *= 1.28
-		_banner("ОРУЖЕЙНЫЙ СТОЛ", 2.0)
-		_story("ОРУЖЕЙНЫЙ СТОЛ\nУрон %d → %d (+28%%). Каждый твой выстрел теперь сильнее." % [roundi(old_damage), roundi(hero_damage)], 3.8)
 		_start_night(2)
+		_banner("ОРУЖЕЙНЫЙ СТОЛ", 2.0)
+		_story("ОРУЖЕЙНЫЙ СТОЛ\nУрон %d → %d (+28%%). Каждый твой выстрел теперь сильнее." % [roundi(old_damage), roundi(hero_damage)], 4.0)
 	elif hero_pos.distance_to(right_choice_pos) < 48.0:
 		workshop_choice = "gear"
 		var old_slots := carry_limit
@@ -2105,9 +2106,9 @@ func _update_workshop_choice() -> void:
 		gather_interval = 0.34
 		hero_max_hp += 18.0
 		hero_hp = hero_max_hp
-		_banner("ПОХОДНЫЙ НАБОР", 2.0)
-		_story("ПОХОДНЫЙ НАБОР\nСлоты %d → %d • здоровье %d → %d. Добыча ресурсов стала быстрее." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 4.2)
 		_start_night(2)
+		_banner("ПОХОДНЫЙ НАБОР", 2.0)
+		_story("ПОХОДНЫЙ НАБОР\nСлоты %d → %d • здоровье %d → %d. Добыча ресурсов стала быстрее." % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp)], 4.4)
 
 
 func _spawn_rescue_guards() -> void:
@@ -2177,7 +2178,10 @@ func _start_night(number: int) -> void:
 			night_queue.append("fast" if i % 3 == 2 else "basic")
 		night_queue.append("elite")
 		_banner("СУМЕРКИ", 1.8)
-		_story("Две стороны леса ожили одновременно.", 2.7)
+		if survivors <= 1:
+			_story("ТЫ ОДИН\nВторая ночь рассчитана на помощь союзника. Без него выжить значительно труднее.", 4.0)
+		else:
+			_story("Две стороны леса ожили одновременно. Союзников рядом: %d." % (survivors - 1), 3.0)
 	else:
 		stage = Stage.NIGHT3
 		active_night_sides = [0, 1, 3]
