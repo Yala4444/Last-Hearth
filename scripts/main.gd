@@ -191,6 +191,7 @@ var stage_transition_lock := false
 var hub_feedback_text := ""
 var hub_feedback_pos := Vector2.ZERO
 var hub_feedback_timer := 0.0
+var master_arrival_focus_timer := 0.0
 var region_map_open := false
 var region_map_selected_fire := 0
 var help_open := false
@@ -272,6 +273,7 @@ func _process(delta: float) -> void:
 	banner_timer = maxf(0.0, banner_timer - delta)
 	story_hint_timer = maxf(0.0, story_hint_timer - delta)
 	hub_feedback_timer = maxf(0.0, hub_feedback_timer - delta)
+	master_arrival_focus_timer = maxf(0.0, master_arrival_focus_timer - delta)
 	_advance_notice_queue()
 	flash_timer = maxf(0.0, flash_timer - delta)
 	route_grace_timer = maxf(0.0, route_grace_timer - delta)
@@ -475,6 +477,7 @@ func _enter_hub(message: String = "") -> void:
 	help_open = false
 	hub_feedback_text = ""
 	hub_feedback_timer = 0.0
+	master_arrival_focus_timer = 0.0
 	banner_text = ""
 	banner_timer = 0.0
 	story_hint = ""
@@ -485,6 +488,7 @@ func _enter_hub(message: String = "") -> void:
 	var master_state := String(meta.get("master_relationship_state", "unknown"))
 	if master_state == "joining_home" and not bool(meta.get("master_arrival_seen", false)):
 		meta["master_arrival_seen"] = true
+		master_arrival_focus_timer = 5.6
 		_save_meta()
 		_story("МАСТЕР ПРИШЁЛ К ПОСЛЕДНЕМУ ОЧАГУ\n«Теперь огни видят друг друга. Здесь справятся без меня. А у тебя работы ещё много.» Дом мастера можно построить.", 5.6)
 	elif fires > 0 and not bool(meta.get("hub_intro_seen", false)):
@@ -3266,6 +3270,7 @@ func _draw_hub() -> void:
 	if master_state in ["joining_home", "resident"]:
 		var master_pos := HUB_WORKER_HOME_POS + Vector2(-50, 48)
 		_draw_humanoid(master_pos, Color("#9b7856"), 0.0, "worker", -1.0)
+	_draw_master_arrival_focus()
 
 	var has_construction := _hub_has_pending_construction()
 	_draw_hub_area_gate(HUB_GROVE_GATE, "РОЩА", "древесина" if has_construction else "пока не нужна", true)
@@ -3305,6 +3310,20 @@ func _draw_hub() -> void:
 		draw_rect(badge, Color(0.10, 0.08, 0.05, 0.96))
 		draw_rect(Rect2(badge.position, Vector2(3, badge.size.y)), Color("#d6a65f"))
 		draw_string(font, badge.position + Vector2(5, 14), "НОВОЕ", HORIZONTAL_ALIGNMENT_CENTER, 44, 8, Color("#f0d49c"))
+
+func _draw_master_arrival_focus() -> void:
+	if master_arrival_focus_timer <= 0.0:
+		return
+	var pos := HUB_WORKER_HOME_POS
+	var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.009)
+	var alpha := clampf(master_arrival_focus_timer / 5.6, 0.0, 1.0)
+	draw_circle(pos, 54.0 + pulse * 5.0, Color(0.88, 0.66, 0.34, 0.035 * alpha))
+	draw_arc(pos, 48.0 + pulse * 4.0, 0.0, TAU, 48, Color(0.91, 0.71, 0.42, 0.74 * alpha), 2.4)
+	var plate := Rect2(pos + Vector2(-92, -76), Vector2(184, 28))
+	draw_rect(plate, Color(0.012, 0.021, 0.017, 0.92 * alpha))
+	draw_rect(Rect2(plate.position, Vector2(3, plate.size.y)), Color(0.82, 0.60, 0.31, alpha))
+	draw_string(font, plate.position + Vector2(7, 19), "МЕСТО ДЛЯ ДОМА МАСТЕРА", HORIZONTAL_ALIGNMENT_CENTER, 170, 9, Color(0.94, 0.84, 0.64, alpha))
+
 
 func _draw_hub_growth_props(fires: int) -> void:
 	# Settlement growth must represent real infrastructure, never imaginary residents.
@@ -5241,6 +5260,21 @@ func _draw_region_fire_node(index: int) -> void:
 	draw_string(font, pos + Vector2(-64, 39), short_name, HORIZONTAL_ALIGNMENT_CENTER, 128, 8, Color("#e6d4ad"))
 
 
+func _map_connection_point(a: Vector2, b: Vector2, phase: float) -> Vector2:
+	return a.lerp(b, fposmod(phase, 1.0))
+
+
+func _draw_region_map_connection(a: Vector2, b: Vector2, lit: bool, phase_offset: float) -> void:
+	var base_color := Color(0.47, 0.43, 0.31, 0.46)
+	draw_line(a, b, base_color, 6.0, true)
+	if not lit:
+		return
+	var phase := float(Time.get_ticks_msec()) * 0.00028 + phase_offset
+	var glow_pos := _map_connection_point(a, b, phase)
+	draw_circle(glow_pos, 8.0, Color(0.94, 0.64, 0.29, 0.07))
+	draw_circle(glow_pos, 3.2, Color(0.96, 0.73, 0.37, 0.78))
+
+
 func _draw_region_map_overlay() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.80))
 	var panel := Rect2(Vector2(28, 132), Vector2(424, 548))
@@ -5256,9 +5290,11 @@ func _draw_region_map_overlay() -> void:
 	var node2 := _forest_map_node_pos(2)
 	var node3 := _forest_map_node_pos(3)
 	if _forest_fire_state(2) != "unknown":
-		draw_line(node1, node2, Color(0.47, 0.43, 0.31, 0.46), 6.0, true)
+		var first_link_lit := _forest_fire_state(1) == "restored" and _forest_fire_state(2) == "restored"
+		_draw_region_map_connection(node1, node2, first_link_lit, 0.0)
 	if _forest_fire_state(3) != "unknown":
-		draw_line(node2, node3, Color(0.47, 0.43, 0.31, 0.46), 6.0, true)
+		var second_link_lit := _forest_fire_state(2) == "restored" and _forest_fire_state(3) == "restored"
+		_draw_region_map_connection(node2, node3, second_link_lit, 0.47)
 
 	for index in range(1, 4):
 		_draw_region_fire_node(index)
