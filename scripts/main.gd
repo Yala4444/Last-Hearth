@@ -740,12 +740,9 @@ func _generate_layout() -> void:
 
 func _add_event(kind: String, pos: Vector2) -> void:
 	var required := 1.25
-	if kind == "altar":
-		required = 1.65
-	elif kind == "wounded":
+	if kind == "wounded":
 		required = 1.45
-	elif kind == "dead_camp":
-		required = 1.35
+
 	elif kind == "tracks":
 		required = 1.05
 	elif kind == "broken_watch":
@@ -1349,19 +1346,6 @@ func _update_world_events(delta: float) -> void:
 				run_embers += 1
 				event["outcome"] = "helped"
 				_story("РАНЕНЫЙ СТРАННИК\n«Они идут за светом... Береги огонь.»", 3.2)
-			"altar":
-				if rng.randf() < 0.5:
-					hero_damage *= 1.12
-					event["outcome"] = "damage"
-					_story("СТАРЫЙ АЛТАРЬ\nПламя коснулось оружия. Урон выше.", 3.0)
-				else:
-					carry_limit += 1
-					event["outcome"] = "carry"
-					_story("СТАРЫЙ АЛТАРЬ\nНоша кажется легче. Перенос +1.", 3.0)
-			"dead_camp":
-				run_embers += 1
-				event["outcome"] = "memory"
-				_story("ПОТУХШИЙ КОСТЁР\nНа камне вырезан знак нашего Очагa.", 3.2)
 			"tracks":
 				event["outcome"] = "trail"
 				_story("СЛЕДЫ В ГРЯЗИ\nОни ведут глубже в лес — и не похожи на человеческие.", 3.1)
@@ -3734,12 +3718,8 @@ func _draw_world_events() -> void:
 				_draw_event_wagon(pos, alpha, triggered)
 			"wounded":
 				_draw_event_wounded(pos, alpha, triggered)
-			"altar":
-				_draw_event_altar(pos, alpha, triggered)
 			"black_tree":
 				_draw_event_black_tree(pos, alpha, triggered)
-			"dead_camp":
-				_draw_event_dead_camp(pos, alpha, triggered)
 			"tracks":
 				_draw_event_tracks(pos, alpha, triggered)
 			"broken_watch":
@@ -3751,7 +3731,7 @@ func _draw_world_events() -> void:
 			"watch_repair":
 				_draw_event_broken_watch(pos, alpha, triggered)
 			"final_altar":
-				_draw_event_altar(pos, alpha, triggered)
+				_draw_event_fire_mark(pos, alpha, triggered)
 			"nest":
 				_draw_event_nest(pos, alpha, triggered)
 			"signal_survivor":
@@ -3854,7 +3834,7 @@ func _draw_event_wounded(pos: Vector2, alpha: float, triggered: bool) -> void:
 		draw_string(font, pos + Vector2(-52, -36), "РАНЕНЫЙ", HORIZONTAL_ALIGNMENT_CENTER, 104, 9, Color(0.84, 0.78, 0.67, 0.82))
 
 
-func _draw_event_altar(pos: Vector2, alpha: float, triggered: bool) -> void:
+func _draw_event_fire_mark(pos: Vector2, alpha: float, triggered: bool) -> void:
 	for i in range(5):
 		var a := TAU * float(i) / 5.0
 		draw_circle(pos + Vector2(cos(a), sin(a)) * 18.0, 4.0, Color(0.38, 0.40, 0.36, alpha))
@@ -3873,16 +3853,6 @@ func _draw_event_black_tree(pos: Vector2, alpha: float, triggered: bool) -> void
 	draw_circle(pos + Vector2(15, -1), 14.0, Color(0.10, 0.14, 0.11, alpha))
 	draw_circle(pos + Vector2(3, -11), 3.0, Color(0.55, 0.27, 0.18, 0.75 * alpha))
 	draw_string(font, pos + Vector2(-58, -43), "ЧЁРНОЕ ДЕРЕВО", HORIZONTAL_ALIGNMENT_CENTER, 116, 9, Color(0.77, 0.70, 0.60, 0.80 * alpha))
-
-
-func _draw_event_dead_camp(pos: Vector2, alpha: float, triggered: bool) -> void:
-	draw_circle(pos, 16.0, Color(0.20, 0.18, 0.15, 0.7 * alpha))
-	for i in range(6):
-		var a := TAU * float(i) / 6.0
-		draw_circle(pos + Vector2(cos(a), sin(a)) * 15.0, 3.4, Color(0.35, 0.34, 0.31, alpha))
-	draw_line(pos + Vector2(-12, 7), pos + Vector2(12, -7), Color(0.26, 0.18, 0.13, alpha), 4.0)
-	if not triggered:
-		draw_string(font, pos + Vector2(-62, -29), "ПОТУХШИЙ КОСТЁР", HORIZONTAL_ALIGNMENT_CENTER, 124, 9, Color(0.78, 0.73, 0.64, 0.80))
 
 
 func _draw_event_dead_signal(pos: Vector2, alpha: float, triggered: bool) -> void:
