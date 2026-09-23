@@ -236,6 +236,9 @@ func _init() -> void:
 	if String(game.meta.get("hunter_fate", "")) != "keeper_fire_1":
 		fail("Hunter should stay with Fire 1 instead of becoming an instant hub resident")
 		return
+	if String(game.meta.get("forest_fire_1_keeper", "")) != "Охотник":
+		fail("Fire 1 did not remember the Hunter as its local keeper")
+		return
 	if String(game.meta.get("master_relationship_state", "")) != "waiting_forest":
 		fail("Master should remain part of the forest chapter before 3/3")
 		return
@@ -243,7 +246,7 @@ func _init() -> void:
 		fail("The first restored fire should not create residential plots at the Last Hearth")
 		return
 	if not bool(game.meta.get("watch_restored", false)):
-		fail("Restored watch was not persisted into the Last Hearth")
+		fail("Restored watch was not persisted as regional infrastructure")
 		return
 
 	print("CHAPTER1_ADVENTURE_SANITY_OK")
