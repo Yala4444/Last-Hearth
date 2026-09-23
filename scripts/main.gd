@@ -3537,9 +3537,18 @@ func _draw_route_gate(pos: Vector2, label: String, color: Color, points_left: bo
 	var tip := pos + dir * 18.0
 	var side := Vector2(-dir.y, dir.x) * 7.0
 	draw_colored_polygon(PackedVector2Array([tip + dir * 7.0, tip - dir * 5.0 + side, tip - dir * 5.0 - side]), color)
+
+	# Route choices use a strict two-line hierarchy on mobile:
+	# destination first, promised reward second. Return gates remain one line.
 	var text_x := clampf(pos.x - 88.0, 8.0, VIEW_SIZE.x - 184.0)
-	var text_pos := Vector2(text_x, pos.y - 38.0)
-	draw_string(font, text_pos, label, HORIZONTAL_ALIGNMENT_CENTER, 176, 10, Color("#ead9b6"))
+	var parts := label.split(" • ", false, 1)
+	if parts.size() > 1:
+		var title := String(parts[0]).strip_edges()
+		var reward := String(parts[1]).strip_edges()
+		draw_string(font, Vector2(text_x, pos.y - 45.0), title, HORIZONTAL_ALIGNMENT_CENTER, 176, 9, Color("#ead9b6"))
+		draw_string(font, Vector2(text_x, pos.y - 31.0), reward, HORIZONTAL_ALIGNMENT_CENTER, 176, 8, Color(color.r, color.g, color.b, 0.95))
+	else:
+		draw_string(font, Vector2(text_x, pos.y - 37.0), label, HORIZONTAL_ALIGNMENT_CENTER, 176, 9, Color("#ead9b6"))
 
 
 func _draw_solo_risk(pos: Vector2) -> void:
