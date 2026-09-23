@@ -33,6 +33,17 @@ func _init() -> void:
 		if not profile.has("fires") or profile["fires"].size() != 3:
 			fail("Region does not define exactly three fires: " + region_id)
 			return
+		if not profile.has("people") or profile["people"].size() < 3:
+			fail("Region does not define a meaningful people roster: " + region_id)
+			return
+		var resident_count := 0
+		for person_variant in profile["people"]:
+			var person: Dictionary = person_variant
+			if String(person.get("fate", "")) == "chapter_resident":
+				resident_count += 1
+		if resident_count != 1:
+			fail("Region must define exactly one chapter resident: " + region_id)
+			return
 
 	# Forgotten Forest must escalate through two mini-bosses into the real regional boss.
 	game.expedition_sector = 0
