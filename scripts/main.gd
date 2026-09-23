@@ -89,6 +89,9 @@ var meta: Dictionary = {
 	"attempts": 0,
 	"forest_fires": 0,
 	"forest_cleared": false,
+	"rescued_hunter": false,
+	"rescued_worker": false,
+	"watch_restored": false,
 	"hearth_rank": 1,
 	"guide_seen": false
 }
@@ -274,6 +277,9 @@ func _load_meta() -> void:
 		meta["forest_fires"] = migrated_fires
 		meta["forest_cleared"] = migrated_fires >= 3
 		meta["guide_seen"] = false
+	meta["rescued_hunter"] = bool(meta.get("rescued_hunter", false))
+	meta["rescued_worker"] = bool(meta.get("rescued_worker", false))
+	meta["watch_restored"] = bool(meta.get("watch_restored", false))
 	meta["build_version"] = 11
 
 
@@ -409,7 +415,11 @@ func _start_expedition() -> void:
 	_stop_joystick()
 
 	_generate_layout()
-	_banner("Вылазка #%d | %s" % [int(meta.get("attempts", 1)), map_variant_name], 2.4)
+	if int(meta.get("attempts", 1)) == 1:
+		_banner("ПЕРВЫЙ СВЕТ", 2.2)
+		_story("Сруби ближайшее дерево. Подними брёвна и принеси их к полевому огню — каждый груз оттолкнёт тьму.", 5.0)
+	else:
+		_banner("Вылазка #%d | %s" % [int(meta.get("attempts", 1)), map_variant_name], 2.4)
 
 
 func _generate_layout() -> void:
@@ -1430,6 +1440,14 @@ func _deposit_resources_if_close(delta: float) -> void:
 	})
 	if stage == Stage.DAY2_BUILD:
 		_burst_typed(deposit_pos + Vector2(rng.randf_range(-12.0, 12.0), 4), 4, "wood" if kind == "wood" else "stone")
+		_float_text(deposit_pos + Vector2(0, -48), "СТРОЙКА +", Color("#dfc38d"))
+	elif stage == Stage.DAY1_GATHER and kind == "wood":
+		var starting_light := 165.0 + float(int(meta.get("hearth_bonus", 0))) * 8.0
+		light_radius = maxf(light_radius, starting_light + float(mini(camp_wood, 5)) * 8.0)
+		hearth_pulse = minf(1.0, hearth_pulse + 0.24)
+		upgrade_wave = maxf(upgrade_wave, 0.16)
+		_float_text(HEARTH_POS + Vector2(0, -72), "СВЕТ +", Color("#efc77f"))
+		_burst(HEARTH_POS + Vector2(rng.randf_range(-12.0, 12.0), 4), 5)
 	else:
 		hearth_pulse = minf(1.0, hearth_pulse + 0.18)
 		_burst(HEARTH_POS + Vector2(rng.randf_range(-12.0, 12.0), 4), 3)
@@ -1447,7 +1465,7 @@ func _check_day_progress() -> void:
 		hearth_level = 2
 		hearth_max_hp = 170.0
 		hearth_hp = hearth_max_hp
-		light_radius = 225.0
+		light_radius = 225.0 + float(int(meta.get("hearth_bonus", 0))) * 8.0
 		stage = Stage.DAY1_RESCUE
 		current_stage_wood_start = camp_wood
 		current_stage_stone_start = camp_stone
@@ -2047,8 +2065,18 @@ func _finish_run(win: bool, reason: String = "") -> void:
 		meta["forest_fires"] = fires
 		meta["forest_cleared"] = fires >= 3
 		meta["hearth_rank"] = maxi(int(meta.get("hearth_rank", 1)), 1 + fires)
-		result_title = "ОГОНЬ В ЛЕСУ ВОССТАНОВЛЕН"
-		result_subtitle = "Ещё один сигнал теперь отвечает Последнему Очагу."
+		if day1_route == "hunter":
+			meta["rescued_hunter"] = true
+		if survivor_two_found:
+			meta["rescued_worker"] = true
+		if day3_route == "watch":
+			meta["watch_restored"] = true
+		if fires >= 3:
+			result_title = "ЗАБЫТЫЙ ЛЕС ОЧИЩЕН"
+			result_subtitle = "Три сигнальных огня снова отвечают Последнему Очагу."
+		else:
+			result_title = "ОГОНЬ В ЛЕСУ ВОССТАНОВЛЕН"
+			result_subtitle = "Ещё один сигнал теперь отвечает Последнему Очагу."
 	else:
 		if reason == "hero":
 			result_title = "ВЫЛАЗКА ОБОРВАЛАСЬ"
@@ -2293,25 +2321,30 @@ func _draw_hub() -> void:
 	var hub_light := 185.0 + float(fires) * 34.0 + float(hearth_bonus) * 15.0
 	_draw_light_field(HEARTH_POS, hub_light)
 
-	# The permanent home starts as almost nothing and grows after successful expeditions.
-	if fires >= 1:
-		_draw_hub_building(Vector2(92, 226), "home", "УКРЫТИЕ", "")
-	else:
+	# The permanent home grows only from things the player actually brought back or built.
+	if bool(meta.get("rescued_hunter", false)):
+		_draw_hub_building(Vector2(92, 226), "home", "УКРЫТИЕ ОХОТНИКА", "")
+	elif fires >= 1:
 		_draw_hub_site(Vector2(92, 226), "МЕСТО ДЛЯ УКРЫТИЯ")
 
-	if fires >= 1 or int(meta.get("carry_level", 0)) > 0:
+	if int(meta.get("carry_level", 0)) > 0:
 		_draw_hub_building(HUB_CARRY_POS, "store", "СНАРЯЖЕНИЕ", "рюкзак")
 	else:
 		_draw_hub_site(HUB_CARRY_POS, "СНАРЯЖЕНИЕ")
 
-	if fires >= 1 or int(meta.get("damage_level", 0)) > 0:
+	if int(meta.get("damage_level", 0)) > 0:
 		_draw_hub_building(HUB_DAMAGE_POS, "forge", "КУЗНИЦА", "оружие")
 	else:
 		_draw_hub_site(HUB_DAMAGE_POS, "КУЗНИЦА")
 
-	if fires >= 2:
+	if bool(meta.get("rescued_worker", false)):
+		_draw_hub_building(Vector2(374, 226), "home", "УКРЫТИЕ МАСТЕРА", "")
+	elif fires >= 2:
+		_draw_hub_site(Vector2(374, 226), "МЕСТО ДЛЯ МАСТЕРА")
+
+	if bool(meta.get("watch_restored", false)):
 		_draw_hub_building(Vector2(390, 620), "watch", "ДОЗОР", "")
-	elif fires >= 1:
+	elif fires >= 2:
 		_draw_hub_site(Vector2(390, 620), "БУДУЩИЙ ДОЗОР")
 
 	_draw_map_table(HUB_MAP_POS)
@@ -2320,12 +2353,18 @@ func _draw_hub() -> void:
 	_draw_hearth(HEARTH_POS, hub_hearth_level)
 	_draw_hearth_altar(HUB_HEARTH_UPGRADE_POS)
 
-	var resident_roles: Array[String] = ["hunter", "worker", "guard", "guard"]
-	var resident_positions: Array[Vector2] = [Vector2(145, 332), Vector2(338, 336), Vector2(310, 676), Vector2(178, 676)]
-	var resident_count := 0 if fires <= 0 else mini(resident_roles.size(), fires + 1)
-	for i in range(resident_count):
-		var p: Vector2 = resident_positions[i]
-		_draw_humanoid(p, Color("#7f886a") if i == 0 else Color("#9b7856"), float(i), resident_roles[i], 1.0)
+	var resident_index := 0
+	if bool(meta.get("rescued_hunter", false)):
+		_draw_humanoid(Vector2(145, 332), Color("#7f886a"), float(resident_index), "hunter", 1.0)
+		resident_index += 1
+	if bool(meta.get("rescued_worker", false)):
+		_draw_humanoid(Vector2(338, 336), Color("#9b7856"), float(resident_index), "worker", 1.0)
+		resident_index += 1
+	if fires >= 2:
+		_draw_humanoid(Vector2(310, 676), Color("#758597"), float(resident_index), "guard", 1.0)
+		resident_index += 1
+	if fires >= 3:
+		_draw_humanoid(Vector2(178, 676), Color("#758597"), float(resident_index), "guard", 1.0)
 
 	_draw_hero(hero_pos)
 
