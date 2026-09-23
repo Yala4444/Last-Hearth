@@ -36,7 +36,8 @@ func _init() -> void:
 
 	# The settlement must have continuous side areas rather than menu-only resource buttons.
 	game.hero_pos = game.HUB_GROVE_GATE
-	game._update_hub_area_transitions()
+	game.hero_target = game.hero_pos
+	game._process(0.016)
 	if game.hub_area != "grove":
 		fail("Walking left from the Last Hearth did not enter the grove")
 		return
@@ -48,7 +49,7 @@ func _init() -> void:
 		return
 
 	# Entering beside the return gate must NOT bounce back on the next frame.
-	game._update_hub_area_transitions()
+	game._process(0.016)
 	if game.hub_area != "grove":
 		fail("The grove immediately bounced back to the Last Hearth")
 		return
@@ -57,13 +58,15 @@ func _init() -> void:
 		return
 
 	game.hero_pos = Vector2(280.0, 535.0)
-	game._update_hub_area_transitions()
+	game.hero_target = game.hero_pos
+	game._process(0.016)
 	if not bool(game.hub_return_armed):
 		fail("Walking into the grove did not arm the return path")
 		return
 
 	game.hero_pos = game.hub_area_return_gate
-	game._update_hub_area_transitions()
+	game.hero_target = game.hero_pos
+	game._process(0.016)
 	if game.hub_area != "center":
 		fail("The grove did not return to the settlement center")
 		return
