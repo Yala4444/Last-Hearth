@@ -3132,7 +3132,7 @@ func _draw_expedition() -> void:
 	if area == Area.CAMP:
 		_draw_revealed_landmarks()
 
-	if stage == Stage.DAY1_RESCUE and area == Area.HUNTER_TRAIL and not survivor_one_found:
+	if stage == Stage.DAY1_RESCUE and day1_route == "hunter" and area == Area.HUNTER_TRAIL and not survivor_one_found:
 		var survivor_visibility := _light_visibility(survivor_one_pos)
 		if survivor_visibility > 0.72:
 			_draw_survivor(survivor_one_pos, "?")
@@ -3217,50 +3217,81 @@ func _draw_route_gate(pos: Vector2, label: String, color: Color, points_left: bo
 
 
 func _draw_route_area_decor() -> void:
-	if area == Area.HUNTER_TRAIL:
-		draw_line(Vector2(238, 745), Vector2(250, 585), Color(0.35, 0.30, 0.21, 0.20), 18.0)
-		draw_line(Vector2(250, 585), Vector2(225, 410), Color(0.35, 0.30, 0.21, 0.18), 15.0)
-		draw_line(Vector2(225, 410), Vector2(245, 205), Color(0.35, 0.30, 0.21, 0.16), 12.0)
-		for p: Vector2 in [Vector2(202, 420), Vector2(275, 510), Vector2(218, 315)]:
-			for i in range(3):
-				draw_circle(p + Vector2(float(i) * 8.0, float(i % 2) * 6.0), 2.6, Color(0.39, 0.30, 0.20, 0.48))
-	elif area == Area.SAWMILL:
-		draw_rect(Rect2(Vector2(122, 145), Vector2(236, 108)), Color(0.14, 0.13, 0.10, 0.34))
-		for x in [140.0, 188.0, 292.0, 340.0]:
-			draw_line(Vector2(x, 145), Vector2(x + 12.0, 250), Color(0.34, 0.25, 0.16, 0.35), 6.0)
-		draw_line(Vector2(120, 258), Vector2(360, 258), Color(0.39, 0.29, 0.18, 0.42), 6.0)
-		for y in [350.0, 470.0, 590.0]:
-			draw_line(Vector2(90, y), Vector2(150, y - 12), Color(0.33, 0.24, 0.16, 0.28), 4.0)
-			draw_line(Vector2(330, y + 8), Vector2(395, y - 4), Color(0.33, 0.24, 0.16, 0.28), 4.0)
-	elif area == Area.WORKER_RUINS:
-		draw_rect(Rect2(Vector2(135, 140), Vector2(215, 98)), Color(0.12, 0.13, 0.12, 0.32))
-		draw_line(Vector2(145, 235), Vector2(165, 160), Color(0.35, 0.29, 0.21, 0.42), 7.0)
-		draw_line(Vector2(340, 235), Vector2(318, 160), Color(0.35, 0.29, 0.21, 0.42), 7.0)
-		draw_line(Vector2(160, 165), Vector2(320, 165), Color(0.40, 0.33, 0.24, 0.46), 7.0)
-		draw_line(Vector2(180, 230), Vector2(300, 180), Color(0.25, 0.22, 0.18, 0.36), 5.0)
-		if not worker_route_complete:
-			var barricade_alpha := 0.58 if enemies.size() > 0 else 0.26
-			draw_line(Vector2(202, 205), Vector2(300, 205), Color(0.48, 0.34, 0.21, barricade_alpha), 8.0)
-			draw_line(Vector2(215, 184), Vector2(285, 224), Color(0.39, 0.28, 0.18, barricade_alpha), 6.0)
-			if enemies.size() > 0:
-				draw_string(font, Vector2(180, 252), "ПРОХОД ЗАБЛОКИРОВАН", HORIZONTAL_ALIGNMENT_CENTER, 144, 9, Color("#c8ad7c"))
-		for p: Vector2 in [Vector2(125, 350), Vector2(360, 390), Vector2(155, 540)]:
-			draw_circle(p, 34.0, Color(0.12, 0.14, 0.13, 0.20))
-			draw_line(p + Vector2(-22, 8), p + Vector2(24, -6), Color(0.36, 0.31, 0.24, 0.25), 4.0)
-	elif area == Area.WATCH_RIDGE:
-		for p: Vector2 in [Vector2(105, 250), Vector2(375, 275), Vector2(130, 540), Vector2(350, 560)]:
-			draw_circle(p, 46.0, Color(0.10, 0.13, 0.13, 0.23))
-		draw_line(Vector2(212, 250), Vector2(228, 152), Color(0.35, 0.28, 0.20, 0.45), 7.0)
-		draw_line(Vector2(270, 250), Vector2(255, 154), Color(0.35, 0.28, 0.20, 0.45), 7.0)
-		draw_line(Vector2(215, 168), Vector2(270, 180), Color(0.42, 0.33, 0.22, 0.48), 7.0)
-	elif area == Area.ALTAR_GLADE:
-		draw_circle(Vector2(240, 215), 82.0, Color(0.15, 0.12, 0.10, 0.28))
-		for i in range(10):
-			var a := TAU * float(i) / 10.0
-			var p := Vector2(240, 215) + Vector2(cos(a), sin(a)) * 58.0
-			draw_circle(p, 5.0, Color(0.34, 0.34, 0.30, 0.46))
-		draw_line(Vector2(150, 420), Vector2(330, 420), Color(0.30, 0.23, 0.18, 0.18), 5.0)
+	if stage == Stage.DAY1_RESCUE:
+		match day1_route:
+			"hunter":
+				draw_line(Vector2(238, 745), Vector2(250, 585), Color(0.35, 0.30, 0.21, 0.20), 18.0)
+				draw_line(Vector2(250, 585), Vector2(225, 410), Color(0.35, 0.30, 0.21, 0.18), 15.0)
+				draw_line(Vector2(225, 410), Vector2(245, 205), Color(0.35, 0.30, 0.21, 0.16), 12.0)
+			"sawmill":
+				draw_rect(Rect2(Vector2(122, 145), Vector2(236, 108)), Color(0.14, 0.13, 0.10, 0.34))
+				for x in [140.0, 188.0, 292.0, 340.0]:
+					draw_line(Vector2(x, 145), Vector2(x + 12.0, 250), Color(0.34, 0.25, 0.16, 0.35), 6.0)
+				draw_line(Vector2(120, 258), Vector2(360, 258), Color(0.39, 0.29, 0.18, 0.42), 6.0)
+			"caravan":
+				draw_line(Vector2(36, 420), Vector2(444, 315), Color(0.34, 0.31, 0.24, 0.16), 30.0)
+				draw_line(Vector2(55, 426), Vector2(430, 328), Color(0.44, 0.38, 0.28, 0.13), 5.0)
+				draw_circle(Vector2(205, 245), 24.0, Color(0.16, 0.14, 0.11, 0.22))
+			"nest":
+				draw_circle(Vector2(240, 220), 86.0, Color(0.07, 0.09, 0.07, 0.25))
+				for i in range(8):
+					var a := TAU * float(i) / 8.0
+					draw_line(Vector2(240, 220) + Vector2(cos(a), sin(a)) * 22.0, Vector2(240, 220) + Vector2(cos(a), sin(a)) * 78.0, Color(0.18, 0.13, 0.10, 0.22), 6.0)
+			"signal":
+				draw_line(Vector2(240, 260), Vector2(240, 160), Color(0.32, 0.27, 0.20, 0.30), 5.0)
+				draw_line(Vector2(240, 166), Vector2(270, 180), Color(0.56, 0.35, 0.22, 0.36), 6.0)
+				draw_arc(Vector2(240, 245), 92.0, PI, TAU, 32, Color(0.27, 0.30, 0.25, 0.16), 14.0)
+			_:
+				draw_circle(Vector2(240, 220), 62.0, Color(0.10, 0.08, 0.07, 0.24))
+				for i in range(9):
+					var a := TAU * float(i) / 9.0
+					draw_circle(Vector2(240, 220) + Vector2(cos(a), sin(a)) * 42.0, 5.0, Color(0.31, 0.30, 0.27, 0.32))
+		return
 
+	if stage == Stage.DAY2_RESCUE:
+		if day2_mission == "worker":
+			draw_rect(Rect2(Vector2(135, 140), Vector2(215, 98)), Color(0.12, 0.13, 0.12, 0.32))
+			draw_line(Vector2(145, 235), Vector2(165, 160), Color(0.35, 0.29, 0.21, 0.42), 7.0)
+			draw_line(Vector2(340, 235), Vector2(318, 160), Color(0.35, 0.29, 0.21, 0.42), 7.0)
+			draw_line(Vector2(160, 165), Vector2(320, 165), Color(0.40, 0.33, 0.24, 0.46), 7.0)
+		elif day2_mission == "storehouse":
+			draw_rect(Rect2(Vector2(145, 145), Vector2(190, 94)), Color(0.15, 0.14, 0.11, 0.34))
+			for x in [158.0, 210.0, 270.0, 322.0]:
+				draw_line(Vector2(x, 145), Vector2(x, 238), Color(0.34, 0.27, 0.18, 0.35), 6.0)
+			draw_rect(Rect2(Vector2(185, 190), Vector2(45, 28)), Color(0.29, 0.24, 0.17, 0.30))
+			draw_rect(Rect2(Vector2(248, 184), Vector2(52, 34)), Color(0.29, 0.24, 0.17, 0.30))
+		else:
+			draw_line(Vector2(160, 235), Vector2(190, 160), Color(0.34, 0.31, 0.25, 0.38), 8.0)
+			draw_line(Vector2(320, 235), Vector2(290, 160), Color(0.34, 0.31, 0.25, 0.38), 8.0)
+			draw_line(Vector2(185, 162), Vector2(295, 162), Color(0.39, 0.34, 0.27, 0.36), 6.0)
+			draw_line(Vector2(245, 160), Vector2(245, 120), Color(0.45, 0.31, 0.22, 0.30), 4.0)
+		if not worker_route_complete and enemies.size() > 0:
+			draw_string(font, Vector2(168, 255), "ПРОХОД ЗАБЛОКИРОВАН", HORIZONTAL_ALIGNMENT_CENTER, 144, 9, Color("#c8ad7c"))
+		return
+
+	if stage == Stage.DAY3_TOWER:
+		match day3_route:
+			"watch":
+				draw_line(Vector2(212, 250), Vector2(228, 152), Color(0.35, 0.28, 0.20, 0.45), 7.0)
+				draw_line(Vector2(270, 250), Vector2(255, 154), Color(0.35, 0.28, 0.20, 0.45), 7.0)
+				draw_line(Vector2(215, 168), Vector2(270, 180), Color(0.42, 0.33, 0.22, 0.48), 7.0)
+			"altar", "shrine":
+				draw_circle(Vector2(240, 215), 82.0, Color(0.15, 0.12, 0.10, 0.28))
+				for i in range(10):
+					var a := TAU * float(i) / 10.0
+					var p := Vector2(240, 215) + Vector2(cos(a), sin(a)) * 58.0
+					draw_circle(p, 5.0, Color(0.34, 0.34, 0.30, 0.46))
+			"barricade":
+				draw_line(Vector2(110, 245), Vector2(370, 245), Color(0.29, 0.24, 0.18, 0.22), 18.0)
+				for x in [155.0, 215.0, 275.0, 335.0]:
+					draw_line(Vector2(x, 210), Vector2(x - 15, 275), Color(0.41, 0.29, 0.17, 0.34), 7.0)
+			"beacon":
+				draw_line(Vector2(205, 255), Vector2(240, 145), Color(0.34, 0.28, 0.20, 0.38), 7.0)
+				draw_line(Vector2(275, 255), Vector2(240, 145), Color(0.34, 0.28, 0.20, 0.38), 7.0)
+				draw_arc(Vector2(240, 160), 48.0, PI, TAU, 20, Color(0.50, 0.39, 0.24, 0.28), 5.0)
+			_:
+				draw_rect(Rect2(Vector2(170, 160), Vector2(140, 70)), Color(0.13, 0.13, 0.11, 0.28))
+				draw_line(Vector2(175, 205), Vector2(305, 175), Color(0.37, 0.31, 0.22, 0.25), 6.0)
 
 func _draw_explorer_lantern() -> void:
 	var glow := 0.055 + sin(Time.get_ticks_msec() * 0.007) * 0.012
@@ -3382,19 +3413,19 @@ func _draw_world_events() -> void:
 			"final_altar":
 				_draw_event_altar(pos, alpha, triggered)
 			"nest":
-				_draw_event_black_tree(pos, alpha, triggered)
+				_draw_event_nest(pos, alpha, triggered)
 			"signal_survivor":
-				_draw_event_wounded(pos, alpha, triggered)
+				_draw_event_signal_survivor(pos, alpha, triggered)
 			"dead_fire_route":
 				_draw_event_dead_camp(pos, alpha, triggered)
 			"supply_cache":
-				_draw_event_wagon(pos, alpha, triggered)
+				_draw_event_supply_cache(pos, alpha, triggered)
 			"barricade_repair":
-				_draw_event_broken_watch(pos, alpha, triggered)
+				_draw_event_barricade(pos, alpha, triggered)
 			"beacon":
-				_draw_event_dead_camp(pos, alpha, triggered)
+				_draw_event_beacon(pos, alpha, triggered)
 			"shrine":
-				_draw_event_altar(pos, alpha, triggered)
+				_draw_event_shrine(pos, alpha, triggered)
 
 		if not triggered:
 			var progress := 0.0
@@ -3406,6 +3437,65 @@ func _draw_world_events() -> void:
 				draw_arc(pos, 29.0, -PI * 0.5, -PI * 0.5 + TAU * progress, 30, Color(0.94, 0.76, 0.42, 0.85), 3.0)
 
 
+
+
+func _draw_event_nest(pos: Vector2, alpha: float, triggered: bool) -> void:
+	if triggered:
+		draw_circle(pos + Vector2(0, 13), 10.0, Color(0.18, 0.12, 0.10, alpha))
+		return
+	draw_rect(Rect2(pos + Vector2(-7, 0), Vector2(14, 34)), Color(0.13, 0.10, 0.09, alpha))
+	draw_circle(pos + Vector2(0, -10), 24.0, Color(0.09, 0.13, 0.10, alpha))
+	for i in range(5):
+		var a := TAU * float(i) / 5.0
+		draw_line(pos + Vector2(cos(a), sin(a)) * 10.0, pos + Vector2(cos(a), sin(a)) * 29.0, Color(0.22, 0.16, 0.12, alpha), 4.0)
+	draw_string(font, pos + Vector2(-55, -44), "ЛОГОВО", HORIZONTAL_ALIGNMENT_CENTER, 110, 9, Color(0.82, 0.72, 0.59, 0.86 * alpha))
+
+
+func _draw_event_signal_survivor(pos: Vector2, alpha: float, triggered: bool) -> void:
+	if triggered:
+		return
+	_draw_humanoid(pos, Color(0.46, 0.51, 0.45, alpha), 0.0, "guard", 1.0)
+	draw_line(pos + Vector2(15, -20), pos + Vector2(15, -43), Color(0.52, 0.40, 0.26, alpha), 3.0)
+	draw_circle(pos + Vector2(15, -47), 4.0, Color(0.94, 0.58, 0.25, 0.9 * alpha))
+	draw_string(font, pos + Vector2(-58, -55), "РАЗВЕДЧИК", HORIZONTAL_ALIGNMENT_CENTER, 116, 9, Color(0.84, 0.78, 0.67, 0.86 * alpha))
+
+
+func _draw_event_supply_cache(pos: Vector2, alpha: float, triggered: bool) -> void:
+	draw_rect(Rect2(pos + Vector2(-24, -10), Vector2(48, 25)), Color(0.34, 0.28, 0.20, alpha))
+	draw_line(pos + Vector2(-22, -8), pos + Vector2(22, -8), Color(0.58, 0.46, 0.30, alpha), 4.0)
+	draw_line(pos + Vector2(0, -8), pos + Vector2(0, 14), Color(0.55, 0.48, 0.37, alpha), 3.0)
+	if not triggered:
+		draw_string(font, pos + Vector2(-54, -34), "ТАЙНИК", HORIZONTAL_ALIGNMENT_CENTER, 108, 9, Color(0.84, 0.78, 0.66, 0.86 * alpha))
+
+
+func _draw_event_barricade(pos: Vector2, alpha: float, triggered: bool) -> void:
+	for y in [-12.0, 2.0, 16.0]:
+		draw_line(pos + Vector2(-34, y), pos + Vector2(34, y - 5), Color(0.42, 0.30, 0.18, alpha), 7.0)
+	draw_line(pos + Vector2(-24, 24), pos + Vector2(-15, -30), Color(0.34, 0.25, 0.18, alpha), 5.0)
+	draw_line(pos + Vector2(25, 24), pos + Vector2(14, -30), Color(0.34, 0.25, 0.18, alpha), 5.0)
+	if not triggered:
+		draw_string(font, pos + Vector2(-66, -48), "ЗАВАЛ У МОСТА", HORIZONTAL_ALIGNMENT_CENTER, 132, 9, Color(0.82, 0.74, 0.62, 0.86 * alpha))
+
+
+func _draw_event_beacon(pos: Vector2, alpha: float, triggered: bool) -> void:
+	draw_line(pos + Vector2(-14, 24), pos + Vector2(0, -34), Color(0.37, 0.29, 0.21, alpha), 6.0)
+	draw_line(pos + Vector2(14, 24), pos + Vector2(0, -34), Color(0.37, 0.29, 0.21, alpha), 6.0)
+	draw_line(pos + Vector2(-18, 3), pos + Vector2(18, 3), Color(0.46, 0.35, 0.23, alpha), 5.0)
+	var glow := 0.16 if triggered else 0.06
+	draw_circle(pos + Vector2(0, -38), 12.0, Color(1.0, 0.54, 0.20, glow * alpha))
+	if not triggered:
+		draw_string(font, pos + Vector2(-66, -58), "СИГНАЛЬНЫЙ МАЯК", HORIZONTAL_ALIGNMENT_CENTER, 132, 9, Color(0.85, 0.77, 0.63, 0.86 * alpha))
+
+
+func _draw_event_shrine(pos: Vector2, alpha: float, triggered: bool) -> void:
+	for i in range(7):
+		var a := TAU * float(i) / 7.0
+		var stone := pos + Vector2(cos(a), sin(a)) * 22.0
+		draw_circle(stone, 5.0, Color(0.40, 0.40, 0.36, alpha))
+	draw_line(pos + Vector2(-7, 10), pos + Vector2(0, -18), Color(0.68, 0.51, 0.30, 0.65 * alpha), 3.0)
+	draw_line(pos + Vector2(7, 10), pos + Vector2(0, -18), Color(0.68, 0.51, 0.30, 0.65 * alpha), 3.0)
+	if not triggered:
+		draw_string(font, pos + Vector2(-62, -42), "КАМЕННЫЙ КРУГ", HORIZONTAL_ALIGNMENT_CENTER, 124, 9, Color(0.84, 0.77, 0.64, 0.86 * alpha))
 
 
 func _draw_event_wagon(pos: Vector2, alpha: float, triggered: bool) -> void:
