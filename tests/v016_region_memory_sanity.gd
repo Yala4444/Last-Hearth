@@ -47,6 +47,25 @@ func _init() -> void:
 			fail("All fires should be restored at 3/3")
 			return
 
+	# Opening the map acknowledges newly restored fires, so the table can stop showing its NEW badge.
+	game.mode = game.Mode.HUB
+	game.hub_area = "center"
+	game.region_map_open = false
+	game.help_open = false
+	game.hub_zone_lock = ""
+	game.meta["forest_fires"] = 1
+	game.meta["map_seen_fires"] = 0
+	game.hero_pos = game.HUB_MAP_POS
+	game.hero_target = game.hero_pos
+	game._update_hub_interactions()
+	if not bool(game.region_map_open):
+		fail("Walking to the map table did not open the discovered-fire map")
+		return
+	if int(game.meta.get("map_seen_fires", 0)) != 1:
+		fail("Opening the map did not acknowledge the newest restored fire")
+		return
+	game.region_map_open = false
+
 	# Character fates: local keepers do not unlock homes.
 	game.meta["hunter_fate"] = "keeper_fire_1"
 	game.meta["master_relationship_state"] = "waiting_forest"
