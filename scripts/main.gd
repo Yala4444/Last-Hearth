@@ -106,6 +106,7 @@ var meta: Dictionary = {
 	"forest_fire_2_keeper": "",
 	"forest_fire_3_keeper": "",
 	"forest_story_step": 0,
+	"map_seen_fires": 0,
 	"hunter_fate": "unknown",
 	"master_relationship_state": "unknown",
 	"master_arrival_seen": false,
@@ -347,6 +348,7 @@ func _load_meta() -> void:
 
 	meta["hub_intro_seen"] = bool(meta.get("hub_intro_seen", false))
 	meta["master_arrival_seen"] = bool(meta.get("master_arrival_seen", false))
+	meta["map_seen_fires"] = clampi(int(meta.get("map_seen_fires", 0)), 0, 3)
 	meta["rescued_hunter"] = bool(meta.get("rescued_hunter", false))
 	meta["rescued_worker"] = bool(meta.get("rescued_worker", false))
 	meta["watch_restored"] = bool(meta.get("watch_restored", false))
@@ -1862,6 +1864,8 @@ func _update_hub_interactions() -> void:
 		if int(meta.get("forest_fires", 0)) > 0:
 			region_map_selected_fire = _default_region_map_selection()
 			region_map_open = true
+			meta["map_seen_fires"] = int(meta.get("forest_fires", 0))
+			_save_meta()
 			_stop_joystick()
 		else:
 			_start_expedition()
@@ -3291,9 +3295,16 @@ func _draw_hub() -> void:
 	draw_string(font, HUB_HEARTH_UPGRADE_POS + Vector2(-95, 49), hearth_label, HORIZONTAL_ALIGNMENT_CENTER, 190, 8, Color("#e6c583"))
 
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006) * 0.08
-	draw_arc(HUB_MAP_POS, 46.0 * pulse, 0.0, TAU, 44, Color(0.78, 0.88, 0.70, 0.55), 2.0)
+	var unread_map := fires > int(meta.get("map_seen_fires", 0))
+	var map_ring := Color("#e0b469") if unread_map else Color(0.78, 0.88, 0.70, 0.55)
+	draw_arc(HUB_MAP_POS, (49.0 if unread_map else 46.0) * pulse, 0.0, TAU, 44, map_ring, 2.4 if unread_map else 2.0)
 	var map_label := "ПЕРВАЯ ВЫЛАЗКА" if fires <= 0 else "КАРТА ОГНЕЙ"
 	draw_string(font, HUB_MAP_POS + Vector2(-90, 57), map_label, HORIZONTAL_ALIGNMENT_CENTER, 180, 12, Color("#f3e4c8"))
+	if unread_map:
+		var badge := Rect2(HUB_MAP_POS + Vector2(30, -47), Vector2(54, 20))
+		draw_rect(badge, Color(0.10, 0.08, 0.05, 0.96))
+		draw_rect(Rect2(badge.position, Vector2(3, badge.size.y)), Color("#d6a65f"))
+		draw_string(font, badge.position + Vector2(5, 14), "НОВОЕ", HORIZONTAL_ALIGNMENT_CENTER, 44, 8, Color("#f0d49c"))
 
 func _draw_hub_growth_props(fires: int) -> void:
 	# Settlement growth must represent real infrastructure, never imaginary residents.
