@@ -622,6 +622,8 @@ func _enter_hub(message: String = "") -> void:
 	story_hint = ""
 	story_hint_timer = 0.0
 	notice_queue.clear()
+	if message != "":
+		_play_sfx("home", -1.0)
 
 	var fires := int(meta.get("forest_fires", 0))
 	var master_state := String(meta.get("master_relationship_state", "unknown"))
@@ -636,7 +638,6 @@ func _enter_hub(message: String = "") -> void:
 		_story("ОГОНЬ ОСТАЛСЯ В ЛЕСУ\nВосстановленный очаг не исчез после вылазки. Открой карту: там виден каждый найденный сигнал и тот, кто остался его хранить.", 5.5)
 	elif message != "":
 		_hub_feedback("ВОЗВРАЩЕНИЕ К ПОСЛЕДНЕМУ ОЧАГУ", HEARTH_POS, 1.8)
-		_play_sfx("home", -1.0)
 
 func _configure_expedition_sector() -> void:
 	expedition_sector = clampi(int(meta.get("forest_fires", 0)), 0, 2)
