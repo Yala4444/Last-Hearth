@@ -45,6 +45,9 @@ func _init() -> void:
 	if game.enemies.size() < 3:
 		fail("Hunter route lacks the rescue encounter")
 		return
+	if float(game.hero_pos.x) < 400.0 or float(game.route_return_gate_pos.x) < 400.0:
+		fail("Leaving camp to the left must enter the route from the right edge")
+		return
 
 	game.enemies.clear()
 	game.hero_pos = game.survivor_one_pos
@@ -56,13 +59,16 @@ func _init() -> void:
 		fail("Hunter did not join the group")
 		return
 
-	game.hero_pos = game.ROUTE_RETURN_GATE
+	game.hero_pos = game.route_return_gate_pos
 	game._update_area_transitions()
 	if int(game.area) != int(game.Area.CAMP):
 		fail("Hunter route did not return to camp")
 		return
 	if int(game.stage) != int(game.Stage.NIGHT1):
 		fail("Returning from hunter route did not start Night 1")
+		return
+	if float(game.hero_pos.x) > 120.0:
+		fail("Returning from the hunter route did not re-enter camp from the left")
 		return
 
 	# Sawmill branch gives a different payoff and does not add the hunter.
@@ -71,6 +77,9 @@ func _init() -> void:
 	game._enter_day1_route("sawmill")
 	if int(game.area) != int(game.Area.SAWMILL):
 		fail("Sawmill route did not load")
+		return
+	if float(game.hero_pos.x) > 80.0:
+		fail("Leaving camp to the right must enter the sawmill from the left edge")
 		return
 	var before_carry := int(game.carry_limit)
 	var before_hp := float(game.hearth_max_hp)
@@ -142,13 +151,21 @@ func _init() -> void:
 		fail("Worker did not join the group")
 		return
 
-	game.hero_pos = game.ROUTE_RETURN_GATE
+	game.hero_pos = game.route_return_gate_pos
 	game._update_area_transitions()
 	if int(game.area) != int(game.Area.CAMP):
 		fail("Worker route did not return to camp")
 		return
+	if int(game.stage) != int(game.Stage.DAY2_BUILD) or bool(game.workshop_built):
+		fail("Worker return must start the workshop construction phase")
+		return
+	var build_wood_start := int(game.current_stage_wood_start)
+	var build_stone_start := int(game.current_stage_stone_start)
+	game.camp_wood = build_wood_start + game.WORKSHOP_WOOD_COST
+	game.camp_stone = build_stone_start + game.WORKSHOP_STONE_COST
+	game._check_day_progress()
 	if int(game.stage) != int(game.Stage.WORKSHOP_CHOICE) or not bool(game.workshop_built):
-		fail("Worker return did not restore the workshop")
+		fail("Fresh materials did not finish the workshop")
 		return
 
 
@@ -172,7 +189,7 @@ func _init() -> void:
 	if not bool(game.day3_route_complete) or not bool(game.tower_built):
 		fail("Watch route did not rebuild the tower")
 		return
-	game.hero_pos = game.ROUTE_RETURN_GATE
+	game.hero_pos = game.route_return_gate_pos
 	game._update_area_transitions()
 	if int(game.area) != int(game.Area.CAMP) or int(game.stage) != int(game.Stage.NIGHT3):
 		fail("Watch route did not return into Night 3")
@@ -190,6 +207,19 @@ func _init() -> void:
 	game._update_day3_route()
 	if not bool(game.day3_route_complete) or float(game.hero_damage) <= damage_before:
 		fail("Altar route did not grant the offensive payoff")
+		return
+
+	# A completed run restores one regional signal without falsely unlocking the next chapter.
+	game.mode = game.Mode.EXPEDITION
+	game.meta["forest_fires"] = 0
+	game.meta["forest_cleared"] = false
+	game.run_embers = 0
+	game._finish_run(true)
+	if int(game.meta.get("forest_fires", 0)) != 1:
+		fail("A successful run did not restore exactly one forest fire")
+		return
+	if bool(game.meta.get("forest_cleared", false)):
+		fail("Dead Fields must not unlock after only one restored fire")
 		return
 
 	print("CHAPTER1_ADVENTURE_SANITY_OK")
