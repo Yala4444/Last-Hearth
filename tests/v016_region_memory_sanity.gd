@@ -148,6 +148,20 @@ func _init() -> void:
 		fail("Third expedition intro did not connect the Master's chapter arc")
 		return
 
+	# P2 polish: restored map links expose a deterministic pulse point helper.
+	var pulse_mid = game._map_connection_point(Vector2(0, 0), Vector2(100, 0), 0.5)
+	if absf(pulse_mid.x - 50.0) > 0.01 or absf(pulse_mid.y) > 0.01:
+		fail("Map connection pulse helper is not interpolating restored links correctly")
+		return
+
+	# The Master's first arrival creates a visible focus beat on his newly unlocked plot.
+	game.meta["master_relationship_state"] = "joining_home"
+	game.meta["master_arrival_seen"] = false
+	game._enter_hub()
+	if game.master_arrival_focus_timer <= 0.0:
+		fail("Master arrival did not start the home-plot focus beat")
+		return
+
 	# Hearth Book is multi-page and no longer closes on any random tap.
 	game.help_open = true
 	game.hearth_book_page = 0
