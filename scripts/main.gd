@@ -975,7 +975,7 @@ func _update_day1_route() -> void:
 			_add_survivor("hunter", survivor_one_pos)
 			day1_route_complete = true
 			run_embers += 1
-			_story("ОХОТНИК СПАСЁН\n«Ночью они идут на огонь. Я останусь у края света.»", 3.7)
+			_story("ОХОТНИК СПАСЁН\nСОЮЗНИК +1 • стреляет издалека. «Ночью они идут на огонь. Я прикрою край света.»", 4.2)
 		return
 
 	if day1_route == "sawmill":
@@ -1002,7 +1002,7 @@ func _update_day1_route() -> void:
 			hearth_hp = hearth_max_hp
 			_add_survivor("guard", Vector2(240.0, 220.0))
 			run_embers += 1
-			_story("ВОЗНИЦА СПАСЁН\nСоюзник +1 • слоты %d > %d • прочность огня +20. Он идёт с тобой." % [old_slots, carry_limit], 4.1)
+			_story("ВОЗНИЦА СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. Слоты %d > %d • прочность огня +20." % [old_slots, carry_limit], 4.3)
 		"nest":
 			var old_damage := hero_damage
 			hero_damage *= 1.18
@@ -1010,7 +1010,7 @@ func _update_day1_route() -> void:
 			_story("ЛОГОВО УНИЧТОЖЕНО\nУрон %d > %d (+18%%). Союзника ты не нашёл — поздние ночи будут опаснее." % [roundi(old_damage), roundi(hero_damage)], 4.2)
 		"signal":
 			run_embers += 1
-			_story("РАЗВЕДЧИК СПАСЁН\n«Я видел ещё один огонь глубже в лесу. Покажу дорогу.»", 3.4)
+			_story("РАЗВЕДЧИК СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. «Я видел ещё один огонь глубже в лесу.»", 4.0)
 		"dead_fire":
 			var old_hearth_hp := hearth_max_hp
 			hearth_max_hp += 32.0
@@ -1126,7 +1126,7 @@ func _update_worker_route() -> void:
 		_add_survivor("worker", survivor_two_pos)
 		worker_route_complete = true
 		run_embers += 1
-		_story("РАБОЧИЙ СПАСЁН\n«Я починю мастерскую. Но эти твари знали, где мы прячемся.»", 3.8)
+		_story("МАСТЕР СПАСЁН\nСОЮЗНИК +1 • ночью чинит Очаг. «Дай мне инструменты — удержим свет.»", 4.2)
 	elif day2_mission == "storehouse":
 		if not _route_event_triggered("supply_cache"):
 			return
@@ -1144,7 +1144,7 @@ func _update_worker_route() -> void:
 		_add_survivor("guard", survivor_two_pos)
 		worker_route_complete = true
 		run_embers += 2
-		_story("РАЗВЕДЧИК СПАСЁН\n«До сердца леса осталось недалеко. Я пойду с вами.»", 3.6)
+		_story("РАЗВЕДЧИК СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. «До сердца леса осталось недалеко.»", 4.0)
 
 
 func _return_from_worker_ruins() -> void:
