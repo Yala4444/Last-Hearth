@@ -298,10 +298,17 @@ var hub_zone_lock := ""
 var result_title := ""
 var result_subtitle := ""
 
+var audio_sfx_players: Array[AudioStreamPlayer] = []
+var audio_sfx_cursor := 0
+var audio_sfx_streams: Dictionary = {}
+var audio_wind: AudioStreamPlayer
+var audio_fire: AudioStreamPlayer
+
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
 	rng.randomize()
+	_setup_audio()
 	_load_meta()
 	if bool(meta.get("first_run", true)):
 		meta["first_run"] = false
@@ -332,6 +339,7 @@ func _process(delta: float) -> void:
 	upgrade_wave = maxf(0.0, upgrade_wave - delta * 0.72)
 	light_display_radius = lerpf(light_display_radius, light_radius, 1.0 - exp(-delta * 2.8))
 	_update_resource_flights(delta)
+	_update_audio_mix()
 
 	if mode == Mode.HUB:
 		_update_movement(delta)
@@ -350,6 +358,94 @@ func _process(delta: float) -> void:
 	_update_particles(delta)
 	_update_floaters(delta)
 	queue_redraw()
+
+
+func _make_wave(duration: float, start_freq: float, end_freq: float, noise_amount: float = 0.0, decay: bool = true, looped: bool = false) -> AudioStreamWAV:
+	var rate := 11025
+	var frames := maxi(64, int(duration * float(rate)))
+	var data := PackedByteArray()
+	data.resize(frames * 2)
+	for i in range(frames):
+		var progress := float(i) / float(maxi(1, frames - 1))
+		var time := float(i) / float(rate)
+		var freq := lerpf(start_freq, end_freq, progress)
+		var envelope := (1.0 - progress) if decay else (0.72 + 0.18 * sin(progress * TAU * 3.0))
+		var hash_wave := sin(float(i) * 12.9898 + 78.233) * 43758.5453
+		var noise := (fposmod(hash_wave, 2.0) - 1.0) * noise_amount
+		var harmonic := sin(TAU * freq * time) * 0.68 + sin(TAU * freq * 0.51 * time) * 0.20
+		var sample := clampf((harmonic + noise) * envelope, -1.0, 1.0)
+		var value := int(sample * 32767.0)
+		data[i * 2] = value & 0xff
+		data[i * 2 + 1] = (value >> 8) & 0xff
+
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.stereo = false
+	stream.data = data
+	if looped:
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+		stream.loop_begin = 0
+		stream.loop_end = frames
+	return stream
+
+
+func _setup_audio() -> void:
+	audio_sfx_streams = {
+		"chop": _make_wave(0.11, 118.0, 72.0, 0.18),
+		"stone": _make_wave(0.10, 245.0, 92.0, 0.24),
+		"pickup": _make_wave(0.10, 620.0, 940.0, 0.02),
+		"shot": _make_wave(0.065, 980.0, 520.0, 0.05),
+		"enemy_down": _make_wave(0.18, 170.0, 62.0, 0.20),
+		"night": _make_wave(0.48, 104.0, 48.0, 0.10),
+		"boss": _make_wave(0.72, 76.0, 31.0, 0.22),
+		"boss_phase": _make_wave(0.42, 190.0, 54.0, 0.16),
+		"boss_down": _make_wave(0.68, 88.0, 28.0, 0.18),
+		"map": _make_wave(0.34, 470.0, 860.0, 0.01),
+		"home": _make_wave(0.58, 330.0, 495.0, 0.015)
+	}
+	for i in range(7):
+		var player := AudioStreamPlayer.new()
+		player.volume_db = -13.0
+		add_child(player)
+		audio_sfx_players.append(player)
+
+	audio_wind = AudioStreamPlayer.new()
+	audio_wind.stream = _make_wave(2.8, 58.0, 82.0, 0.16, false, true)
+	audio_wind.volume_db = -31.0
+	add_child(audio_wind)
+	audio_wind.play()
+
+	audio_fire = AudioStreamPlayer.new()
+	audio_fire.stream = _make_wave(1.9, 126.0, 84.0, 0.25, false, true)
+	audio_fire.volume_db = -29.0
+	add_child(audio_fire)
+	audio_fire.play()
+
+
+func _play_sfx(kind: String, volume_offset_db: float = 0.0) -> void:
+	if audio_sfx_players.is_empty() or not audio_sfx_streams.has(kind):
+		return
+	var player := audio_sfx_players[audio_sfx_cursor % audio_sfx_players.size()]
+	audio_sfx_cursor += 1
+	player.stop()
+	player.stream = audio_sfx_streams[kind]
+	player.volume_db = -13.0 + volume_offset_db
+	player.play()
+
+
+func _update_audio_mix() -> void:
+	if audio_wind == null or audio_fire == null:
+		return
+	var night := stage in [Stage.NIGHT1, Stage.NIGHT2, Stage.NIGHT3]
+	var wind_target := -34.0 if mode == Mode.HUB else (-25.0 if night else -30.0)
+	var fire_target := -23.0 if mode == Mode.HUB else (-20.0 if area == Area.CAMP else -31.0)
+	# Deliberate near-silence before the real Forest Guardian makes the final arrival readable.
+	if mode == Mode.EXPEDITION and expedition_sector == 2 and boss_delay_timer > 0.0:
+		wind_target = -46.0
+		fire_target = -38.0
+	audio_wind.volume_db = lerpf(audio_wind.volume_db, wind_target, 0.045)
+	audio_fire.volume_db = lerpf(audio_fire.volume_db, fire_target, 0.055)
 
 
 func _load_meta() -> void:
@@ -540,6 +636,7 @@ func _enter_hub(message: String = "") -> void:
 		_story("ОГОНЬ ОСТАЛСЯ В ЛЕСУ\nВосстановленный очаг не исчез после вылазки. Открой карту: там виден каждый найденный сигнал и тот, кто остался его хранить.", 5.5)
 	elif message != "":
 		_hub_feedback("ВОЗВРАЩЕНИЕ К ПОСЛЕДНЕМУ ОЧАГУ", HEARTH_POS, 1.8)
+		_play_sfx("home", -1.0)
 
 func _configure_expedition_sector() -> void:
 	expedition_sector = clampi(int(meta.get("forest_fires", 0)), 0, 2)
@@ -1952,10 +2049,12 @@ func _update_hub_interactions() -> void:
 	if near_map and hub_zone_lock != "map":
 		hub_zone_lock = "map"
 		if int(meta.get("forest_fires", 0)) > 0:
+			var map_has_new_fire := int(meta.get("forest_fires", 0)) > int(meta.get("map_seen_fires", 0))
 			region_map_selected_fire = _default_region_map_selection()
 			region_map_open = true
 			meta["map_seen_fires"] = int(meta.get("forest_fires", 0))
 			_save_meta()
+			_play_sfx("map" if map_has_new_fire else "pickup", -2.0)
 			_stop_joystick()
 		else:
 			_start_expedition()
@@ -2093,6 +2192,7 @@ func _update_resource_gathering() -> void:
 		event["progress"] = 1.0 - float(maxi(0, hits_left)) / 5.0
 		events[e] = event
 		gather_cd = gather_interval * 1.12
+		_play_sfx("chop", -1.0)
 		_burst(event_pos, 5)
 		camera_shake = maxf(camera_shake, 0.8)
 		if hits_left <= 0:
@@ -2115,6 +2215,7 @@ func _update_resource_gathering() -> void:
 		node["hits"] = hits
 		node["hit_flash"] = 1.0
 		gather_cd = gather_interval
+		_play_sfx("chop" if kind == "tree" else "stone", -2.0)
 		_burst_typed(node_pos, 6, "wood" if kind == "tree" else "stone")
 
 		if hits > 0:
@@ -2198,6 +2299,7 @@ func _update_resource_pickups(delta: float) -> void:
 		"duration": 0.24
 	})
 	_burst(pickup_pos, 4)
+	_play_sfx("pickup", -4.0)
 	resource_pickups.remove_at(nearest_index)
 	pickup_cd = 0.11
 
@@ -2374,6 +2476,7 @@ func _update_expedition_choice() -> void:
 
 func _start_night(number: int) -> void:
 	current_night = number
+	_play_sfx("night", -1.0)
 	night_queue.clear()
 	night_spawn_cd = 0.65
 	twilight_timer = TWILIGHT_DURATION + 0.8
@@ -2475,6 +2578,7 @@ func _update_night_spawner(delta: float) -> void:
 		if _is_chapter_boss(next_kind) and not boss_announced:
 			boss_announced = true
 			boss_delay_timer = 2.6
+			_play_sfx("boss", 0.0)
 			_story(_boss_arrival_story(next_kind), 2.8)
 			return
 
@@ -2778,6 +2882,8 @@ func _update_combat() -> void:
 				"speed": 520.0,
 				"tower": false
 			})
+		if targets.size() > 0:
+			_play_sfx("shot", -7.0)
 		hero_shot_cd = hero_fire_rate
 
 
@@ -2887,6 +2993,7 @@ func _update_enemies(delta: float) -> void:
 				enemy["boss_phase"] = 2
 				enemy["speed"] = 38.0
 				enemy["damage"] = 18.0
+				_play_sfx("boss_phase", -1.0)
 				_banner("ВЕПРЬ В ЯРОСТИ | РЫВКИ БЫСТРЕЕ", 1.8)
 				camera_shake = 3.2
 			elif enemy_kind == "rootborn" and boss_phase == 1 and hp_ratio <= 0.50:
@@ -2894,6 +3001,7 @@ func _update_enemies(delta: float) -> void:
 				light_radius = maxf(215.0, light_radius - 42.0)
 				night_queue.push_front("guard")
 				night_queue.push_front("fast")
+				_play_sfx("boss_phase", -1.0)
 				_story("КОРНИ СЖАЛИ СВЕТ\nКорневик укоренился у границы огня. Радиус света уменьшился, из чащи полезли новые твари.", 3.2)
 				camera_shake = 3.6
 			elif enemy_kind in ["forest_guardian", "boss"] and boss_phase == 1 and hp_ratio <= 0.66:
@@ -2902,6 +3010,7 @@ func _update_enemies(delta: float) -> void:
 				enemy["damage"] = 20.0
 				night_queue.push_front("fast")
 				night_queue.push_front("fast")
+				_play_sfx("boss_phase", -1.0)
 				_story("ХРАНИТЕЛЬ ЛЕСА — ФАЗА II\nКора на его теле треснула. Из тьмы отвечают две быстрые тени.", 3.2)
 				camera_shake = 4.0
 			elif enemy_kind in ["forest_guardian", "boss"] and boss_phase == 2 and hp_ratio <= 0.33:
@@ -2910,6 +3019,7 @@ func _update_enemies(delta: float) -> void:
 				enemy["damage"] = 23.0
 				light_radius = maxf(230.0, light_radius - 30.0)
 				night_queue.push_front("elite")
+				_play_sfx("boss_phase", -1.0)
 				_story("ХРАНИТЕЛЬ ЛЕСА — ПОСЛЕДНЯЯ ФАЗА\nСвет сжимается. Страж бросает всё, чтобы не дать третьему огню зажечься.", 3.4)
 				camera_shake = 5.2
 
@@ -2967,8 +3077,10 @@ func _on_enemy_killed(enemy: Dictionary) -> void:
 		camera_shake = 6.0
 
 	if kind == "elite":
+		_play_sfx("enemy_down", -3.0)
 		_float_text(pos + Vector2(0, -25), "ЭЛИТА ПОВЕРЖЕНА", Color(1.0, 0.72, 0.38))
 	elif _is_chapter_boss(kind):
+		_play_sfx("boss_down", 1.0)
 		run_embers += _boss_ember_reward(kind)
 		core_active = true
 		core_carried = false
@@ -2980,6 +3092,8 @@ func _on_enemy_killed(enemy: Dictionary) -> void:
 		flash_timer = 0.7
 		var fallen_name := _boss_display_name(kind)
 		_banner("%s ПОВЕРЖЕН | ЗАБЕРИ ЯДРО" % fallen_name, 2.6)
+	else:
+		_play_sfx("enemy_down", -8.0)
 
 
 func _update_core_return() -> void:
