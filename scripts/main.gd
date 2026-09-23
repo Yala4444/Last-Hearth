@@ -3166,6 +3166,15 @@ func _draw_hub() -> void:
 func _draw_hub_growth_props(fires: int) -> void:
 	# Non-interactive set dressing: the settlement itself becomes the progression reward.
 	if fires >= 1:
+		# Footpaths make the settlement read as one place instead of disconnected icons.
+		for destination: Vector2 in [
+			HUB_FORESTER_HOME_POS + Vector2(0, 34),
+			HUB_HUNTER_HOME_POS + Vector2(0, 34),
+			HUB_WORKER_HOME_POS + Vector2(0, 34),
+			HUB_GROVE_GATE,
+			HUB_QUARRY_GATE
+		]:
+			draw_line(HEARTH_POS, destination, Color(0.39, 0.34, 0.25, 0.065), 16.0, true)
 		# Woodpile and supply crate.
 		for i in range(3):
 			var y := 370.0 + float(i) * 7.0
