@@ -3668,7 +3668,7 @@ func _draw_book_stand(pos: Vector2) -> void:
 
 
 func _draw_hub_building(pos: Vector2, kind: String, label: String, subtitle: String) -> void:
-	_draw_ellipse_custom(pos + Vector2(0, 25), Vector2(38, 11), Color(0.01, 0.02, 0.015, 0.28))
+	_draw_ellipse_custom(pos + Vector2(0, 28), Vector2(43, 12), Color(0.01, 0.02, 0.015, 0.34))
 	var wall := Color("#5d4e3b")
 	var roof := Color("#7b6243")
 	if kind == "forge":
@@ -3680,22 +3680,37 @@ func _draw_hub_building(pos: Vector2, kind: String, label: String, subtitle: Str
 	elif kind == "watch":
 		wall = Color("#4e4b3b")
 		roof = Color("#6f6846")
-	draw_rect(Rect2(pos + Vector2(-28, -12), Vector2(56, 40)), wall)
+
+	draw_rect(Rect2(pos + Vector2(-29, -12), Vector2(58, 41)), wall)
 	var roof_pts := PackedVector2Array([
-		pos + Vector2(-34, -12), pos + Vector2(0, -39), pos + Vector2(34, -12)
+		pos + Vector2(-36, -12), pos + Vector2(0, -41), pos + Vector2(36, -12)
 	])
 	draw_colored_polygon(roof_pts, roof)
-	draw_rect(Rect2(pos + Vector2(-6, 7), Vector2(12, 21)), Color("#292821"))
+	draw_line(pos + Vector2(-28, 1), pos + Vector2(28, 1), wall.lightened(0.08), 2.0)
+	draw_rect(Rect2(pos + Vector2(-6, 7), Vector2(12, 22)), Color("#292821"))
+
+	var window_glow := 0.72 + sin(Time.get_ticks_msec() * 0.004 + pos.x) * 0.10
+	draw_circle(pos + Vector2(15, 8), 12.0, Color(0.95, 0.61, 0.25, 0.035 * window_glow))
+	draw_rect(Rect2(pos + Vector2(10, 3), Vector2(10, 10)), Color(0.91, 0.63, 0.31, 0.65 * window_glow))
+	draw_line(pos + Vector2(15, 3), pos + Vector2(15, 13), Color("#4b3e30"), 1.4)
+	draw_line(pos + Vector2(10, 8), pos + Vector2(20, 8), Color("#4b3e30"), 1.4)
+
 	if kind == "forge":
-		draw_rect(Rect2(pos + Vector2(18, -33), Vector2(8, 27)), Color("#443c34"))
-		draw_circle(pos + Vector2(22, -38), 6.0, Color(0.72, 0.45, 0.30, 0.16))
+		draw_rect(Rect2(pos + Vector2(18, -34), Vector2(8, 28)), Color("#443c34"))
+		draw_circle(pos + Vector2(22, -39), 7.0, Color(0.72, 0.45, 0.30, 0.16))
 	elif kind == "store":
 		for i in range(3):
-			draw_line(pos + Vector2(-20, 14 - i * 8), pos + Vector2(-2, 14 - i * 8), Color("#a87b48"), 5.0, true)
-	draw_string(font, pos + Vector2(-70, 47), label, HORIZONTAL_ALIGNMENT_CENTER, 140, 11, Color("#e6dcc6"))
-	if subtitle != "":
-		draw_string(font, pos + Vector2(-70, 60), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 140, 10, Color("#9aa79a"))
+			draw_line(pos + Vector2(-21, 14 - i * 8), pos + Vector2(-3, 14 - i * 8), Color("#a87b48"), 5.0, true)
+	else:
+		# A completed resident home should look inhabited rather than like a clean icon.
+		draw_line(pos + Vector2(-38, 23), pos + Vector2(-20, 17), Color("#775237"), 5.0, true)
+		draw_circle(pos + Vector2(-39, 23), 2.8, Color("#a2754a"))
+		draw_rect(Rect2(pos + Vector2(31, 15), Vector2(14, 11)), Color("#55483a"))
+		draw_line(pos + Vector2(31, 20), pos + Vector2(45, 20), Color("#816a4d"), 2.0)
 
+	draw_string(font, pos + Vector2(-70, 49), label, HORIZONTAL_ALIGNMENT_CENTER, 140, 11, Color("#e6dcc6"))
+	if subtitle != "":
+		draw_string(font, pos + Vector2(-70, 62), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 140, 10, Color("#9aa79a"))
 
 func _draw_map_table(pos: Vector2) -> void:
 	draw_rect(Rect2(pos + Vector2(-34, -13), Vector2(68, 30)), Color("#67533b"))
@@ -4695,23 +4710,53 @@ func _draw_enemy(enemy: Dictionary) -> void:
 		body = Color("#83513f")
 	elif kind == "elite":
 		body = Color("#60425d")
-	elif kind == "boss":
+	elif kind == "black_boar":
+		body = Color("#4b3935")
+	elif kind == "rootborn":
+		body = Color("#4a4633")
+	elif kind in ["forest_guardian", "boss"]:
 		body = Color("#413443")
 	elif kind == "guard":
 		body = Color("#5e4945")
 	if flash:
 		body = body.lightened(0.55)
 
-	_draw_ellipse_custom(pos + Vector2(0, radius * 0.75), Vector2(radius * 1.15, radius * 0.38), Color(0.01, 0.015, 0.012, 0.38))
+	var shadow_scale := 1.55 if _is_chapter_boss(kind) else 1.15
+	_draw_ellipse_custom(pos + Vector2(0, radius * 0.78), Vector2(radius * shadow_scale, radius * 0.40), Color(0.01, 0.015, 0.012, 0.42))
+
+	var eye_left := pos + Vector2(-radius * 0.28, -radius * 0.58)
+	var eye_right := pos + Vector2(radius * 0.28, -radius * 0.58)
 
 	if kind == "fast":
-		# Low, animal-like silhouette.
 		_draw_ellipse_custom(pos + Vector2(0, 1), Vector2(radius * 1.35, radius * 0.70), body)
 		draw_circle(pos + Vector2(radius * 0.85, -4), radius * 0.46, body)
 		draw_line(pos + Vector2(-7, 6), pos + Vector2(-14, 15), body.darkened(0.15), 4.0)
 		draw_line(pos + Vector2(7, 6), pos + Vector2(15, 15), body.darkened(0.15), 4.0)
-	elif kind == "boss":
-		# The Forest Guardian needs a silhouette you can recognise before reading a label.
+	elif kind == "black_boar":
+		var charge := 0.5 + 0.5 * sin(float(enemy.get("move_phase", 0.0)) * 0.72)
+		_draw_ellipse_custom(pos + Vector2(-4, 3), Vector2(radius * 1.35, radius * 0.76), body)
+		draw_circle(pos + Vector2(radius * 0.95, -3), radius * 0.58, body.darkened(0.03))
+		draw_line(pos + Vector2(radius * 1.08, 3), pos + Vector2(radius * 1.42, 10), Color("#d2c3a4"), 3.2)
+		draw_line(pos + Vector2(radius * 1.05, 1), pos + Vector2(radius * 1.35, -8), Color("#d2c3a4"), 3.2)
+		for x in [-18.0, -4.0, 10.0, 22.0]:
+			draw_line(pos + Vector2(x, 13), pos + Vector2(x - 4.0 * charge, 28), body.darkened(0.18), 6.0)
+		draw_line(pos + Vector2(-radius, -8), pos + Vector2(-radius - 10, -18), body.darkened(0.12), 4.0)
+		eye_left = pos + Vector2(radius * 0.90, -8)
+		eye_right = pos + Vector2(radius * 1.03, -7)
+	elif kind == "rootborn":
+		_draw_ellipse_custom(pos + Vector2(0, 1), Vector2(radius * 0.90, radius * 1.08), body)
+		draw_rect(Rect2(pos + Vector2(-radius * 0.52, -radius * 0.65), Vector2(radius * 1.04, radius * 1.42)), body)
+		for offset in [-22.0, -8.0, 9.0, 23.0]:
+			draw_line(pos + Vector2(offset * 0.45, radius * 0.45), pos + Vector2(offset, radius * 1.30), Color("#5a4b34"), 6.0)
+		draw_line(pos + Vector2(-13, -22), pos + Vector2(-29, -43), Color("#665238"), 7.0)
+		draw_line(pos + Vector2(13, -22), pos + Vector2(30, -40), Color("#665238"), 7.0)
+		draw_circle(pos + Vector2(-21, -37), 5.0, Color("#35412f"))
+		draw_circle(pos + Vector2(23, -35), 5.0, Color("#35412f"))
+	elif kind in ["forest_guardian", "boss"]:
+		var boss_phase := int(enemy.get("boss_phase", 1))
+		if boss_phase >= 2:
+			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+			draw_circle(pos, radius * (1.55 + pulse * 0.12), Color(0.68, 0.34, 0.22, 0.045 + float(boss_phase - 1) * 0.025))
 		_draw_ellipse_custom(pos + Vector2(0, 3), Vector2(radius * 1.05, radius * 1.15), body)
 		draw_circle(pos + Vector2(0, -radius * 0.75), radius * 0.62, body.darkened(0.08))
 		draw_line(pos + Vector2(-18, -23), pos + Vector2(-34, -43), Color("#5e4b38"), 6.0)
@@ -4721,7 +4766,6 @@ func _draw_enemy(enemy: Dictionary) -> void:
 		draw_line(pos + Vector2(-17, 24), pos + Vector2(-25, 42), body.darkened(0.15), 8.0)
 		draw_line(pos + Vector2(17, 24), pos + Vector2(25, 42), body.darkened(0.15), 8.0)
 	else:
-		# Upright shadow-creatures instead of coloured circles.
 		_draw_ellipse_custom(pos + Vector2(0, 3), Vector2(radius * 0.78, radius * 1.05), body)
 		draw_circle(pos + Vector2(0, -radius * 0.72), radius * 0.55, body.darkened(0.05))
 		draw_line(pos + Vector2(-6, 10), pos + Vector2(-9, radius + 8), body.darkened(0.18), 5.0)
@@ -4730,21 +4774,21 @@ func _draw_enemy(enemy: Dictionary) -> void:
 			draw_line(pos + Vector2(-8, -17), pos + Vector2(-17, -28), Color("#6c5542"), 4.0)
 			draw_line(pos + Vector2(8, -17), pos + Vector2(17, -28), Color("#6c5542"), 4.0)
 
-	var eye_sep := radius * 0.28
-	var eye_y := -radius * 0.58
-	draw_circle(pos + Vector2(-eye_sep, eye_y), maxf(1.6, radius * 0.09), Color("#efad51"))
-	draw_circle(pos + Vector2(eye_sep, eye_y), maxf(1.6, radius * 0.09), Color("#efad51"))
+	draw_circle(eye_left, maxf(1.6, radius * 0.09), Color("#efad51"))
+	draw_circle(eye_right, maxf(1.6, radius * 0.09), Color("#efad51"))
 
 	var hp := float(enemy.get("hp", 1.0))
 	var max_hp := float(enemy.get("max_hp", 1.0))
-	if kind in ["elite", "boss"] or hp < max_hp:
-		var bar_w := radius * 2.4
+	if kind == "elite" or _is_chapter_boss(kind) or hp < max_hp:
+		var bar_w := radius * (3.0 if _is_chapter_boss(kind) else 2.4)
 		draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 18), Vector2(bar_w, 5)), Color(0, 0, 0, 0.48))
 		draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 18), Vector2(bar_w * clampf(hp / max_hp, 0.0, 1.0), 5)), Color("#d7b872"))
 
-	if kind == "boss":
-		draw_string(font, pos + Vector2(-80, -radius - 28), "ХРАНИТЕЛЬ ЛЕСА", HORIZONTAL_ALIGNMENT_CENTER, 160, 11, Color("#ead7c7"))
-
+	if _is_chapter_boss(kind):
+		var boss_label := _boss_display_name(kind)
+		if kind in ["forest_guardian", "boss"]:
+			boss_label += " • ФАЗА %d" % int(enemy.get("boss_phase", 1))
+		draw_string(font, pos + Vector2(-95, -radius - 29), boss_label, HORIZONTAL_ALIGNMENT_CENTER, 190, 10, Color("#ead7c7"))
 
 func _draw_shot(shot: Dictionary) -> void:
 	var pos: Vector2 = shot["pos"]
