@@ -90,7 +90,7 @@ var stage: Stage = Stage.DAY1_GATHER
 var result_win := false
 
 var meta: Dictionary = {
-	"build_version": 15,
+	"build_version": 16,
 	"first_run": true,
 	"embers": 0,
 	"carry_level": 0,
@@ -99,6 +99,16 @@ var meta: Dictionary = {
 	"attempts": 0,
 	"forest_fires": 0,
 	"forest_cleared": false,
+	"forest_fire_1_state": "unknown",
+	"forest_fire_2_state": "unknown",
+	"forest_fire_3_state": "unknown",
+	"forest_fire_1_keeper": "",
+	"forest_fire_2_keeper": "",
+	"forest_fire_3_keeper": "",
+	"forest_story_step": 0,
+	"hunter_fate": "unknown",
+	"master_relationship_state": "unknown",
+	"master_arrival_seen": false,
 	"rescued_hunter": false,
 	"rescued_worker": false,
 	"watch_restored": false,
@@ -181,7 +191,9 @@ var hub_feedback_text := ""
 var hub_feedback_pos := Vector2.ZERO
 var hub_feedback_timer := 0.0
 var region_map_open := false
+var region_map_selected_fire := 0
 var help_open := false
+var hearth_book_page := 0
 var hub_area := "center"
 var hub_area_return_gate := Vector2.ZERO
 var hub_center_return_pos := Vector2.ZERO
@@ -219,8 +231,8 @@ var survivor_two_pos := Vector2.ZERO
 var survivor_one_found := false
 var survivor_two_found := false
 
-var left_choice_pos := Vector2(145.0, 250.0)
-var right_choice_pos := Vector2(335.0, 250.0)
+var left_choice_pos := Vector2(118.0, 505.0)
+var right_choice_pos := Vector2(362.0, 505.0)
 
 var core_active := false
 var core_carried := false
@@ -296,9 +308,11 @@ func _process(delta: float) -> void:
 
 func _load_meta() -> void:
 	if not FileAccess.file_exists(SAVE_PATH):
+		_sync_forest_discovery_from_progress()
 		return
 	var file := FileAccess.open(SAVE_PATH, FileAccess.READ)
 	if file == null:
+		_sync_forest_discovery_from_progress()
 		return
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if parsed is Dictionary:
@@ -319,22 +333,119 @@ func _load_meta() -> void:
 		meta["guide_seen"] = false
 	if loaded_version < 15:
 		meta["hub_intro_seen"] = false
+	if loaded_version < 16:
+		# v0.16 treated every rescued person as a future hub resident.
+		# v0.16 preserves progress but converts people into explicit chapter fates.
+		meta["hub_intro_seen"] = false
+		meta["master_arrival_seen"] = false
+		var old_fires := clampi(int(meta.get("forest_fires", 0)), 0, 3)
+		if bool(meta.get("rescued_hunter", false)) and old_fires >= 1:
+			meta["hunter_fate"] = "keeper_fire_1"
+			meta["forest_fire_1_keeper"] = "Охотник"
+		if bool(meta.get("rescued_worker", false)):
+			meta["master_relationship_state"] = "joining_home" if old_fires >= 3 else "waiting_forest"
+
 	meta["hub_intro_seen"] = bool(meta.get("hub_intro_seen", false))
+	meta["master_arrival_seen"] = bool(meta.get("master_arrival_seen", false))
 	meta["rescued_hunter"] = bool(meta.get("rescued_hunter", false))
 	meta["rescued_worker"] = bool(meta.get("rescued_worker", false))
 	meta["watch_restored"] = bool(meta.get("watch_restored", false))
 	meta["forester_home_built"] = bool(meta.get("forester_home_built", false))
 	meta["hunter_home_built"] = bool(meta.get("hunter_home_built", false))
 	meta["worker_home_built"] = bool(meta.get("worker_home_built", false))
+	meta["hunter_fate"] = String(meta.get("hunter_fate", "unknown"))
+	meta["master_relationship_state"] = String(meta.get("master_relationship_state", "unknown"))
+	for index in range(1, 4):
+		var state_key := "forest_fire_%d_state" % index
+		var keeper_key := "forest_fire_%d_keeper" % index
+		meta[state_key] = String(meta.get(state_key, "unknown"))
+		meta[keeper_key] = String(meta.get(keeper_key, ""))
 	for key: String in ["forester_home_wood", "forester_home_stone", "hunter_home_wood", "hunter_home_stone", "worker_home_wood", "worker_home_stone"]:
 		meta[key] = int(meta.get(key, 0))
-	meta["build_version"] = 15
-
+	_sync_forest_discovery_from_progress()
+	meta["build_version"] = 16
 
 func _save_meta() -> void:
 	var file := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(meta))
+
+
+func _forest_fire_key(index: int, suffix: String) -> String:
+	return "forest_fire_%d_%s" % [index, suffix]
+
+
+func _forest_fire_state(index: int) -> String:
+	return String(meta.get(_forest_fire_key(index, "state"), "unknown"))
+
+
+func _forest_fire_keeper(index: int) -> String:
+	return String(meta.get(_forest_fire_key(index, "keeper"), ""))
+
+
+func _set_forest_fire_state(index: int, state: String) -> void:
+	if index < 1 or index > 3:
+		return
+	meta[_forest_fire_key(index, "state")] = state
+
+
+func _forest_fire_name(index: int) -> String:
+	match index:
+		1: return "ОГОНЬ НА ОПУШКЕ"
+		2: return "ОГОНЬ СТАРОЙ ДОРОГИ"
+		3: return "ОГОНЬ СЕРДЦА ЛЕСА"
+	return "НЕИЗВЕСТНЫЙ ОГОНЬ"
+
+
+func _sync_forest_discovery_from_progress() -> void:
+	var fires := clampi(int(meta.get("forest_fires", 0)), 0, 3)
+	for index in range(1, 4):
+		var state := _forest_fire_state(index)
+		if index <= fires:
+			state = "restored"
+		elif index == fires + 1 and fires < 3:
+			if state == "unknown":
+				state = "seen"
+		elif index > fires + 1:
+			state = "unknown"
+		_set_forest_fire_state(index, state)
+	meta["forest_story_step"] = fires
+	meta["forest_cleared"] = fires >= 3
+
+
+func _mark_current_forest_fire_seen() -> void:
+	var index := clampi(int(meta.get("forest_fires", 0)) + 1, 1, 3)
+	if _forest_fire_state(index) == "unknown":
+		_set_forest_fire_state(index, "seen")
+		_save_meta()
+
+
+func _default_region_map_selection() -> int:
+	var fires := clampi(int(meta.get("forest_fires", 0)), 0, 3)
+	if fires > 0:
+		return fires
+	if _forest_fire_state(1) != "unknown":
+		return 1
+	return 0
+
+
+func _forest_fire_detail(index: int) -> String:
+	var state := _forest_fire_state(index)
+	if state == "unknown":
+		return ""
+	if state == "seen":
+		return "Сигнал замечен, но путь к нему ещё лежит во тьме."
+	var keeper := _forest_fire_keeper(index)
+	match index:
+		1:
+			if keeper != "":
+				return "%s держит тропу у восстановленного огня." % keeper
+			return "Первый огонь снова освещает край леса."
+		2:
+			return "Старая дорога снова связана светом с опушкой."
+		3:
+			return "Три огня видят друг друга. Забытый лес снова связан светом."
+	return "Огонь восстановлен."
 
 
 func _enter_hub(message: String = "") -> void:
@@ -356,6 +467,7 @@ func _enter_hub(message: String = "") -> void:
 	core_carried = false
 	hub_zone_lock = ""
 	region_map_open = false
+	region_map_selected_fire = 0
 	help_open = false
 	hub_feedback_text = ""
 	hub_feedback_timer = 0.0
@@ -364,14 +476,21 @@ func _enter_hub(message: String = "") -> void:
 	story_hint = ""
 	story_hint_timer = 0.0
 	notice_queue.clear()
+
 	var fires := int(meta.get("forest_fires", 0))
-	if fires > 0 and not bool(meta.get("hub_intro_seen", false)):
+	var master_state := String(meta.get("master_relationship_state", "unknown"))
+	if master_state == "joining_home" and not bool(meta.get("master_arrival_seen", false)):
+		meta["master_arrival_seen"] = true
+		_save_meta()
+		_story("МАСТЕР ПРИШЁЛ К ПОСЛЕДНЕМУ ОЧАГУ
+«Теперь огни видят друг друга. Здесь справятся без меня. А у тебя работы ещё много.» Дом мастера можно построить.", 5.6)
+	elif fires > 0 and not bool(meta.get("hub_intro_seen", false)):
 		meta["hub_intro_seen"] = true
 		_save_meta()
-		_story("ПОСЛЕДНИЙ ОЧАГ РАСТЁТ\nСпасённым людям нужен дом. Роща слева даёт дерево, склон справа — камень. Неси материалы к каркасам.", 5.4)
+		_story("ОГОНЬ ОСТАЛСЯ В ЛЕСУ
+Восстановленный очаг не исчез после вылазки. Открой карту: там виден каждый найденный сигнал и тот, кто остался его хранить.", 5.5)
 	elif message != "":
 		_hub_feedback("ВОЗВРАЩЕНИЕ К ПОСЛЕДНЕМУ ОЧАГУ", HEARTH_POS, 1.8)
-
 
 func _configure_expedition_sector() -> void:
 	expedition_sector = clampi(int(meta.get("forest_fires", 0)), 0, 2)
@@ -489,6 +608,7 @@ func _start_expedition() -> void:
 	run_seed = rng.randi()
 	rng.seed = run_seed
 	_configure_expedition_sector()
+	_mark_current_forest_fire_seen()
 
 	if int(meta.get("attempts", 1)) <= 1:
 		hero_pos = Vector2(240.0, 688.0)
@@ -695,7 +815,7 @@ func _generate_layout() -> void:
 			"hit_flash": 0.0
 		})
 
-	# v0.15: the main clearing tells its story through scenery only.
+	# v0.16: the main clearing tells its story through scenery only.
 	# Interactable landmarks belong to explicit routes, so the player never mistakes filler for a choice.
 	for i in range(62):
 		var dpos := Vector2(rng.randf_range(26.0, 454.0), rng.randf_range(128.0, 770.0))
@@ -1516,26 +1636,8 @@ func _update_movement(delta: float) -> void:
 
 func _hub_build_sites() -> Array[Dictionary]:
 	var sites: Array[Dictionary] = []
-	var fires := int(meta.get("forest_fires", 0))
-	if fires >= 1:
-		sites.append({
-			"id": "forester_home",
-			"pos": HUB_FORESTER_HOME_POS,
-			"label": "ДОМ ЛЕСНИКА",
-			"role": "civilian",
-			"wood_cost": 3,
-			"stone_cost": 1
-		})
-	if bool(meta.get("rescued_hunter", false)):
-		sites.append({
-			"id": "hunter_home",
-			"pos": HUB_HUNTER_HOME_POS,
-			"label": "ДОМ ОХОТНИКА",
-			"role": "hunter",
-			"wood_cost": 4,
-			"stone_cost": 1
-		})
-	if bool(meta.get("rescued_worker", false)):
+	var master_state := String(meta.get("master_relationship_state", "unknown"))
+	if master_state in ["joining_home", "resident"]:
 		sites.append({
 			"id": "worker_home",
 			"pos": HUB_WORKER_HOME_POS,
@@ -1545,7 +1647,6 @@ func _hub_build_sites() -> Array[Dictionary]:
 			"stone_cost": 3
 		})
 	return sites
-
 
 func _hub_site_built(site: Dictionary) -> bool:
 	return bool(meta.get(String(site["id"]) + "_built", false))
@@ -1579,17 +1680,14 @@ func _hub_site_complete(site: Dictionary) -> bool:
 func _finish_hub_site(site: Dictionary) -> void:
 	var id := String(site["id"])
 	meta[id + "_built"] = true
+	if id == "worker_home":
+		meta["master_relationship_state"] = "resident"
 	_save_meta()
 	camera_shake = 2.4
 	flash_timer = 0.28
 	_banner(String(site["label"]) + " ГОТОВ", 2.0)
-	if id == "forester_home":
-		_story("Лесник остаётся у Последнего Очагa. Теперь у поселения есть человек, который следит за древесиной.", 3.5)
-	elif id == "hunter_home":
-		_story("Охотник впервые оставляет оружие у двери. У него появилось место, куда можно вернуться.", 3.5)
-	else:
-		_story("Мастер раскладывает инструменты у нового дома. Поселение становится настоящим.", 3.5)
-
+	if id == "worker_home":
+		_story("Мастер ставит инструменты у двери. Теперь это не временный привал — у него есть место в Последнем Очаге.", 4.2)
 
 func _update_hub_construction(delta: float) -> void:
 	if hub_area != "center" or region_map_open or help_open:
@@ -1745,6 +1843,7 @@ func _update_hub_interactions() -> void:
 
 	if near_book and hub_zone_lock != "book":
 		hub_zone_lock = "book"
+		hearth_book_page = 0
 		help_open = true
 		_stop_joystick()
 		return
@@ -1752,6 +1851,7 @@ func _update_hub_interactions() -> void:
 	if near_map and hub_zone_lock != "map":
 		hub_zone_lock = "map"
 		if int(meta.get("forest_fires", 0)) > 0:
+			region_map_selected_fire = _default_region_map_selection()
 			region_map_open = true
 			_stop_joystick()
 		else:
@@ -1766,7 +1866,7 @@ func _update_hub_interactions() -> void:
 			meta["embers"] = int(meta.get("embers", 0)) - cost
 			meta["carry_level"] = level + 1
 			_save_meta()
-			_hub_feedback("РЮКЗАК: СЛОТЫ %d > %d" % [5 + level, 6 + level], HUB_CARRY_POS, 2.2)
+			_hub_feedback("СКЛАД: СЛОТЫ %d > %d" % [5 + level, 6 + level], HUB_CARRY_POS, 2.2)
 		else:
 			_hub_feedback("НУЖНО %d УГЛЕЙ" % cost, HUB_CARRY_POS, 1.8)
 
@@ -2749,22 +2849,43 @@ func _finish_run(win: bool, reason: String = "") -> void:
 	meta["embers"] = int(meta.get("embers", 0)) + run_embers
 
 	if win:
-		var fires := mini(3, int(meta.get("forest_fires", 0)) + 1)
-		meta["forest_fires"] = fires
-		meta["forest_cleared"] = fires >= 3
-		meta["hearth_rank"] = maxi(int(meta.get("hearth_rank", 1)), 1 + fires)
-		if day1_route == "hunter":
+		var completed_sector := clampi(int(meta.get("forest_fires", 0)), 0, 2)
+		var fire_index := completed_sector + 1
+		_set_forest_fire_state(fire_index, "restored")
+
+		if completed_sector == 0:
+			if day1_route == "hunter" and survivor_one_found:
+				meta["rescued_hunter"] = true
+				meta["hunter_fate"] = "keeper_fire_1"
+				meta["forest_fire_1_keeper"] = "Охотник"
+			if day2_mission == "worker" and survivor_two_found:
+				meta["rescued_worker"] = true
+				meta["master_relationship_state"] = "waiting_forest"
+		elif day1_route == "hunter":
 			meta["rescued_hunter"] = true
-		if day2_mission == "worker" and survivor_two_found:
-			meta["rescued_worker"] = true
+
 		if day3_route == "watch":
 			meta["watch_restored"] = true
-		if fires >= 3:
-			result_title = "ЗАБЫТЫЙ ЛЕС ОЧИЩЕН"
-			result_subtitle = "Три сигнальных огня снова отвечают Последнему Очагу."
+
+		var fires := mini(3, completed_sector + 1)
+		meta["forest_fires"] = fires
+		meta["forest_story_step"] = fires
+		meta["forest_cleared"] = fires >= 3
+		meta["hearth_rank"] = maxi(int(meta.get("hearth_rank", 1)), 1 + fires)
+
+		if fires < 3:
+			_set_forest_fire_state(fires + 1, "seen")
+			result_title = "%s ВОССТАНОВЛЕН" % _forest_fire_name(fire_index)
+			if fire_index == 1 and String(meta.get("hunter_fate", "")) == "keeper_fire_1":
+				result_subtitle = "Охотник остаётся у первого огня и будет держать тропу. На карте замечен следующий сигнал."
+			else:
+				result_subtitle = "Этот огонь остаётся в лесу. На карте замечен следующий сигнал глубже во тьме."
 		else:
-			result_title = "ОГОНЬ В ЛЕСУ ВОССТАНОВЛЕН"
-			result_subtitle = "Ещё один сигнал теперь отвечает Последнему Очагу."
+			if String(meta.get("master_relationship_state", "unknown")) in ["waiting_forest", "met"]:
+				meta["master_relationship_state"] = "joining_home"
+				meta["master_arrival_seen"] = false
+			result_title = "ЗАБЫТЫЙ ЛЕС ВОССТАНОВЛЕН"
+			result_subtitle = "Три огня снова видят друг друга. Теперь люди могут удерживать этот путь без тебя."
 	else:
 		if reason == "hero":
 			result_title = "ВЫЛАЗКА ОБОРВАЛАСЬ"
@@ -2776,9 +2897,10 @@ func _finish_run(win: bool, reason: String = "") -> void:
 			else:
 				result_subtitle = "Временные усиления потеряны. Угли и постоянные улучшения остались."
 
+	_sync_forest_discovery_from_progress()
+	meta["build_version"] = 16
 	_save_meta()
 	_stop_joystick()
-
 
 func _update_enemy_deaths(delta: float) -> void:
 	for i in range(enemy_deaths.size() - 1, -1, -1):
@@ -2943,11 +3065,9 @@ func _stop_joystick() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if mode == Mode.HUB and help_open:
 		if event is InputEventScreenTouch and event.pressed:
-			help_open = false
-			hub_zone_lock = "book"
+			_handle_hearth_book_press(event.position)
 		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			help_open = false
-			hub_zone_lock = "book"
+			_handle_hearth_book_press(event.position)
 		return
 
 	if mode == Mode.RESULT:
@@ -3001,19 +3121,46 @@ func _unhandled_input(event: InputEvent) -> void:
 			hero_target.y = clampf(hero_target.y, 118.0, VIEW_SIZE.y - 24.0)
 
 
-func _handle_region_map_press(pos: Vector2) -> void:
-	var forest_rect := Rect2(Vector2(50, 292), Vector2(172, 150))
-	var dead_rect := Rect2(Vector2(258, 292), Vector2(172, 150))
-	if forest_rect.has_point(pos):
-		region_map_open = false
-		_start_expedition()
-	elif dead_rect.has_point(pos):
-		var fires := int(meta.get("forest_fires", 0))
-		var text := "НУЖНО ВОССТАНОВИТЬ 3 ОГНЯ ЛЕСА" if fires < 3 else "МЁРТВЫЕ ПОЛЯ ПОКА НЕ ДОСТУПНЫ"
-		_hub_feedback(text, HUB_MAP_POS + Vector2(0, 120), 2.4)
-	elif pos.y < 180.0 or pos.y > 560.0:
-		region_map_open = false
+func _handle_hearth_book_press(pos: Vector2) -> void:
+	var prev_rect := Rect2(Vector2(50, 612), Vector2(96, 38))
+	var close_rect := Rect2(Vector2(154, 612), Vector2(172, 38))
+	var next_rect := Rect2(Vector2(334, 612), Vector2(96, 38))
+	if prev_rect.has_point(pos):
+		hearth_book_page = maxi(0, hearth_book_page - 1)
+	elif next_rect.has_point(pos):
+		hearth_book_page = mini(4, hearth_book_page + 1)
+	elif close_rect.has_point(pos) or pos.y < 130.0 or pos.y > 675.0:
+		help_open = false
+		hub_zone_lock = "book"
 
+
+func _handle_region_map_press(pos: Vector2) -> void:
+	var panel := Rect2(Vector2(28, 132), Vector2(424, 548))
+	if not panel.has_point(pos):
+		region_map_open = false
+		return
+
+	for index in range(1, 4):
+		if _forest_fire_state(index) == "unknown":
+			continue
+		if pos.distance_to(_forest_map_node_pos(index)) < 32.0:
+			region_map_selected_fire = index
+			return
+
+	var continue_rect := Rect2(Vector2(105, 540), Vector2(270, 44))
+	if continue_rect.has_point(pos):
+		var fires := int(meta.get("forest_fires", 0))
+		if fires < 3:
+			region_map_open = false
+			_start_expedition()
+		else:
+			region_map_open = false
+			_hub_feedback("ЗАБЫТЫЙ ЛЕС ВОССТАНОВЛЕН • НОВЫЙ ПУТЬ ЕЩЁ ВО ТЬМЕ", HUB_MAP_POS + Vector2(0, 120), 2.8)
+		return
+
+	var close_rect := Rect2(Vector2(150, 616), Vector2(180, 36))
+	if close_rect.has_point(pos):
+		region_map_open = false
 
 func _start_joystick(screen_pos: Vector2) -> void:
 	joystick_active = true
@@ -3079,7 +3226,6 @@ func _draw_hub() -> void:
 	_draw_light_field(HEARTH_POS, hub_light)
 	_draw_hub_growth_props(fires)
 
-	# Homes no longer appear magically: rescued people wait while the player builds them.
 	for site: Dictionary in _hub_build_sites():
 		if _hub_site_built(site):
 			_draw_hub_building(site["pos"], "home", String(site["label"]), "")
@@ -3091,35 +3237,20 @@ func _draw_hub() -> void:
 	_draw_hub_upgrade_station(HUB_CARRY_POS, "backpack", carry_level)
 	_draw_hub_upgrade_station(HUB_DAMAGE_POS, "armory", damage_level)
 
-	if bool(meta.get("watch_restored", false)):
-		_draw_hub_building(HUB_WATCH_POS, "watch", "ДОЗОР", "")
-	elif fires >= 2:
-		_draw_hub_site(HUB_WATCH_POS, "БУДУЩИЙ ДОЗОР")
-
 	_draw_map_table(HUB_MAP_POS)
 	_draw_book_stand(HUB_BOOK_POS)
 	var hub_hearth_level := clampi(1 + fires + hearth_bonus, 1, 5)
 	_draw_hearth(HEARTH_POS, hub_hearth_level)
 	_draw_hearth_altar(HUB_HEARTH_UPGRADE_POS)
 
-	var resident_index := 0
-	if fires >= 1:
-		_draw_humanoid(HUB_FORESTER_HOME_POS + Vector2(48, 48), Color("#71866a"), float(resident_index), "civilian", 1.0)
-		resident_index += 1
-	if bool(meta.get("rescued_hunter", false)):
-		_draw_humanoid(HUB_HUNTER_HOME_POS + Vector2(52, 50), Color("#7f886a"), float(resident_index), "hunter", -1.0)
-		resident_index += 1
-	if bool(meta.get("rescued_worker", false)):
-		_draw_humanoid(HUB_WORKER_HOME_POS + Vector2(-48, 48), Color("#9b7856"), float(resident_index), "worker", -1.0)
-		resident_index += 1
-	if fires >= 2:
-		_draw_humanoid(Vector2(310, 676), Color("#758597"), float(resident_index), "guard", 1.0)
-		resident_index += 1
-	if fires >= 3:
-		_draw_humanoid(Vector2(178, 676), Color("#758597"), float(resident_index), "guard", 1.0)
+	var master_state := String(meta.get("master_relationship_state", "unknown"))
+	if master_state in ["joining_home", "resident"]:
+		var master_pos := HUB_WORKER_HOME_POS + Vector2(-50, 48)
+		_draw_humanoid(master_pos, Color("#9b7856"), 0.0, "worker", -1.0)
 
-	_draw_hub_area_gate(HUB_GROVE_GATE, "РОЩА", "древесина", true)
-	_draw_hub_area_gate(HUB_QUARRY_GATE, "СКЛОН", "камень", false)
+	var has_construction := _hub_has_pending_construction()
+	_draw_hub_area_gate(HUB_GROVE_GATE, "РОЩА", "древесина" if has_construction else "пока не нужна", true)
+	_draw_hub_area_gate(HUB_QUARRY_GATE, "СКЛОН", "камень" if has_construction else "пока не нужен", false)
 	_draw_hub_build_guidance()
 	_draw_resource_flights()
 	_draw_hero(hero_pos)
@@ -3139,7 +3270,6 @@ func _draw_hub() -> void:
 	var carry_cost := 3 + carry_level * 2
 	var damage_cost := 4 + damage_level * 3
 	var hearth_cost := 5 + hearth_bonus * 4
-
 	draw_string(font, HUB_CARRY_POS + Vector2(-72, 63), "СЛОТЫ %d > %d | %d уг." % [5 + carry_level, 6 + carry_level, carry_cost], HORIZONTAL_ALIGNMENT_CENTER, 144, 8, Color("#d7c7a8"))
 	draw_string(font, HUB_DAMAGE_POS + Vector2(-72, 63), "УРОН +%d > +%d%% | %d уг." % [damage_level * 10, (damage_level + 1) * 10, damage_cost], HORIZONTAL_ALIGNMENT_CENTER, 144, 8, Color("#d7c7a8"))
 	var hearth_label := "МАКСИМУМ" if hearth_bonus >= 3 else "HP +%d > +%d | СВЕТ +%d > +%d | %d уг." % [hearth_bonus * 18, (hearth_bonus + 1) * 18, hearth_bonus * 8, (hearth_bonus + 1) * 8, hearth_cost]
@@ -3147,22 +3277,14 @@ func _draw_hub() -> void:
 
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006) * 0.08
 	draw_arc(HUB_MAP_POS, 46.0 * pulse, 0.0, TAU, 44, Color(0.78, 0.88, 0.70, 0.55), 2.0)
-	var map_label := "ПЕРВАЯ ВЫЛАЗКА" if fires <= 0 else "КАРТА ВЫЛАЗОК"
+	var map_label := "ПЕРВАЯ ВЫЛАЗКА" if fires <= 0 else "КАРТА ОГНЕЙ"
 	draw_string(font, HUB_MAP_POS + Vector2(-90, 57), map_label, HORIZONTAL_ALIGNMENT_CENTER, 180, 12, Color("#f3e4c8"))
 
 func _draw_hub_growth_props(fires: int) -> void:
-	# Non-interactive set dressing: the settlement itself becomes the progression reward.
+	# Settlement growth must represent real infrastructure, never imaginary residents.
 	if fires >= 1:
-		# Footpaths make the settlement read as one place instead of disconnected icons.
-		for destination: Vector2 in [
-			HUB_FORESTER_HOME_POS + Vector2(0, 34),
-			HUB_HUNTER_HOME_POS + Vector2(0, 34),
-			HUB_WORKER_HOME_POS + Vector2(0, 34),
-			HUB_GROVE_GATE,
-			HUB_QUARRY_GATE
-		]:
+		for destination: Vector2 in [HUB_MAP_POS + Vector2(0, 30), HUB_CARRY_POS, HUB_DAMAGE_POS, HUB_GROVE_GATE, HUB_QUARRY_GATE]:
 			draw_line(HEARTH_POS, destination, Color(0.39, 0.34, 0.25, 0.065), 16.0, true)
-		# Woodpile and supply crate.
 		for i in range(3):
 			var y := 370.0 + float(i) * 7.0
 			draw_line(Vector2(58, y), Vector2(96, y - 2.0), Color("#775237"), 6.0, true)
@@ -3170,13 +3292,11 @@ func _draw_hub_growth_props(fires: int) -> void:
 			draw_circle(Vector2(96, y - 2.0), 3.0, Color("#a2754a"))
 		draw_rect(Rect2(Vector2(388, 360), Vector2(26, 22)), Color("#5f503d"))
 		draw_line(Vector2(388, 370), Vector2(414, 370), Color("#88704f"), 3.0)
-		# One warm path lantern.
 		draw_line(Vector2(326, 360), Vector2(326, 397), Color("#5e4a34"), 4.0)
 		draw_circle(Vector2(326, 356), 5.0, Color("#e29a43"))
 		draw_circle(Vector2(326, 356), 14.0, Color(0.93, 0.58, 0.24, 0.06))
 
 	if fires >= 2:
-		# The camp becomes an outpost: crates and defensive stakes occupy the perimeter.
 		for x in [28.0, 452.0]:
 			for y in [350.0, 405.0, 460.0]:
 				var inward := 1.0 if x < 240.0 else -1.0
@@ -3186,12 +3306,10 @@ func _draw_hub_growth_props(fires: int) -> void:
 		draw_line(Vector2(54, 639), Vector2(75, 639), Color("#877052"), 2.0)
 
 	if fires >= 3:
-		# Three recovered signals are echoed by three small perimeter lights.
 		for p: Vector2 in [Vector2(155, 600), Vector2(325, 600), Vector2(240, 705)]:
 			draw_line(p + Vector2(0, 14), p + Vector2(0, -10), Color("#655039"), 3.0)
 			draw_circle(p + Vector2(0, -13), 4.5, Color("#e8a24c"))
 			draw_circle(p + Vector2(0, -13), 12.0, Color(0.95, 0.61, 0.25, 0.055))
-
 
 func _draw_hub_build_guidance() -> void:
 	if carried_wood + carried_stone <= 0:
@@ -3341,7 +3459,7 @@ func _draw_hub_upgrade_station(pos: Vector2, kind: String, level: int) -> void:
 		draw_line(pos + Vector2(8, -7), pos + Vector2(8, 18), Color("#9b754b"), 3.0)
 		for i in range(mini(level, 3)):
 			draw_circle(pos + Vector2(-28 + float(i) * 12.0, 10), 4.0, Color("#8d6b42"))
-		draw_string(font, pos + Vector2(-66, 42), "РЮКЗАК", HORIZONTAL_ALIGNMENT_CENTER, 132, 10, Color("#e3d7bf"))
+		draw_string(font, pos + Vector2(-66, 42), "СКЛАД", HORIZONTAL_ALIGNMENT_CENTER, 132, 10, Color("#e3d7bf"))
 		draw_string(font, pos + Vector2(-66, 54), "СЛОТЫ %d" % (5 + level), HORIZONTAL_ALIGNMENT_CENTER, 132, 8, Color("#9fb1a2"))
 	else:
 		# Weapon bench / anvil silhouette stays recognizable at every level.
@@ -3460,13 +3578,6 @@ func _draw_expedition() -> void:
 		_draw_survivor(survivor_two_pos, "!")
 	if stage == Stage.DAY2_BUILD and area == Area.CAMP and not workshop_built:
 		_draw_workshop_construction()
-	if stage == Stage.WORKSHOP_CHOICE:
-		_draw_choice_shrine(left_choice_pos, "ОРУЖИЕ | УРОН +28%", Color("#a85949"))
-		_draw_choice_shrine(right_choice_pos, "ПОХОДНЫЙ | СЛОТ +1 • ЗДР +18", Color("#567e58"))
-	if stage == Stage.EXPEDITION_CHOICE:
-		_draw_choice_shrine(left_choice_pos, "ДВА БОЙЦА | СОЮЗНИКИ +2", Color("#6688a0"))
-		_draw_choice_shrine(right_choice_pos, "ОГНЕННАЯ МЕТКА | УРОН +60%", Color("#b75e45"))
-
 	if area == Area.CAMP and workshop_built:
 		_draw_workshop()
 	if area == Area.CAMP and tower_built:
@@ -3492,6 +3603,12 @@ func _draw_expedition() -> void:
 		_draw_explorer_lantern()
 	_draw_companions()
 	_draw_hero(hero_pos)
+	if stage == Stage.WORKSHOP_CHOICE:
+		_draw_choice_shrine(left_choice_pos, "ОРУЖИЕ | УРОН +28%", Color("#a85949"))
+		_draw_choice_shrine(right_choice_pos, "ПОХОДНЫЙ | СЛОТ +1 • ЗДР +18", Color("#567e58"))
+	elif stage == Stage.EXPEDITION_CHOICE:
+		_draw_choice_shrine(left_choice_pos, "ДВА БОЙЦА | СОЮЗНИКИ +2", Color("#6688a0"))
+		_draw_choice_shrine(right_choice_pos, "ОГНЕННАЯ МЕТКА | УРОН +60%", Color("#b75e45"))
 	_draw_guidance_marker()
 
 	if night_stage and twilight_timer > 0.0:
@@ -4513,21 +4630,20 @@ func _draw_tower() -> void:
 
 
 func _draw_choice_shrine(pos: Vector2, label: String, color: Color) -> void:
-	# A choice is represented as a build site in the world, not as a menu button.
-	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006 + pos.x) * 0.05
-	draw_rect(Rect2(pos + Vector2(-34, -17), Vector2(68, 42)), Color(color.r, color.g, color.b, 0.13))
-	draw_line(pos + Vector2(-33, 24), pos + Vector2(-33, -25), Color("#7b684a"), 4.0)
-	draw_line(pos + Vector2(33, 24), pos + Vector2(33, -25), Color("#7b684a"), 4.0)
-	draw_line(pos + Vector2(-35, -22), pos + Vector2(35, -22), Color("#9d8052"), 4.0)
-	draw_arc(pos, 42.0 * pulse, 0.0, TAU, 36, Color(color.r, color.g, color.b, 0.42), 2.0)
+	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006 + pos.x) * 0.04
+	var card := Rect2(pos + Vector2(-92, -54), Vector2(184, 118))
+	draw_rect(card, Color(0.014, 0.024, 0.020, 0.96))
+	draw_rect(Rect2(card.position, Vector2(card.size.x, 3)), Color(color.r, color.g, color.b, 0.88))
+	draw_circle(pos + Vector2(0, -9), 31.0, Color(color.r, color.g, color.b, 0.10))
+	draw_arc(pos + Vector2(0, -9), 27.0 * pulse, 0.0, TAU, 36, Color(color.r, color.g, color.b, 0.52), 2.0)
+	draw_line(pos + Vector2(-20, 7), pos + Vector2(20, 7), Color("#8b714d"), 5.0)
 
 	var parts := label.split("|", false, 1)
 	var title := String(parts[0]).strip_edges()
-	draw_string(font, pos + Vector2(-86, 52), title, HORIZONTAL_ALIGNMENT_CENTER, 172, 10, Color("#f0e4cf"))
+	draw_string(font, card.position + Vector2(8, 83), title, HORIZONTAL_ALIGNMENT_CENTER, 168, 10, Color("#f0e4cf"))
 	if parts.size() > 1:
 		var effect := String(parts[1]).strip_edges()
-		draw_string(font, pos + Vector2(-86, 67), effect, HORIZONTAL_ALIGNMENT_CENTER, 172, 8, Color("#d3bd8f"))
-
+		draw_string(font, card.position + Vector2(8, 102), effect, HORIZONTAL_ALIGNMENT_CENTER, 168, 8, Color("#d3bd8f"))
 
 func _draw_core(pos: Vector2) -> void:
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006) * 0.10
@@ -4795,7 +4911,7 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(426, 55), "v0.15", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(426, 55), "v0.16", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
@@ -5000,55 +5116,154 @@ func _draw_area_transition() -> void:
 
 
 func _draw_help_overlay() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.82))
-	var panel := Rect2(Vector2(34, 150), Vector2(412, 500))
-	draw_rect(panel, Color("#17261e"))
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.84))
+	var panel := Rect2(Vector2(34, 118), Vector2(412, 552))
+	draw_rect(panel, Color("#18271f"))
 	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#d09a55"))
-	draw_string(font, Vector2(54, 198), "КНИГА ПОСЛЕДНЕГО ОЧАГА", HORIZONTAL_ALIGNMENT_CENTER, 372, 18, Color("#f1e4cd"))
-	draw_string(font, Vector2(58, 235), "Тьма погасила старые огни и разделила людей.", HORIZONTAL_ALIGNMENT_LEFT, 364, 11, Color("#b9c8bc"))
-	draw_string(font, Vector2(58, 270), "1. В вылазке разжигай ПОЛЕВОЙ ОГОНЬ.", HORIZONTAL_ALIGNMENT_LEFT, 364, 11, Color("#e1c994"))
-	draw_string(font, Vector2(58, 299), "2. Топливо расширяет свет и открывает мир.", HORIZONTAL_ALIGNMENT_LEFT, 364, 11, Color("#c0ccc2"))
-	draw_string(font, Vector2(58, 328), "3. Ищи людей, сигнальные огни и старые постройки.", HORIZONTAL_ALIGNMENT_LEFT, 364, 11, Color("#c0ccc2"))
-	draw_string(font, Vector2(58, 357), "4. Спасённые люди идут с тобой и помогают.", HORIZONTAL_ALIGNMENT_LEFT, 364, 11, Color("#c0ccc2"))
-	draw_string(font, Vector2(58, 386), "5. Возвращай угли домой — Последний Очаг растёт.", HORIZONTAL_ALIGNMENT_LEFT, 364, 11, Color("#c0ccc2"))
-	draw_string(font, Vector2(58, 438), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 364, 12, Color("#e1c994"))
-	draw_string(font, Vector2(58, 466), "Это твой дом. Кузница, снаряжение, дозор и новые", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 486), "жители появляются здесь по мере возвращения света.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 516), "СТРОИТЕЛЬСТВО", HORIZONTAL_ALIGNMENT_LEFT, 364, 12, Color("#e1c994"))
-	draw_string(font, Vector2(58, 542), "Слева от Очагa есть роща, справа — каменный склон.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 562), "Добывай материалы и неси их прямо к каркасам домов.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 594), "УГЛИ — жар восстановленных огней для постоянных улучшений.", HORIZONTAL_ALIGNMENT_LEFT, 364, 10, Color("#aebdaf"))
-	draw_string(font, Vector2(58, 628), "КОСНИСЬ ЭКРАНА, ЧТОБЫ ЗАКРЫТЬ", HORIZONTAL_ALIGNMENT_CENTER, 364, 10, Color("#d4bd8d"))
+	draw_rect(Rect2(Vector2(54, 145), Vector2(372, 1)), Color(0.72, 0.59, 0.39, 0.35))
+
+	var title := ""
+	var paragraphs: Array[String] = []
+	match hearth_book_page:
+		0:
+			title = "ПОСЛЕДНИЙ ОЧАГ"
+			paragraphs = [
+				"Когда старые огни погасли, дороги исчезли вместе с ними.",
+				"Последний Очаг — место, куда ещё можно вернуться. Каждый восстановленный огонь отвоёвывает у тьмы ещё один кусок мира.",
+				"Ты не собираешь все огни в одном месте. Ты связываешь их в цепь — чтобы люди снова могли жить между ними."
+			]
+		1:
+			title = "ВЫЛАЗКИ"
+			paragraphs = [
+				"Разожги полевой огонь и носи к нему топливо — свет открывает безопасное пространство.",
+				"Исследуй только один важный путь за раз. Находки меняют ночь: союзник, оружие, защита или новая дорога.",
+				"Пережив последнюю ночь, восстанови сигнальный огонь региона. Он останется гореть и после твоего ухода."
+			]
+		2:
+			title = "ЛЮДИ"
+			paragraphs = [
+				"Не каждый спасённый человек должен жить у Последнего Очагa.",
+				"Кто-то идёт рядом только одну вылазку. Кто-то остаётся хранителем восстановленного огня. И только некоторые сами решают прийти домой.",
+				"Новый постоянный житель — это новая часть поселения и новая возможность, а не просто награда за уровень."
+			]
+		3:
+			title = "ПОСЕЛЕНИЕ"
+			paragraphs = [
+				"Склад увеличивает переносимый запас. Оружейная усиливает урон. Сам Очаг даёт прочность и больше света.",
+				"Жилой дом появляется только тогда, когда реальный человек решил поселиться здесь.",
+				"Для домов нужны дерево из рощи и камень со склона. Угли тратятся на постоянные улучшения."
+			]
+		_:
+			title = "КАРТА"
+			paragraphs = [
+				"Карта не знает будущего. На ней есть только места, до которых дошёл свет.",
+				"Тусклый сигнал — огонь замечен, но ещё не восстановлен. Яркий огонь — точка уже удерживается людьми.",
+				"После трёх восстановленных огней регион считается связанным. Только тогда становится виден следующий путь."
+			]
+
+	draw_string(font, Vector2(54, 190), "КНИГА ПОСЛЕДНЕГО ОЧАГА", HORIZONTAL_ALIGNMENT_CENTER, 372, 11, Color("#aa9570"))
+	draw_string(font, Vector2(54, 225), title, HORIZONTAL_ALIGNMENT_CENTER, 372, 20, Color("#f1e4cd"))
+	var y := 270.0
+	for p_index in range(paragraphs.size()):
+		var lines := _wrap_story_lines(paragraphs[p_index], 52)
+		for line_index in range(lines.size()):
+			var color := Color("#e1c994") if p_index == 0 else Color("#b8c6bb")
+			draw_string(font, Vector2(62, y), lines[line_index], HORIZONTAL_ALIGNMENT_LEFT, 356, 10, color)
+			y += 18.0
+		y += 18.0
+
+	draw_string(font, Vector2(58, 586), "СТРАНИЦА %d/5" % (hearth_book_page + 1), HORIZONTAL_ALIGNMENT_CENTER, 364, 9, Color("#8fa095"))
+	var prev_rect := Rect2(Vector2(50, 612), Vector2(96, 38))
+	var close_rect := Rect2(Vector2(154, 612), Vector2(172, 38))
+	var next_rect := Rect2(Vector2(334, 612), Vector2(96, 38))
+	draw_rect(prev_rect, Color("#202d25") if hearth_book_page > 0 else Color("#1a221d"))
+	draw_rect(close_rect, Color("#2a382e"))
+	draw_rect(next_rect, Color("#202d25") if hearth_book_page < 4 else Color("#1a221d"))
+	draw_string(font, prev_rect.position + Vector2(4, 24), "НАЗАД", HORIZONTAL_ALIGNMENT_CENTER, 88, 9, Color("#c9b892") if hearth_book_page > 0 else Color("#68756c"))
+	draw_string(font, close_rect.position + Vector2(5, 24), "ЗАКРЫТЬ", HORIZONTAL_ALIGNMENT_CENTER, 162, 9, Color("#ead3a1"))
+	draw_string(font, next_rect.position + Vector2(4, 24), "ДАЛЬШЕ", HORIZONTAL_ALIGNMENT_CENTER, 88, 9, Color("#c9b892") if hearth_book_page < 4 else Color("#68756c"))
+
+func _forest_map_node_pos(index: int) -> Vector2:
+	match index:
+		1: return Vector2(112, 350)
+		2: return Vector2(240, 315)
+		3: return Vector2(366, 365)
+	return Vector2.ZERO
+
+
+func _draw_region_fire_node(index: int) -> void:
+	var state := _forest_fire_state(index)
+	if state == "unknown":
+		return
+	var pos := _forest_map_node_pos(index)
+	var selected := region_map_selected_fire == index
+	if selected:
+		draw_circle(pos, 31.0, Color(0.91, 0.69, 0.37, 0.10))
+		draw_arc(pos, 27.0, 0.0, TAU, 40, Color("#d8ae68"), 2.0)
+	if state == "seen":
+		var pulse := 0.55 + 0.20 * sin(Time.get_ticks_msec() * 0.006 + float(index))
+		draw_circle(pos, 17.0, Color(0.78, 0.49, 0.24, 0.07 + pulse * 0.04))
+		draw_circle(pos, 5.0, Color(0.72, 0.45, 0.24, pulse))
+		draw_string(font, pos + Vector2(-58, 38), "СИГНАЛ", HORIZONTAL_ALIGNMENT_CENTER, 116, 8, Color("#a89477"))
+		return
+
+	draw_circle(pos, 20.0, Color(0.93, 0.55, 0.22, 0.10))
+	var flame := PackedVector2Array([
+		pos + Vector2(0, -13), pos + Vector2(8, 3),
+		pos + Vector2(0, 12), pos + Vector2(-8, 3)
+	])
+	draw_colored_polygon(flame, Color("#e69a45"))
+	draw_circle(pos + Vector2(0, 1), 4.5, Color("#ffd078"))
+	draw_string(font, pos + Vector2(-58, 39), "%d/3" % index, HORIZONTAL_ALIGNMENT_CENTER, 116, 8, Color("#e6d4ad"))
 
 
 func _draw_region_map_overlay() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.76))
-	draw_rect(Rect2(Vector2(28, 176), Vector2(424, 390)), Color("#15231c"))
-	draw_string(font, Vector2(50, 220), "КАРТА ОКРЕСТНОСТЕЙ", HORIZONTAL_ALIGNMENT_CENTER, 380, 20, Color("#f2e5cf"))
-	draw_string(font, Vector2(60, 250), "Сигнальные огни показывают, куда ещё можно дойти.", HORIZONTAL_ALIGNMENT_CENTER, 360, 10, Color("#9eafa3"))
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.012, 0.009, 0.80))
+	var panel := Rect2(Vector2(28, 132), Vector2(424, 548))
+	draw_rect(panel, Color("#15231c"))
+	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#c69250"))
 
-	var forest_rect := Rect2(Vector2(50, 292), Vector2(172, 150))
-	var dead_rect := Rect2(Vector2(258, 292), Vector2(172, 150))
-	draw_rect(forest_rect, Color("#21352a"))
-	draw_rect(dead_rect, Color("#1c2723"))
-	draw_rect(Rect2(forest_rect.position, Vector2(forest_rect.size.x, 4)), Color("#83a070"))
-	draw_rect(Rect2(dead_rect.position, Vector2(dead_rect.size.x, 4)), Color("#665a51"))
+	draw_string(font, Vector2(50, 178), "ЗАБЫТЫЙ ЛЕС", HORIZONTAL_ALIGNMENT_CENTER, 380, 20, Color("#f2e5cf"))
+	var fires := clampi(int(meta.get("forest_fires", 0)), 0, 3)
+	draw_string(font, Vector2(60, 204), "ОГНИ %d/3 • карта показывает только то, что ты уже обнаружил" % fires, HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#9eafa3"))
 
-	var fires := int(meta.get("forest_fires", 0))
-	draw_circle(Vector2(136, 345), 28.0, Color(0.23, 0.43, 0.27, 0.85))
-	for i in range(5):
-		var a := TAU * float(i) / 5.0
-		draw_circle(Vector2(136, 345) + Vector2(cos(a), sin(a)) * 20.0, 7.0, Color("#34593a"))
-	draw_string(font, Vector2(61, 391), "ЗАБЫТЫЙ ЛЕС", HORIZONTAL_ALIGNMENT_CENTER, 150, 12, Color("#e6dbc6"))
-	draw_string(font, Vector2(61, 411), "ОГНИ %d/3 | ИДТИ ГЛУБЖЕ" % fires, HORIZONTAL_ALIGNMENT_CENTER, 150, 9, Color("#9fbea2"))
+	# Known paths stop at the edge of knowledge.
+	var node1 := _forest_map_node_pos(1)
+	var node2 := _forest_map_node_pos(2)
+	var node3 := _forest_map_node_pos(3)
+	if _forest_fire_state(2) != "unknown":
+		draw_line(node1, node2, Color(0.47, 0.43, 0.31, 0.46), 6.0, true)
+	if _forest_fire_state(3) != "unknown":
+		draw_line(node2, node3, Color(0.47, 0.43, 0.31, 0.46), 6.0, true)
 
-	draw_circle(Vector2(344, 345), 30.0, Color(0.18, 0.17, 0.15, 0.88))
-	draw_line(Vector2(322, 355), Vector2(365, 330), Color("#55483d"), 5.0)
-	draw_circle(Vector2(356, 336), 5.0, Color("#b87845"))
-	draw_string(font, Vector2(269, 391), "МЁРТВЫЕ ПОЛЯ", HORIZONTAL_ALIGNMENT_CENTER, 150, 12, Color("#d7ccbc"))
-	var dead_label := "НУЖНЫ 3 ОГНЯ ЛЕСА" if fires < 3 else "СЛЕДУЮЩАЯ ГЛАВА ПОКА ЗАКРЫТА"
-	draw_string(font, Vector2(269, 411), dead_label, HORIZONTAL_ALIGNMENT_CENTER, 150, 9, Color("#897e74"))
-	draw_string(font, Vector2(68, 518), "Коснись Забытых лесов, чтобы продолжить поиск.", HORIZONTAL_ALIGNMENT_CENTER, 344, 10, Color("#839187"))
+	for index in range(1, 4):
+		_draw_region_fire_node(index)
+
+	if region_map_selected_fire <= 0 or _forest_fire_state(region_map_selected_fire) == "unknown":
+		region_map_selected_fire = _default_region_map_selection()
+	if region_map_selected_fire > 0:
+		var detail_title := _forest_fire_name(region_map_selected_fire)
+		var detail_state := _forest_fire_state(region_map_selected_fire)
+		var status := "ЗАМЕЧЕН" if detail_state == "seen" else "ВОССТАНОВЛЕН"
+		draw_string(font, Vector2(54, 432), "%s • %s" % [detail_title, status], HORIZONTAL_ALIGNMENT_CENTER, 372, 10, Color("#e7d2a6"))
+		var detail_lines := _wrap_story_lines(_forest_fire_detail(region_map_selected_fire), 58)
+		for i in range(mini(detail_lines.size(), 2)):
+			draw_string(font, Vector2(60, 454 + i * 17), detail_lines[i], HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#aebcaf"))
+
+	if fires >= 3:
+		draw_string(font, Vector2(60, 503), "ЗА ГРАНИЦЕЙ ЛЕСА ВИДЕН НОВЫЙ СИГНАЛ", HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#aa947a"))
+		draw_string(font, Vector2(60, 520), "Мёртвые поля пока скрыты тьмой.", HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#766e66"))
+	else:
+		draw_string(font, Vector2(60, 505), "За последним известным сигналом карта снова становится пустой.", HORIZONTAL_ALIGNMENT_CENTER, 360, 9, Color("#7f8d83"))
+
+	var continue_rect := Rect2(Vector2(105, 540), Vector2(270, 44))
+	draw_rect(continue_rect, Color("#2a382e"))
+	var continue_text := "ИДТИ К СЛЕДУЮЩЕМУ СИГНАЛУ" if fires < 3 else "ЛЕС ВОССТАНОВЛЕН"
+	draw_string(font, continue_rect.position + Vector2(8, 27), continue_text, HORIZONTAL_ALIGNMENT_CENTER, 254, 10, Color("#edd5a2"))
+
+	var close_rect := Rect2(Vector2(150, 616), Vector2(180, 36))
+	draw_rect(close_rect, Color("#202c25"))
+	draw_string(font, close_rect.position + Vector2(6, 23), "ЗАКРЫТЬ КАРТУ", HORIZONTAL_ALIGNMENT_CENTER, 168, 9, Color("#9fb0a4"))
 
 func _draw_enemy_deaths() -> void:
 	for death: Dictionary in enemy_deaths:
@@ -5130,11 +5345,12 @@ func _draw_result_overlay() -> void:
 			distant + Vector2(0, 10), distant + Vector2(-7, 4)
 		])
 		draw_colored_polygon(flame, Color("#f2b14e"))
-		draw_string(font, Vector2(62, 330), "ГДЕ-ТО ЕЩЁ ГОРИТ ОГОНЬ", HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#e7cf9b"))
 		var fires := int(meta.get("forest_fires", 0))
-		var progress_text := "Огни Забытых лесов: %d/3 | следующий сигнал глубже в лесу" % fires
+		var signal_title := "НА КАРТЕ ПОЯВИЛСЯ НОВЫЙ СИГНАЛ" if fires < 3 else "ЦЕПЬ ОГНЕЙ ВОССТАНОВЛЕНА"
+		draw_string(font, Vector2(62, 330), signal_title, HORIZONTAL_ALIGNMENT_CENTER, 356, 12, Color("#e7cf9b"))
+		var progress_text := "Забытый лес: %d/3 | восстановленные огни останутся здесь" % fires
 		if fires >= 3:
-			progress_text = "Все сигналы леса найдены | Мёртвые поля пока скрыты"
+			progress_text = "Забытый лес: 3/3 | следующий регион только показался во тьме"
 		draw_string(font, Vector2(62, 351), progress_text, HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#a9b9aa"))
 	else:
 		draw_string(font, Vector2(62, 314), "Постоянные улучшения и найденные угли сохранены.", HORIZONTAL_ALIGNMENT_CENTER, 356, 10, Color("#a9b9aa"))
