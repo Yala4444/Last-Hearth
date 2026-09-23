@@ -50,5 +50,38 @@ func _init() -> void:
 		fail("Velocity did not settle after reaching the target")
 		return
 
+	# Notification priority: story stays readable and lower-priority notices wait.
+	game.story_hint = ""
+	game.story_hint_timer = 0.0
+	game.banner_text = ""
+	game.banner_timer = 0.0
+	game.hub_feedback_text = ""
+	game.hub_feedback_timer = 0.0
+	game.notice_queue.clear()
+	game._story("IMPORTANT STORY", 1.0)
+	game._banner("LATER BANNER", 1.0)
+	if game.story_hint != "IMPORTANT STORY" or game.notice_queue.size() != 1:
+		fail("Notification queue did not serialize story and banner")
+		return
+	game.story_hint_timer = 0.0
+	game._advance_notice_queue()
+	if game.banner_text != "LATER BANNER" or game.banner_timer <= 0.0:
+		fail("Queued banner did not advance after story")
+		return
+
+	# Worker identity: during a night the worker repairs the hearth instead of acting like another shooter.
+	game.survivor_agents.clear()
+	game.hearth_max_hp = 150.0
+	game.hearth_hp = 100.0
+	game.stage = game.Stage.NIGHT2
+	game._add_survivor("worker", Vector2(260.0, 430.0))
+	var worker: Dictionary = game.survivor_agents[0]
+	worker["repair_cd"] = 0.0
+	game.survivor_agents[0] = worker
+	game._update_survivor_agents(0.1)
+	if game.hearth_hp <= 100.0:
+		fail("Worker did not repair the hearth during night")
+		return
+
 	print("V015_CLARITY_SANITY_OK")
 	quit(0)
