@@ -65,9 +65,9 @@ func _init() -> void:
 		fail("Workshop incorrectly consumed pre-farmed stock")
 		return
 
-	# Only eight new wood and five new stone complete the workshop; old stock survives.
-	game.camp_wood = 18
-	game.camp_stone = 12
+	# v0.11 keeps this construction beat short: four fresh wood and three fresh stone.
+	game.camp_wood = 10 + game.WORKSHOP_WOOD_COST
+	game.camp_stone = 7 + game.WORKSHOP_STONE_COST
 	game._check_day_progress()
 	if int(game.stage) != 4 or not bool(game.workshop_built):
 		fail("Workshop stage progression failed after fresh resources")
@@ -76,7 +76,7 @@ func _init() -> void:
 		fail("Workshop did not preserve pre-existing stock")
 		return
 
-	# v0.9 removes the old Day 3 6/6 resource gate entirely.
+	# Day 3 still avoids another full resource gate; the short build beat belongs to Day 2.
 	game.stage = 7
 	game.day3_route = ""
 	game.current_stage_wood_start = 4
