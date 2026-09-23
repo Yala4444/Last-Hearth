@@ -2,17 +2,17 @@ extends Node2D
 
 const VIEW_SIZE := Vector2(480.0, 800.0)
 const HEARTH_POS := Vector2(240.0, 410.0)
-const HUB_MAP_POS := Vector2(240.0, 160.0)
-const HUB_CARRY_POS := Vector2(115.0, 430.0)
-const HUB_DAMAGE_POS := Vector2(365.0, 430.0)
-const HUB_HEARTH_UPGRADE_POS := Vector2(240.0, 590.0)
-const HUB_BOOK_POS := Vector2(58.0, 690.0)
-const HUB_GROVE_GATE := Vector2(42.0, 535.0)
-const HUB_QUARRY_GATE := Vector2(438.0, 535.0)
-const HUB_FORESTER_HOME_POS := Vector2(78.0, 238.0)
-const HUB_HUNTER_HOME_POS := Vector2(240.0, 230.0)
-const HUB_WORKER_HOME_POS := Vector2(402.0, 238.0)
-const HUB_WATCH_POS := Vector2(394.0, 650.0)
+const HUB_MAP_POS := Vector2(240.0, 145.0)
+const HUB_CARRY_POS := Vector2(118.0, 490.0)
+const HUB_DAMAGE_POS := Vector2(362.0, 490.0)
+const HUB_HEARTH_UPGRADE_POS := Vector2(240.0, 615.0)
+const HUB_BOOK_POS := Vector2(62.0, 690.0)
+const HUB_GROVE_GATE := Vector2(42.0, 570.0)
+const HUB_QUARRY_GATE := Vector2(438.0, 570.0)
+const HUB_FORESTER_HOME_POS := Vector2(78.0, 275.0)
+const HUB_HUNTER_HOME_POS := Vector2(240.0, 275.0)
+const HUB_WORKER_HOME_POS := Vector2(402.0, 275.0)
+const HUB_WATCH_POS := Vector2(394.0, 690.0)
 
 const HERO_SPEED := 178.0
 const HERO_ACCEL := 12.0
@@ -3078,15 +3078,10 @@ func _draw_hub() -> void:
 		else:
 			_draw_hub_construction_site(site)
 
-	if int(meta.get("carry_level", 0)) > 0:
-		_draw_hub_building(HUB_CARRY_POS, "store", "РЮКЗАК", "+слоты")
-	else:
-		_draw_hub_site(HUB_CARRY_POS, "РЮКЗАК")
-
-	if int(meta.get("damage_level", 0)) > 0:
-		_draw_hub_building(HUB_DAMAGE_POS, "forge", "ОРУЖЕЙНАЯ", "+урон")
-	else:
-		_draw_hub_site(HUB_DAMAGE_POS, "ОРУЖЕЙНАЯ")
+	var carry_level := int(meta.get("carry_level", 0))
+	var damage_level := int(meta.get("damage_level", 0))
+	_draw_hub_upgrade_station(HUB_CARRY_POS, "backpack", carry_level)
+	_draw_hub_upgrade_station(HUB_DAMAGE_POS, "armory", damage_level)
 
 	if bool(meta.get("watch_restored", false)):
 		_draw_hub_building(HUB_WATCH_POS, "watch", "ДОЗОР", "")
@@ -3101,13 +3096,13 @@ func _draw_hub() -> void:
 
 	var resident_index := 0
 	if fires >= 1:
-		_draw_humanoid(HUB_FORESTER_HOME_POS + Vector2(30, 92), Color("#71866a"), float(resident_index), "civilian", 1.0)
+		_draw_humanoid(HUB_FORESTER_HOME_POS + Vector2(48, 48), Color("#71866a"), float(resident_index), "civilian", 1.0)
 		resident_index += 1
 	if bool(meta.get("rescued_hunter", false)):
-		_draw_humanoid(HUB_HUNTER_HOME_POS + Vector2(-34, 94), Color("#7f886a"), float(resident_index), "hunter", 1.0)
+		_draw_humanoid(HUB_HUNTER_HOME_POS + Vector2(52, 50), Color("#7f886a"), float(resident_index), "hunter", -1.0)
 		resident_index += 1
 	if bool(meta.get("rescued_worker", false)):
-		_draw_humanoid(HUB_WORKER_HOME_POS + Vector2(-30, 92), Color("#9b7856"), float(resident_index), "worker", 1.0)
+		_draw_humanoid(HUB_WORKER_HOME_POS + Vector2(-48, 48), Color("#9b7856"), float(resident_index), "worker", -1.0)
 		resident_index += 1
 	if fires >= 2:
 		_draw_humanoid(Vector2(310, 676), Color("#758597"), float(resident_index), "guard", 1.0)
@@ -3121,29 +3116,28 @@ func _draw_hub() -> void:
 	_draw_hero(hero_pos)
 
 	if _active_notice_priority() == 0:
-		draw_string(font, Vector2(18, 116), "ПОСЛЕДНИЙ ОЧАГ", HORIZONTAL_ALIGNMENT_LEFT, 300, 22, Color("#f4ead4"))
-		var subtitle := "Пока здесь горит огонь — людям есть куда возвращаться."
-		if fires > 0 and fires < 3:
-			subtitle = "Огни Забытых лесов: %d/3 | поселение растёт" % fires
+		var settlement_status := "УБЕЖИЩЕ • ОГНИ ЛЕСА 0/3"
+		if fires == 1:
+			settlement_status = "ЛАГЕРЬ • ОГНИ ЛЕСА 1/3"
+		elif fires == 2:
+			settlement_status = "ФОРПОСТ • ОГНИ ЛЕСА 2/3"
 		elif fires >= 3:
-			subtitle = "Три огня леса восстановлены | дальше лежит новая тьма"
-		draw_string(font, Vector2(18, 139), subtitle, HORIZONTAL_ALIGNMENT_LEFT, 440, 11, Color("#9eafa2"))
+			settlement_status = "ПОСЕЛЕНИЕ • ОГНИ ЛЕСА 3/3"
+		draw_string(font, Vector2(18, 105), settlement_status, HORIZONTAL_ALIGNMENT_LEFT, 360, 10, Color("#aab9ad"))
 
-	var carry_level := int(meta.get("carry_level", 0))
-	var damage_level := int(meta.get("damage_level", 0))
 	var carry_cost := 3 + carry_level * 2
 	var damage_cost := 4 + damage_level * 3
 	var hearth_cost := 5 + hearth_bonus * 4
 
-	draw_string(font, HUB_CARRY_POS + Vector2(-63, 70), "ур.%d | %d углей" % [carry_level, carry_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 10, Color("#d7c7a8"))
-	draw_string(font, HUB_DAMAGE_POS + Vector2(-63, 70), "ур.%d | %d углей" % [damage_level, damage_cost], HORIZONTAL_ALIGNMENT_CENTER, 126, 10, Color("#d7c7a8"))
+	draw_string(font, HUB_CARRY_POS + Vector2(-66, 63), "след. %d углей" % carry_cost, HORIZONTAL_ALIGNMENT_CENTER, 132, 9, Color("#d7c7a8"))
+	draw_string(font, HUB_DAMAGE_POS + Vector2(-66, 63), "след. %d углей" % damage_cost, HORIZONTAL_ALIGNMENT_CENTER, 132, 9, Color("#d7c7a8"))
 	var hearth_label := "максимум" if hearth_bonus >= 3 else "ур.%d | %d углей" % [hearth_bonus, hearth_cost]
 	draw_string(font, HUB_HEARTH_UPGRADE_POS + Vector2(-72, 49), hearth_label, HORIZONTAL_ALIGNMENT_CENTER, 144, 11, Color("#e6c583"))
 
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006) * 0.08
 	draw_arc(HUB_MAP_POS, 46.0 * pulse, 0.0, TAU, 44, Color(0.78, 0.88, 0.70, 0.55), 2.0)
 	var map_label := "ПЕРВАЯ ВЫЛАЗКА" if fires <= 0 else "КАРТА ВЫЛАЗОК"
-	draw_string(font, HUB_MAP_POS + Vector2(-90, 69), map_label, HORIZONTAL_ALIGNMENT_CENTER, 180, 13, Color("#f3e4c8"))
+	draw_string(font, HUB_MAP_POS + Vector2(-90, 57), map_label, HORIZONTAL_ALIGNMENT_CENTER, 180, 12, Color("#f3e4c8"))
 
 func _draw_hub_construction_site(site: Dictionary) -> void:
 	var pos: Vector2 = site["pos"]
@@ -3241,6 +3235,33 @@ func _draw_hub_site(pos: Vector2, label: String) -> void:
 		draw_rect(Rect2(pos + Vector2(-24, -18), Vector2(48, 16)), Color("#65523a"))
 	draw_string(font, pos + Vector2(-64, 48), label, HORIZONTAL_ALIGNMENT_CENTER, 128, 9, Color("#bdb7a5"))
 
+func _draw_hub_upgrade_station(pos: Vector2, kind: String, level: int) -> void:
+	_draw_ellipse_custom(pos + Vector2(0, 23), Vector2(34, 9), Color(0.01, 0.02, 0.015, 0.24))
+	if kind == "backpack":
+		# A supply rack with a visible pack; upgrading adds stored bundles rather than turning it into a house.
+		draw_line(pos + Vector2(-25, 18), pos + Vector2(-20, -18), Color("#6e563c"), 5.0)
+		draw_line(pos + Vector2(25, 18), pos + Vector2(20, -18), Color("#6e563c"), 5.0)
+		draw_line(pos + Vector2(-22, -14), pos + Vector2(22, -14), Color("#8b6b46"), 6.0)
+		draw_rect(Rect2(pos + Vector2(-13, -8), Vector2(26, 28)), Color("#544637"))
+		draw_line(pos + Vector2(-8, -7), pos + Vector2(-8, 18), Color("#9b754b"), 3.0)
+		draw_line(pos + Vector2(8, -7), pos + Vector2(8, 18), Color("#9b754b"), 3.0)
+		for i in range(mini(level, 3)):
+			draw_circle(pos + Vector2(-28 + float(i) * 12.0, 10), 4.0, Color("#8d6b42"))
+		draw_string(font, pos + Vector2(-66, 42), "РЮКЗАК", HORIZONTAL_ALIGNMENT_CENTER, 132, 10, Color("#e3d7bf"))
+		draw_string(font, pos + Vector2(-66, 54), "СЛОТЫ %d" % (5 + level), HORIZONTAL_ALIGNMENT_CENTER, 132, 8, Color("#9fb1a2"))
+	else:
+		# Weapon bench / anvil silhouette stays recognizable at every level.
+		draw_line(pos + Vector2(-28, 18), pos + Vector2(28, 18), Color("#69533d"), 6.0)
+		draw_rect(Rect2(pos + Vector2(-12, -5), Vector2(30, 12)), Color("#777873"))
+		draw_line(pos + Vector2(-8, 7), pos + Vector2(-18, 20), Color("#55534e"), 5.0)
+		draw_line(pos + Vector2(17, -4), pos + Vector2(31, -19), Color("#b0aaa0"), 3.0)
+		draw_line(pos + Vector2(28, -22), pos + Vector2(34, -16), Color("#b0aaa0"), 2.0)
+		for i in range(mini(level, 3)):
+			draw_circle(pos + Vector2(-27 + float(i) * 11.0, -10), 3.5, Color("#a05f45"))
+		draw_string(font, pos + Vector2(-66, 42), "ОРУЖЕЙНАЯ", HORIZONTAL_ALIGNMENT_CENTER, 132, 10, Color("#e3d7bf"))
+		draw_string(font, pos + Vector2(-66, 54), "УРОН +%d%%" % (level * 10), HORIZONTAL_ALIGNMENT_CENTER, 132, 8, Color("#c2a78c"))
+
+
 func _draw_book_stand(pos: Vector2) -> void:
 	draw_rect(Rect2(pos + Vector2(-20, -10), Vector2(40, 24)), Color("#554633"))
 	draw_line(pos + Vector2(-14, 14), pos + Vector2(-18, 29), Color("#40372c"), 4.0)
@@ -3292,7 +3313,7 @@ func _draw_map_table(pos: Vector2) -> void:
 	draw_colored_polygon(map_pts, Color("#c8b48b"))
 	draw_line(pos + Vector2(-12, 0), pos + Vector2(10, -3), Color("#74866c"), 2.0)
 	draw_circle(pos + Vector2(14, 2), 3.0, Color("#9c5b43"))
-	draw_string(font, pos + Vector2(-50, 52), "КАРТА", HORIZONTAL_ALIGNMENT_CENTER, 100, 11, Color("#d9d0ba"))
+	# The actionable label is drawn once by _draw_hub(), below the table.
 
 
 func _draw_hearth_altar(pos: Vector2) -> void:
