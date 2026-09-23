@@ -2374,6 +2374,8 @@ func _add_survivor(role: String, spawn_pos: Vector2) -> void:
 	survivor_agents.append({
 		"role": role,
 		"pos": spawn_pos,
+		"vel": Vector2.ZERO,
+		"facing": 1.0,
 		"phase": float(index) * 1.7,
 		"shot_cd": rng.randf_range(0.08, 0.35)
 	})
@@ -2447,14 +2449,34 @@ func _update_survivor_agents(delta: float) -> void:
 		var agent: Dictionary = survivor_agents[i]
 		var role := String(agent.get("role", "guard"))
 		var pos: Vector2 = agent["pos"]
+		var vel: Vector2 = agent.get("vel", Vector2.ZERO)
 		var target := _survivor_defense_target(i) if night else _survivor_day_target(i, role)
 		var to_target := target - pos
+		var move_speed := 100.0 if night else 68.0
+		var desired := Vector2.ZERO
+		if to_target.length() > 5.0:
+			var follow_arrival := clampf(to_target.length() / 46.0, 0.18, 1.0)
+			desired = to_target.normalized() * move_speed * follow_arrival
 
-		var moving := to_target.length() > 5.0
+		var response := 9.0 if desired.length() > 0.1 else 13.0
+		vel = vel.lerp(desired, 1.0 - exp(-delta * response))
+		if desired.length() <= 0.1 and vel.length() < 2.5:
+			vel = Vector2.ZERO
+
+		var moving := vel.length() > 3.0
 		if moving:
-			var move_speed := 100.0 if night else 68.0
-			pos += to_target.normalized() * minf(to_target.length(), move_speed * delta)
+			var step := vel * delta
+			if to_target.length() > 0.0 and step.length() >= to_target.length():
+				pos = target
+				vel = Vector2.ZERO
+			else:
+				pos += step
 		pos = _separate_survivor_position(pos, i)
+
+		if absf(vel.x) > 4.0:
+			var wanted_facing := 1.0 if vel.x >= 0.0 else -1.0
+			agent["facing"] = lerpf(float(agent.get("facing", 1.0)), wanted_facing, 1.0 - exp(-delta * 8.0))
+
 		var phase_speed := 6.0 if moving else (4.2 if role == "worker" and not night else 1.8)
 		agent["phase"] = float(agent.get("phase", 0.0)) + delta * phase_speed
 
@@ -2476,11 +2498,11 @@ func _update_survivor_agents(delta: float) -> void:
 				cd = 0.72 if role == "hunter" else (0.88 if role == "guard" else 1.15)
 
 		agent["pos"] = pos
+		agent["vel"] = vel
 		agent["shot_cd"] = cd
 		survivor_agents[i] = agent
 
 	survivors = 1 + survivor_agents.size()
-
 
 func _keep_hero_out_of_hearth() -> void:
 	var diff := hero_pos - HEARTH_POS
@@ -4039,7 +4061,8 @@ func _draw_companions() -> void:
 			body_color = Color("#a07149")
 		elif role == "guard":
 			body_color = Color("#667d91")
-		_draw_humanoid(pos, body_color, phase, role, 1.0)
+		var facing := float(agent.get("facing", 1.0))
+		_draw_humanoid(pos, body_color, phase, role, facing)
 
 
 func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facing: float = 1.0) -> void:
