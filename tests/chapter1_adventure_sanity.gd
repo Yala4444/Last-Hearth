@@ -218,6 +218,8 @@ func _init() -> void:
 	game.meta["rescued_worker"] = false
 	game.meta["watch_restored"] = false
 	game.day1_route = "hunter"
+	game.survivor_one_found = true
+	game.day2_mission = "worker"
 	game.survivor_two_found = true
 	game.day3_route = "watch"
 	game.run_embers = 0
@@ -229,7 +231,16 @@ func _init() -> void:
 		fail("Dead Fields must not unlock after only one restored fire")
 		return
 	if not bool(game.meta.get("rescued_hunter", false)) or not bool(game.meta.get("rescued_worker", false)):
-		fail("People rescued during a successful run were not persisted into the Last Hearth")
+		fail("People met during the successful run were not persisted")
+		return
+	if String(game.meta.get("hunter_fate", "")) != "keeper_fire_1":
+		fail("Hunter should stay with Fire 1 instead of becoming an instant hub resident")
+		return
+	if String(game.meta.get("master_relationship_state", "")) != "waiting_forest":
+		fail("Master should remain part of the forest chapter before 3/3")
+		return
+	if game._hub_build_sites().size() != 0:
+		fail("The first restored fire should not create residential plots at the Last Hearth")
 		return
 	if not bool(game.meta.get("watch_restored", false)):
 		fail("Restored watch was not persisted into the Last Hearth")
