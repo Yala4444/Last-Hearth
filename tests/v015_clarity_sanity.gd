@@ -83,5 +83,20 @@ func _init() -> void:
 		fail("Worker did not repair the hearth during night")
 		return
 
+	# First return teaches settlement construction contextually instead of opening the full book modal.
+	game.meta["forest_fires"] = 1
+	game.meta["hub_intro_seen"] = false
+	game.help_open = false
+	game._enter_hub()
+	if game.help_open:
+		fail("First return still opens a blocking help overlay")
+		return
+	if not bool(game.meta.get("hub_intro_seen", false)):
+		fail("Hub construction intro was not marked as seen")
+		return
+	if game.story_hint.find("Спасённым людям нужен дом") < 0:
+		fail("First return did not explain why hub construction matters")
+		return
+
 	print("V015_CLARITY_SANITY_OK")
 	quit(0)
