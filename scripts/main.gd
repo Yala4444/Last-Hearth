@@ -22,6 +22,7 @@ const ROUTE_WORKER_GATE := Vector2(438.0, 345.0)
 const ROUTE_WATCH_GATE := Vector2(42.0, 330.0)
 const ROUTE_ALTAR_GATE := Vector2(438.0, 330.0)
 const ROUTE_RETURN_GATE := Vector2(240.0, 748.0)
+const FIELD_FIRE_WOOD_COST := 3
 const WORKSHOP_WOOD_COST := 4
 const WORKSHOP_STONE_COST := 3
 const AREA_FADE_DURATION := 0.24
@@ -1236,7 +1237,7 @@ func _gathering_enabled() -> bool:
 
 func _resource_kind_needed(kind: String) -> bool:
 	if stage == Stage.DAY1_GATHER:
-		return kind == "tree" and camp_wood + carried_wood < 5
+		return kind == "tree" and camp_wood + carried_wood < FIELD_FIRE_WOOD_COST
 	if stage == Stage.DAY2_BUILD:
 		if kind == "tree":
 			return camp_wood + carried_wood < current_stage_wood_start + WORKSHOP_WOOD_COST
@@ -1459,9 +1460,9 @@ func _check_day_progress() -> void:
 	if stage_transition_lock:
 		return
 
-	if stage == Stage.DAY1_GATHER and camp_wood >= 5:
+	if stage == Stage.DAY1_GATHER and camp_wood >= FIELD_FIRE_WOOD_COST:
 		stage_transition_lock = true
-		camp_wood -= 5
+		camp_wood -= FIELD_FIRE_WOOD_COST
 		hearth_level = 2
 		hearth_max_hp = 170.0
 		hearth_hp = hearth_max_hp
@@ -3450,8 +3451,8 @@ func _draw_stockpile() -> void:
 
 func _draw_world_progress() -> void:
 	if stage == Stage.DAY1_GATHER:
-		var delivered := mini(camp_wood, 5)
-		draw_string(font, HEARTH_POS + Vector2(-72, -78), "БРЁВНА %d/5" % delivered, HORIZONTAL_ALIGNMENT_CENTER, 144, 12, Color("#f1d79f"))
+		var delivered := mini(camp_wood, FIELD_FIRE_WOOD_COST)
+		draw_string(font, HEARTH_POS + Vector2(-82, -78), "ТОПЛИВО %d/%d" % [delivered, FIELD_FIRE_WOOD_COST], HORIZONTAL_ALIGNMENT_CENTER, 164, 12, Color("#f1d79f"))
 	elif stage == Stage.DAY2_BUILD:
 		var pos := _workshop_pos()
 		var wood_progress := clampi(camp_wood - current_stage_wood_start, 0, WORKSHOP_WOOD_COST)
@@ -3771,7 +3772,7 @@ func _stage_title() -> String:
 func _objective_text() -> String:
 	match stage:
 		Stage.DAY1_GATHER:
-			return "Сруби дерево, подбери брёвна с земли и отнеси 5 к очагу."
+			return "Сруби одно дерево, подбери топливо и отнеси его к полевому огню."
 		Stage.DAY1_RESCUE:
 			return "Подойди к найденному выжившему."
 		Stage.NIGHT1:
