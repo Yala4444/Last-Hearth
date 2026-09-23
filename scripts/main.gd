@@ -150,6 +150,12 @@ var run_seed := 0
 var map_variant := 0
 var map_variant_name := "Тихая поляна"
 var area: Area = Area.CAMP
+var expedition_sector := 0
+var day1_left_offer := "hunter"
+var day1_right_offer := "sawmill"
+var day2_mission := "worker"
+var day3_left_offer := "watch"
+var day3_right_offer := "altar"
 var day1_route := ""
 var day1_route_complete := false
 var sawmill_claimed := false
@@ -349,6 +355,78 @@ func _enter_hub(message: String = "") -> void:
 		_hub_feedback("ВОЗВРАЩЕНИЕ К ПОСЛЕДНЕМУ ОЧАГУ", HEARTH_POS, 1.8)
 
 
+func _configure_expedition_sector() -> void:
+	expedition_sector = clampi(int(meta.get("forest_fires", 0)), 0, 2)
+	var day1_pair: Array[String] = []
+	var day3_pair: Array[String] = []
+	match expedition_sector:
+		0:
+			day1_pair = ["hunter", "sawmill"]
+			day2_mission = "worker"
+			day3_pair = ["watch", "altar"]
+		1:
+			day1_pair = ["caravan", "nest"]
+			day2_mission = "storehouse"
+			day3_pair = ["barricade", "shrine"]
+		_:
+			day1_pair = ["signal", "dead_fire"]
+			day2_mission = "scout"
+			day3_pair = ["beacon", "cache"]
+
+	if expedition_sector > 0 and rng.randf() < 0.5:
+		var temp_day1 := day1_pair[0]
+		day1_pair[0] = day1_pair[1]
+		day1_pair[1] = temp_day1
+	if expedition_sector > 0 and rng.randf() < 0.5:
+		var temp_day3 := day3_pair[0]
+		day3_pair[0] = day3_pair[1]
+		day3_pair[1] = temp_day3
+
+	day1_left_offer = day1_pair[0]
+	day1_right_offer = day1_pair[1]
+	day3_left_offer = day3_pair[0]
+	day3_right_offer = day3_pair[1]
+
+
+func _day1_route_label(route_name: String) -> String:
+	match route_name:
+		"hunter": return "КРИК О ПОМОЩИ"
+		"sawmill": return "ДЫМ ЛЕСОПИЛКИ"
+		"caravan": return "РАЗБИТЫЙ ОБОЗ"
+		"nest": return "ШУМ В ЧАЩЕ"
+		"signal": return "СИГНАЛ С ХОЛМА"
+		"dead_fire": return "ПОТУХШИЙ ОГОНЬ"
+	return "НЕИЗВЕСТНЫЙ СЛЕД"
+
+
+func _day1_route_title(route_name: String) -> String:
+	match route_name:
+		"hunter": return "тропа охотника"
+		"sawmill": return "старая лесопилка"
+		"caravan": return "разбитый обоз"
+		"nest": return "логово у чёрного дерева"
+		"signal": return "сигнал разведчика"
+		"dead_fire": return "потухший костёр"
+	return "неизвестная тропа"
+
+
+func _day1_route_event_kind(route_name: String) -> String:
+	match route_name:
+		"sawmill": return "sawmill"
+		"caravan": return "wagon"
+		"nest": return "nest"
+		"signal": return "signal_survivor"
+		"dead_fire": return "dead_fire_route"
+	return ""
+
+
+func _route_event_triggered(kind: String) -> bool:
+	for event: Dictionary in events:
+		if String(event.get("kind", "")) == kind and bool(event.get("triggered", false)):
+			return true
+	return false
+
+
 func _start_expedition() -> void:
 	mode = Mode.EXPEDITION
 	stage = Stage.DAY1_GATHER
@@ -357,6 +435,7 @@ func _start_expedition() -> void:
 
 	run_seed = rng.randi()
 	rng.seed = run_seed
+	_configure_expedition_sector()
 
 	if int(meta.get("attempts", 1)) <= 1:
 		hero_pos = Vector2(240.0, 688.0)
@@ -736,6 +815,8 @@ func _route_add_rock(pos: Vector2) -> void:
 func _enter_day1_route(route_name: String) -> void:
 	if area != Area.CAMP or stage != Stage.DAY1_RESCUE or day1_route != "":
 		return
+	if route_name != day1_left_offer and route_name != day1_right_offer:
+		return
 	_stash_camp_area()
 	day1_route = route_name
 	resource_nodes.clear()
@@ -745,45 +826,60 @@ func _enter_day1_route(route_name: String) -> void:
 	decor_points.clear()
 	enemies.clear()
 	shots.clear()
-	_prepare_route_transition(ROUTE_HUNTER_GATE if route_name == "hunter" else ROUTE_SAWMILL_GATE)
+
+	var from_left := route_name == day1_left_offer
+	_prepare_route_transition(ROUTE_HUNTER_GATE if from_left else ROUTE_SAWMILL_GATE)
 	hero_hp = hero_max_hp
-	route_grace_timer = 3.0
+	route_grace_timer = 2.4
 	_stop_joystick()
+	area = Area.HUNTER_TRAIL if from_left else Area.SAWMILL
 
-	if route_name == "hunter":
-		area = Area.HUNTER_TRAIL
-		survivor_one_pos = Vector2(245.0, 205.0)
-		for p: Vector2 in [Vector2(78, 185), Vector2(390, 205), Vector2(100, 360), Vector2(382, 390), Vector2(90, 585), Vector2(390, 600)]:
-			_route_add_tree(p, rng.randi_range(0, 2))
-		for p: Vector2 in [Vector2(150, 285), Vector2(335, 300), Vector2(300, 560)]:
-			_route_add_rock(p)
-		for i in range(44):
-			decor_points.append({
-				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
-				"kind": "grass" if i % 4 != 0 else "branch",
-				"scale": rng.randf_range(0.75, 1.25)
-			})
-		_spawn_enemy_at("guard", Vector2(190, 285))
-		_spawn_enemy_at("guard", Vector2(295, 300))
-		_spawn_enemy_at("fast", Vector2(245, 340))
-		_story("ТРОПА ОХОТНИКА
-Крик оборвался. Между деревьями движутся тени.", 3.6)
-	else:
-		area = Area.SAWMILL
-		for p: Vector2 in [Vector2(78, 185), Vector2(400, 190), Vector2(88, 385), Vector2(392, 400), Vector2(100, 610), Vector2(385, 620)]:
-			_route_add_tree(p, rng.randi_range(0, 2))
-		for p: Vector2 in [Vector2(135, 300), Vector2(350, 315), Vector2(330, 570)]:
-			_route_add_rock(p)
-		for i in range(38):
-			decor_points.append({
-				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
-				"kind": "branch" if i % 3 == 0 else "grass",
-				"scale": rng.randf_range(0.75, 1.25)
-			})
-		_add_event("sawmill", Vector2(240.0, 220.0))
-		_story("СТАРАЯ ЛЕСОПИЛКА
-Здесь можно укрепить Очаг, но механизм заржавел.", 3.6)
+	var trees: Array[Vector2] = [
+		Vector2(76, 184), Vector2(398, 196), Vector2(92, 370),
+		Vector2(388, 398), Vector2(96, 585), Vector2(390, 610)
+	]
+	var rocks: Array[Vector2] = [
+		Vector2(145, 285), Vector2(340, 305), Vector2(305, 560)
+	]
+	for p: Vector2 in trees:
+		_route_add_tree(p, rng.randi_range(0, 2))
+	for p: Vector2 in rocks:
+		_route_add_rock(p)
+	for i in range(42):
+		decor_points.append({
+			"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
+			"kind": "branch" if i % 5 == 0 else ("pebble" if i % 4 == 0 else "grass"),
+			"scale": rng.randf_range(0.75, 1.25)
+		})
 
+	match route_name:
+		"hunter":
+			survivor_one_pos = Vector2(245.0, 205.0)
+			_spawn_enemy_at("guard", Vector2(190, 285))
+			_spawn_enemy_at("guard", Vector2(295, 300))
+			_spawn_enemy_at("fast", Vector2(245, 340))
+			_story("ТРОПА ОХОТНИКА\nКрик оборвался. Между деревьями движутся тени.", 3.6)
+		"sawmill":
+			_add_event("sawmill", Vector2(240.0, 220.0))
+			_story("СТАРАЯ ЛЕСОПИЛКА\nРжавый механизм ещё можно запустить — шум наверняка кого-то разбудит.", 3.6)
+		"caravan":
+			_add_event("wagon", Vector2(240.0, 220.0))
+			_spawn_enemy_at("guard", Vector2(185, 310))
+			_spawn_enemy_at("guard", Vector2(300, 300))
+			_spawn_enemy_at("fast", Vector2(245, 365))
+			_story("РАЗБИТЫЙ ОБОЗ\nТелега застряла на старой дороге. Вокруг неё слишком много свежих следов.", 3.6)
+		"nest":
+			_add_event("nest", Vector2(240.0, 220.0))
+			_story("ШУМ В ЧАЩЕ\nПод чёрными корнями что-то шевелится. Можно пройти мимо — но путь дальше лежит здесь.", 3.6)
+		"signal":
+			_add_event("signal_survivor", Vector2(240.0, 220.0))
+			_spawn_enemy_at("guard", Vector2(185, 300))
+			_spawn_enemy_at("fast", Vector2(292, 315))
+			_spawn_enemy_at("fast", Vector2(245, 365))
+			_story("СИГНАЛ С ХОЛМА\nКто-то трижды поднял факел над деревьями. Потом свет исчез.", 3.6)
+		"dead_fire":
+			_add_event("dead_fire_route", Vector2(240.0, 220.0))
+			_story("ПОТУХШИЙ ОГОНЬ\nКамни ещё тёплые. Значит, этот костёр погас совсем недавно.", 3.6)
 
 func _return_from_day1_route() -> void:
 	if area == Area.CAMP or not day1_route_complete:
@@ -797,35 +893,60 @@ func _return_from_day1_route() -> void:
 
 
 func _update_day1_route() -> void:
-	if stage != Stage.DAY1_RESCUE:
+	if stage != Stage.DAY1_RESCUE or day1_route_complete:
 		return
 
-	if area == Area.HUNTER_TRAIL and not day1_route_complete:
-		if enemies.is_empty() and hero_pos.distance_to(survivor_one_pos) < 48.0:
+	if day1_route == "hunter":
+		if area == Area.HUNTER_TRAIL and enemies.is_empty() and hero_pos.distance_to(survivor_one_pos) < 48.0:
 			survivor_one_found = true
 			_add_survivor("hunter", survivor_one_pos)
 			day1_route_complete = true
 			run_embers += 1
-			_story("ОХОТНИК СПАСЁН
-«Ночью они идут на огонь. Я останусь у края света.»", 3.7)
+			_story("ОХОТНИК СПАСЁН\n«Ночью они идут на огонь. Я останусь у края света.»", 3.7)
+		return
 
-	if area == Area.SAWMILL and sawmill_claimed and not day1_route_complete and enemies.is_empty():
-		day1_route_complete = true
-		carry_limit += 1
-		hearth_max_hp += 38.0
-		hearth_hp = hearth_max_hp
-		run_embers += 1
-		_story("ЛЕСОПИЛКА ОЧИЩЕНА
-Доски укрепят Очаг. Перенос +1, прочность выше.", 3.6)
+	if day1_route == "sawmill":
+		if sawmill_claimed and enemies.is_empty():
+			day1_route_complete = true
+			carry_limit += 1
+			hearth_max_hp += 38.0
+			hearth_hp = hearth_max_hp
+			run_embers += 1
+			_story("ЛЕСОПИЛКА ОЧИЩЕНА\nДоски укрепят огонь. Снаряжение +1 слот, прочность выше.", 3.6)
+		return
 
+	var event_kind := _day1_route_event_kind(day1_route)
+	if event_kind == "" or not _route_event_triggered(event_kind) or not enemies.is_empty():
+		return
+
+	match day1_route:
+		"caravan":
+			carry_limit += 1
+			hearth_max_hp += 20.0
+			hearth_hp = hearth_max_hp
+			run_embers += 1
+			_story("ОБОЗ ОБЫСКАН\nНашлись ремни, доски и сухое топливо. Нести можно больше.", 3.4)
+		"nest":
+			hero_damage *= 1.18
+			run_embers += 2
+			_story("ЛОГОВО УНИЧТОЖЕНО\nПод корнями нашлись обугленные наконечники. Оружие стало опаснее.", 3.4)
+		"signal":
+			run_embers += 1
+			_story("РАЗВЕДЧИК СПАСЁН\n«Я видел ещё один огонь глубже в лесу. Покажу дорогу.»", 3.4)
+		"dead_fire":
+			hearth_max_hp += 32.0
+			hearth_hp = hearth_max_hp
+			run_embers += 1
+			_story("ЖАР СОХРАНЁН\nВ золе ещё осталась сила. Полевой огонь выдержит больше.", 3.4)
+	day1_route_complete = true
 
 func _update_area_transitions() -> void:
 	if stage == Stage.DAY1_RESCUE:
 		if area == Area.CAMP and day1_route == "":
 			if hero_pos.distance_to(ROUTE_HUNTER_GATE) < 46.0:
-				_enter_day1_route("hunter")
+				_enter_day1_route(day1_left_offer)
 			elif hero_pos.distance_to(ROUTE_SAWMILL_GATE) < 46.0:
-				_enter_day1_route("sawmill")
+				_enter_day1_route(day1_right_offer)
 		elif area != Area.CAMP and day1_route_complete and hero_pos.distance_to(route_return_gate_pos) < 50.0:
 			_return_from_day1_route()
 		return
@@ -2320,7 +2441,7 @@ func _finish_run(win: bool, reason: String = "") -> void:
 		meta["hearth_rank"] = maxi(int(meta.get("hearth_rank", 1)), 1 + fires)
 		if day1_route == "hunter":
 			meta["rescued_hunter"] = true
-		if survivor_two_found:
+		if day2_mission == "worker" and survivor_two_found:
 			meta["rescued_worker"] = true
 		if day3_route == "watch":
 			meta["watch_restored"] = true
