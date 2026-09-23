@@ -710,6 +710,20 @@ func _add_event(kind: String, pos: Vector2) -> void:
 		required = 1.90
 	elif kind == "final_altar":
 		required = 1.70
+	elif kind == "nest":
+		required = 1.45
+	elif kind == "signal_survivor":
+		required = 1.35
+	elif kind == "dead_fire_route":
+		required = 1.55
+	elif kind == "supply_cache":
+		required = 1.25
+	elif kind == "barricade_repair":
+		required = 1.75
+	elif kind == "beacon":
+		required = 1.65
+	elif kind == "shrine":
+		required = 1.55
 	events.append({
 		"kind": kind,
 		"pos": pos,
@@ -984,7 +998,7 @@ func _enter_worker_ruins() -> void:
 	shots.clear()
 	_prepare_route_transition(ROUTE_WORKER_GATE)
 	hero_hp = hero_max_hp
-	route_grace_timer = 3.2
+	route_grace_timer = 2.8
 	worker_clear_announced = false
 	survivor_two_pos = Vector2(250.0, 185.0)
 	_stop_joystick()
@@ -1000,11 +1014,27 @@ func _enter_worker_ruins() -> void:
 			"scale": rng.randf_range(0.75, 1.25)
 		})
 
-	_spawn_enemy_at("guard", Vector2(182, 270))
-	_spawn_enemy_at("guard", Vector2(315, 275))
-	_spawn_enemy_at("fast", Vector2(215, 350))
-	_spawn_enemy_at("fast", Vector2(292, 365))
-	_story("РУИНЫ МАСТЕРСКОЙ\nЗа стеной кто-то стучит по металлу. Твари уже внутри.", 3.8)
+	match day2_mission:
+		"worker":
+			_spawn_enemy_at("guard", Vector2(182, 270))
+			_spawn_enemy_at("guard", Vector2(315, 275))
+			_spawn_enemy_at("fast", Vector2(215, 350))
+			_spawn_enemy_at("fast", Vector2(292, 365))
+			_story("РУИНЫ МАСТЕРСКОЙ\nЗа стеной кто-то стучит по металлу. Твари уже внутри.", 3.8)
+		"storehouse":
+			_add_event("supply_cache", survivor_two_pos)
+			_spawn_enemy_at("guard", Vector2(178, 270))
+			_spawn_enemy_at("guard", Vector2(315, 275))
+			_spawn_enemy_at("fast", Vector2(235, 355))
+			_spawn_enemy_at("elite", Vector2(285, 375))
+			_story("СТАРЫЙ СКЛАД\nДверь сорвана, но внутри видны ящики. Сначала придётся очистить двор.", 3.8)
+		_:
+			_spawn_enemy_at("guard", Vector2(170, 270))
+			_spawn_enemy_at("guard", Vector2(320, 270))
+			_spawn_enemy_at("fast", Vector2(205, 345))
+			_spawn_enemy_at("fast", Vector2(290, 350))
+			_spawn_enemy_at("elite", Vector2(250, 405))
+			_story("СИГНАЛ РАЗВЕДЧИКА\nНа обломке стены привязана красная лента. Кто-то ждёт наверху.", 3.8)
 
 
 func _update_worker_route() -> void:
@@ -1012,37 +1042,71 @@ func _update_worker_route() -> void:
 		return
 	if enemies.is_empty() and not worker_clear_announced:
 		worker_clear_announced = true
-		_banner("РУИНЫ ОЧИЩЕНЫ", 1.5)
-		_story("Твари стихли. За завалом снова слышен стук — рабочий ещё жив.", 2.8)
+		if day2_mission == "worker":
+			_banner("РУИНЫ ОЧИЩЕНЫ", 1.5)
+			_story("Твари стихли. За завалом снова слышен стук — рабочий ещё жив.", 2.8)
+		elif day2_mission == "storehouse":
+			_banner("ДВОР ОЧИЩЕН", 1.5)
+			_story("За дверью виден старый походный тайник. Осталось открыть его.", 2.8)
+		else:
+			_banner("ПОДХОД ОЧИЩЕН", 1.5)
+			_story("Сверху отвечает короткий свист. Разведчик ещё жив.", 2.8)
 		return
-	if enemies.is_empty() and hero_pos.distance_to(survivor_two_pos) < 48.0:
+
+	if not enemies.is_empty() or hero_pos.distance_to(survivor_two_pos) >= 48.0:
+		return
+
+	if day2_mission == "worker":
 		survivor_two_found = true
 		_add_survivor("worker", survivor_two_pos)
 		worker_route_complete = true
 		run_embers += 1
 		_story("РАБОЧИЙ СПАСЁН\n«Я починю мастерскую. Но эти твари знали, где мы прячемся.»", 3.8)
+	elif day2_mission == "storehouse":
+		if not _route_event_triggered("supply_cache"):
+			return
+		worker_route_complete = true
+		carry_limit += 1
+		hero_max_hp += 24.0
+		hero_hp = hero_max_hp
+		run_embers += 2
+		_story("СКЛАД РАЗОБРАН\nНашлись ремни, защита и инструменты. Снаряжение стало надёжнее.", 3.6)
+	else:
+		survivor_two_found = true
+		_add_survivor("guard", survivor_two_pos)
+		worker_route_complete = true
+		run_embers += 2
+		_story("РАЗВЕДЧИК СПАСЁН\n«До сердца леса осталось недалеко. Я пойду с вами.»", 3.6)
 
 
 func _return_from_worker_ruins() -> void:
 	if area != Area.WORKER_RUINS or not worker_route_complete:
 		return
 	_restore_camp_area()
-	workshop_built = false
-	stage = Stage.DAY2_BUILD
-	left_choice_pos = Vector2(135.0, 285.0)
-	right_choice_pos = Vector2(345.0, 285.0)
-	current_stage_wood_start = camp_wood
-	current_stage_stone_start = camp_stone
-	light_radius = maxf(light_radius, 255.0)
-	hearth_level = maxi(hearth_level, 3)
-	camera_shake = 1.4
-	flash_timer = 0.32
-	_story("Рабочий: «Каркас уцелел. Принеси немного дерева и камня — я восстановлю мастерскую.»", 4.2)
-	_banner("СТРОИМ МАСТЕРСКУЮ", 1.9)
-
+	if day2_mission == "worker":
+		workshop_built = false
+		stage = Stage.DAY2_BUILD
+		left_choice_pos = Vector2(135.0, 285.0)
+		right_choice_pos = Vector2(345.0, 285.0)
+		current_stage_wood_start = camp_wood
+		current_stage_stone_start = camp_stone
+		light_radius = maxf(light_radius, 255.0)
+		hearth_level = maxi(hearth_level, 3)
+		camera_shake = 1.4
+		flash_timer = 0.32
+		_story("Рабочий: «Каркас уцелел. Принеси немного дерева и камня — я восстановлю мастерскую.»", 4.2)
+		_banner("СТРОИМ МАСТЕРСКУЮ", 1.9)
+	else:
+		if day2_mission == "storehouse":
+			_story("Снаряжение из склада разложено у огня. Ночь уже близко.", 2.8)
+		else:
+			_story("Разведчик показывает безопасную тропу назад. В темноте уже слышны шаги.", 2.8)
+		_start_night(2)
 
 func _enter_day3_route(route_name: String) -> void:
 	if area != Area.CAMP or stage != Stage.DAY3_TOWER or day3_route != "":
+		return
+	if route_name != day3_left_offer and route_name != day3_right_offer:
 		return
 	_stash_camp_area()
 	day3_route = route_name
@@ -1053,44 +1117,49 @@ func _enter_day3_route(route_name: String) -> void:
 	decor_points.clear()
 	enemies.clear()
 	shots.clear()
-	_prepare_route_transition(ROUTE_WATCH_GATE if route_name == "watch" else ROUTE_ALTAR_GATE)
+	var from_left := route_name == day3_left_offer
+	_prepare_route_transition(ROUTE_WATCH_GATE if from_left else ROUTE_ALTAR_GATE)
 	hero_hp = hero_max_hp
 	route_grace_timer = 2.4
 	_stop_joystick()
+	area = Area.WATCH_RIDGE if from_left else Area.ALTAR_GLADE
 
-	if route_name == "watch":
-		area = Area.WATCH_RIDGE
-		for p: Vector2 in [Vector2(75, 190), Vector2(405, 195), Vector2(92, 400), Vector2(388, 405), Vector2(105, 610), Vector2(382, 625)]:
-			_route_add_tree(p, rng.randi_range(0, 2))
-		for p: Vector2 in [Vector2(145, 285), Vector2(340, 305), Vector2(305, 565)]:
-			_route_add_rock(p)
-		for i in range(38):
-			decor_points.append({
-				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
-				"kind": "pebble" if i % 3 == 0 else "grass",
-				"scale": rng.randf_range(0.75, 1.25)
-			})
-		_add_event("watch_repair", Vector2(240.0, 205.0))
-		_story("СЛОМАННЫЙ ДОЗОР\nЕсли поднять башню, она прикроет Очаг в последнюю ночь.", 3.6)
-	else:
-		area = Area.ALTAR_GLADE
-		for p: Vector2 in [Vector2(80, 190), Vector2(400, 190), Vector2(82, 410), Vector2(398, 415), Vector2(115, 625), Vector2(365, 625)]:
-			_route_add_tree(p, rng.randi_range(0, 2))
-		for p: Vector2 in [Vector2(135, 300), Vector2(345, 300), Vector2(240, 570)]:
-			_route_add_rock(p)
-		for i in range(40):
-			decor_points.append({
-				"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
-				"kind": "ash" if i % 5 == 0 else "grass",
-				"scale": rng.randf_range(0.72, 1.20)
-			})
-		_add_event("final_altar", Vector2(240.0, 210.0))
-		_story("ДРЕВНИЙ АЛТАРЬ\nПламя здесь старше нашего Очагa. Оно может изменить оружие.", 3.6)
+	for p: Vector2 in [Vector2(75, 190), Vector2(405, 195), Vector2(92, 400), Vector2(388, 405), Vector2(105, 610), Vector2(382, 625)]:
+		_route_add_tree(p, rng.randi_range(0, 2))
+	for p: Vector2 in [Vector2(145, 285), Vector2(340, 305), Vector2(305, 565)]:
+		_route_add_rock(p)
+	for i in range(40):
+		decor_points.append({
+			"pos": Vector2(rng.randf_range(30.0, 450.0), rng.randf_range(120.0, 755.0)),
+			"kind": "ash" if route_name in ["altar", "shrine"] and i % 5 == 0 else ("pebble" if i % 3 == 0 else "grass"),
+			"scale": rng.randf_range(0.72, 1.22)
+		})
+
+	match route_name:
+		"watch":
+			_add_event("watch_repair", Vector2(240.0, 205.0))
+			_story("СЛОМАННЫЙ ДОЗОР\nЕсли поднять башню, она прикроет огонь в последнюю ночь.", 3.6)
+		"altar":
+			_add_event("final_altar", Vector2(240.0, 210.0))
+			_story("ДРЕВНИЙ АЛТАРЬ\nПламя здесь старше нашего огня. Оно может изменить оружие.", 3.6)
+		"barricade":
+			_add_event("barricade_repair", Vector2(240.0, 210.0))
+			_story("ЗАВАЛ У МОСТА\nЕсли укрепить проход, часть ночной волны не доберётся до огня.", 3.6)
+		"shrine":
+			_add_event("shrine", Vector2(240.0, 210.0))
+			_story("КАМЕННЫЙ КРУГ\nНа камнях остались следы старого огня. Сила здесь ещё не умерла.", 3.6)
+		"beacon":
+			_add_event("beacon", Vector2(240.0, 210.0))
+			_story("СИГНАЛЬНЫЙ МАЯК\nЕсли зажечь его сейчас, он увидит врага раньше нас.", 3.6)
+		_:
+			_add_event("supply_cache", Vector2(240.0, 210.0))
+			_story("ТАЙНИК СТРАЖИ\nПод камнями спрятаны щиты и старые ремни. Может пригодиться ночью.", 3.6)
 
 
 func _update_day3_route() -> void:
 	if stage != Stage.DAY3_TOWER or day3_route_complete:
 		return
+
 	if day3_route == "watch" and watch_repair_started and enemies.is_empty():
 		tower_built = true
 		day3_route_complete = true
@@ -1102,21 +1171,48 @@ func _update_day3_route() -> void:
 		day3_route_complete = true
 		run_embers += 1
 		_story("ОГОНЬ ПРИНЯТ\nСтрелы вспыхивают от прикосновения. Урон значительно выше.", 3.5)
+	elif day3_route == "barricade" and watch_repair_started and enemies.is_empty():
+		hearth_max_hp += 85.0
+		hearth_hp = hearth_max_hp
+		day3_route_complete = true
+		run_embers += 1
+		_story("ПРОХОД УКРЕПЛЁН\nЧасть тварей упрётся в завал. Огонь выдержит намного больше.", 3.5)
+	elif day3_route == "shrine" and final_altar_claimed and enemies.is_empty():
+		hero_damage *= 1.28
+		hero_max_hp += 24.0
+		hero_hp = hero_max_hp
+		day3_route_complete = true
+		run_embers += 1
+		_story("ЗНАК ПРИНЯТ\nОружие стало сильнее, а старый жар защищает тебя от ударов.", 3.5)
+	elif day3_route == "beacon" and watch_repair_started and enemies.is_empty():
+		tower_built = true
+		hero_fire_rate *= 0.90
+		day3_route_complete = true
+		run_embers += 2
+		_story("МАЯК ГОРИТ\nСвет видит дальше нас. Последнюю волну встретим подготовленными.", 3.5)
+	elif day3_route == "cache" and _route_event_triggered("supply_cache") and enemies.is_empty():
+		carry_limit += 1
+		hero_max_hp += 42.0
+		hero_hp = hero_max_hp
+		day3_route_complete = true
+		run_embers += 1
+		_story("ТАЙНИК РАЗОБРАН\nЩит и ремни делают последний бой безопаснее.", 3.5)
 
 
 func _return_from_day3_route() -> void:
 	if area == Area.CAMP or not day3_route_complete:
 		return
 	_restore_camp_area()
-	if day3_route == "watch":
-		_story("Рабочий остаётся у механизма башни. Что-то огромное движется за деревьями.", 3.0)
-	else:
-		if day1_route == "hunter":
-			_story("Охотник молча смотрит на горящие стрелы. Лес вокруг Очагa внезапно стих.", 3.0)
-		else:
-			_story("Рабочий отступает от горящих стрел. Лес вокруг Очагa внезапно стих.", 3.0)
+	match day3_route:
+		"watch":
+			_story("Рабочий остаётся у механизма башни. Что-то огромное движется за деревьями.", 3.0)
+		"barricade":
+			_story("За спиной трещат свежие брёвна баррикады. Впереди лес внезапно стих.", 3.0)
+		"beacon":
+			_story("Сигнальный огонь остаётся гореть над деревьями. Ответа долго ждать не приходится.", 3.0)
+		_:
+			_story("Вы возвращаетесь к огню с тем, что успели забрать. Лес вокруг внезапно стих.", 3.0)
 	_start_night(3)
-
 
 func _event_is_visible(pos: Vector2) -> bool:
 	return pos.distance_to(_active_light_center()) <= _active_light_radius() - 6.0
@@ -1229,6 +1325,56 @@ func _update_world_events(delta: float) -> void:
 				route_grace_timer = 1.0
 				camera_shake = 2.8
 				_story("АЛТАРЬ ВСПЫХНУЛ\nОгонь ответил — и вместе с ним проснулось то, что лежало под камнями.", 3.3)
+			"nest":
+				event["outcome"] = "opened"
+				_spawn_enemy_at("fast", pos + Vector2(-62, 54))
+				_spawn_enemy_at("fast", pos + Vector2(60, 50))
+				_spawn_enemy_at("guard", pos + Vector2(-18, 88))
+				_spawn_enemy_at("guard", pos + Vector2(28, 96))
+				route_grace_timer = 1.0
+				camera_shake = 2.8
+				_story("ЛОГОВО ПРОСНУЛОСЬ\nКорни разошлись, и из-под земли полезли твари.", 3.2)
+			"signal_survivor":
+				event["outcome"] = "rescued"
+				_add_survivor("guard", pos)
+				_burst_typed(pos, 10, "ember")
+				_story("СИГНАЛ ОТВЕЧЕН\nИз-за камней выходит разведчик и присоединяется к тебе.", 3.2)
+			"dead_fire_route":
+				event["outcome"] = "embers"
+				_spawn_enemy_at("fast", pos + Vector2(-48, 62))
+				_spawn_enemy_at("fast", pos + Vector2(54, 66))
+				route_grace_timer = 0.8
+				_story("ЗОЛА ШЕВЕЛЬНУЛАСЬ\nВместе с жаром проснулись две тени.", 3.0)
+			"supply_cache":
+				event["outcome"] = "opened"
+				_spawn_enemy_at("fast", pos + Vector2(-46, 56))
+				_spawn_enemy_at("fast", pos + Vector2(48, 58))
+				route_grace_timer = 0.8
+				_story("ТАЙНИК ОТКРЫТ\nЗапах металла привлёк тех, кто прятался рядом.", 3.0)
+			"barricade_repair":
+				watch_repair_started = true
+				event["outcome"] = "repairing"
+				_spawn_enemy_at("elite", pos + Vector2(0, 92))
+				_spawn_enemy_at("guard", pos + Vector2(-70, 62))
+				_spawn_enemy_at("guard", pos + Vector2(70, 62))
+				route_grace_timer = 1.0
+				_story("БАРРИКАДА ЗАСКРИПЕЛА\nШум ремонта поднял тварей из оврага.", 3.1)
+			"beacon":
+				watch_repair_started = true
+				event["outcome"] = "lit"
+				_spawn_enemy_at("fast", pos + Vector2(-68, 70))
+				_spawn_enemy_at("fast", pos + Vector2(68, 70))
+				_spawn_enemy_at("elite", pos + Vector2(0, 100))
+				route_grace_timer = 1.0
+				_story("МАЯК ЗАЖЁГСЯ\nСвет ударил в небо — и лес ответил рёвом.", 3.2)
+			"shrine":
+				final_altar_claimed = true
+				event["outcome"] = "marked"
+				_spawn_enemy_at("guard", pos + Vector2(-58, 66))
+				_spawn_enemy_at("guard", pos + Vector2(58, 66))
+				_spawn_enemy_at("fast", pos + Vector2(0, 96))
+				route_grace_timer = 0.9
+				_story("КАМЕННЫЙ КРУГ\nЗнаки на камнях загорелись и позвали стражей.", 3.1)
 
 		events[i] = event
 		_check_day_progress()
@@ -3171,6 +3317,20 @@ func _draw_world_events() -> void:
 			"watch_repair":
 				_draw_event_broken_watch(pos, alpha, triggered)
 			"final_altar":
+				_draw_event_altar(pos, alpha, triggered)
+			"nest":
+				_draw_event_black_tree(pos, alpha, triggered)
+			"signal_survivor":
+				_draw_event_wounded(pos, alpha, triggered)
+			"dead_fire_route":
+				_draw_event_dead_camp(pos, alpha, triggered)
+			"supply_cache":
+				_draw_event_wagon(pos, alpha, triggered)
+			"barricade_repair":
+				_draw_event_broken_watch(pos, alpha, triggered)
+			"beacon":
+				_draw_event_dead_camp(pos, alpha, triggered)
+			"shrine":
 				_draw_event_altar(pos, alpha, triggered)
 
 		if not triggered:
