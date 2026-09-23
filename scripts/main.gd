@@ -112,7 +112,8 @@ var meta: Dictionary = {
 	"worker_home_wood": 0,
 	"worker_home_stone": 0,
 	"hearth_rank": 1,
-	"guide_seen": false
+	"guide_seen": false,
+	"hub_intro_seen": false
 }
 
 var hero_pos := Vector2(240.0, 650.0)
@@ -316,6 +317,9 @@ func _load_meta() -> void:
 		meta["forest_cleared"] = migrated_fires >= 3
 	if loaded_version < 13:
 		meta["guide_seen"] = false
+	if loaded_version < 15:
+		meta["hub_intro_seen"] = false
+	meta["hub_intro_seen"] = bool(meta.get("hub_intro_seen", false))
 	meta["rescued_hunter"] = bool(meta.get("rescued_hunter", false))
 	meta["rescued_worker"] = bool(meta.get("rescued_worker", false))
 	meta["watch_restored"] = bool(meta.get("watch_restored", false))
@@ -360,11 +364,12 @@ func _enter_hub(message: String = "") -> void:
 	story_hint = ""
 	story_hint_timer = 0.0
 	notice_queue.clear()
-	if int(meta.get("forest_fires", 0)) > 0 and not bool(meta.get("guide_seen", false)):
-		help_open = true
-		meta["guide_seen"] = true
+	var fires := int(meta.get("forest_fires", 0))
+	if fires > 0 and not bool(meta.get("hub_intro_seen", false)):
+		meta["hub_intro_seen"] = true
 		_save_meta()
-	if message != "":
+		_story("ПОСЛЕДНИЙ ОЧАГ РАСТЁТ\nСпасённым людям нужен дом. Роща слева даёт дерево, склон справа — камень. Неси материалы к каркасам.", 5.4)
+	elif message != "":
 		_hub_feedback("ВОЗВРАЩЕНИЕ К ПОСЛЕДНЕМУ ОЧАГУ", HEARTH_POS, 1.8)
 
 
@@ -3020,7 +3025,7 @@ func _handle_region_map_press(pos: Vector2) -> void:
 		_start_expedition()
 	elif dead_rect.has_point(pos):
 		var fires := int(meta.get("forest_fires", 0))
-		var text := "НУЖНО ВОССТАНОВИТЬ 3 ОГНЯ ЛЕСА" if fires < 3 else "ПУТЬ ПОКА СКРЫТ ТЬМОЙ"
+		var text := "НУЖНО ВОССТАНОВИТЬ 3 ОГНЯ ЛЕСА" if fires < 3 else "МЁРТВЫЕ ПОЛЯ ПОКА НЕ ДОСТУПНЫ"
 		_hub_feedback(text, HUB_MAP_POS + Vector2(0, 120), 2.4)
 	elif pos.y < 180.0 or pos.y > 560.0:
 		region_map_open = false
@@ -3148,10 +3153,10 @@ func _draw_hub() -> void:
 	var damage_cost := 4 + damage_level * 3
 	var hearth_cost := 5 + hearth_bonus * 4
 
-	draw_string(font, HUB_CARRY_POS + Vector2(-66, 63), "след. %d углей" % carry_cost, HORIZONTAL_ALIGNMENT_CENTER, 132, 9, Color("#d7c7a8"))
-	draw_string(font, HUB_DAMAGE_POS + Vector2(-66, 63), "след. %d углей" % damage_cost, HORIZONTAL_ALIGNMENT_CENTER, 132, 9, Color("#d7c7a8"))
-	var hearth_label := "максимум" if hearth_bonus >= 3 else "ур.%d | %d углей" % [hearth_bonus, hearth_cost]
-	draw_string(font, HUB_HEARTH_UPGRADE_POS + Vector2(-72, 49), hearth_label, HORIZONTAL_ALIGNMENT_CENTER, 144, 11, Color("#e6c583"))
+	draw_string(font, HUB_CARRY_POS + Vector2(-72, 63), "СЛОТЫ %d > %d | %d уг." % [5 + carry_level, 6 + carry_level, carry_cost], HORIZONTAL_ALIGNMENT_CENTER, 144, 8, Color("#d7c7a8"))
+	draw_string(font, HUB_DAMAGE_POS + Vector2(-72, 63), "УРОН +%d > +%d%% | %d уг." % [damage_level * 10, (damage_level + 1) * 10, damage_cost], HORIZONTAL_ALIGNMENT_CENTER, 144, 8, Color("#d7c7a8"))
+	var hearth_label := "МАКСИМУМ" if hearth_bonus >= 3 else "HP +%d > +%d | СВЕТ +%d > +%d | %d уг." % [hearth_bonus * 18, (hearth_bonus + 1) * 18, hearth_bonus * 8, (hearth_bonus + 1) * 8, hearth_cost]
+	draw_string(font, HUB_HEARTH_UPGRADE_POS + Vector2(-95, 49), hearth_label, HORIZONTAL_ALIGNMENT_CENTER, 190, 8, Color("#e6c583"))
 
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006) * 0.08
 	draw_arc(HUB_MAP_POS, 46.0 * pulse, 0.0, TAU, 44, Color(0.78, 0.88, 0.70, 0.55), 2.0)
@@ -5001,7 +5006,7 @@ func _draw_region_map_overlay() -> void:
 	draw_line(Vector2(322, 355), Vector2(365, 330), Color("#55483d"), 5.0)
 	draw_circle(Vector2(356, 336), 5.0, Color("#b87845"))
 	draw_string(font, Vector2(269, 391), "МЁРТВЫЕ ПОЛЯ", HORIZONTAL_ALIGNMENT_CENTER, 150, 12, Color("#d7ccbc"))
-	var dead_label := "НУЖНЫ 3 ОГНЯ ЛЕСА" if fires < 3 else "ПУТЬ ЕЩЁ ВО ТЬМЕ"
+	var dead_label := "НУЖНЫ 3 ОГНЯ ЛЕСА" if fires < 3 else "СЛЕДУЮЩАЯ ГЛАВА ПОКА ЗАКРЫТА"
 	draw_string(font, Vector2(269, 411), dead_label, HORIZONTAL_ALIGNMENT_CENTER, 150, 9, Color("#897e74"))
 	draw_string(font, Vector2(68, 518), "Коснись Забытых лесов, чтобы продолжить поиск.", HORIZONTAL_ALIGNMENT_CENTER, 344, 10, Color("#839187"))
 
