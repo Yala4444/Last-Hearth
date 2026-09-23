@@ -858,6 +858,8 @@ func _return_from_worker_ruins() -> void:
 	_restore_camp_area()
 	workshop_built = false
 	stage = Stage.DAY2_BUILD
+	left_choice_pos = Vector2(135.0, 285.0)
+	right_choice_pos = Vector2(345.0, 285.0)
 	current_stage_wood_start = camp_wood
 	current_stage_stone_start = camp_stone
 	light_radius = maxf(light_radius, 255.0)
