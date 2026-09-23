@@ -39,6 +39,9 @@ func _init() -> void:
 	if game._forest_fire_state(3) != "seen":
 		fail("Fire 3 was not revealed at 2/3")
 		return
+	if game._future_region_visible():
+		fail("Future region silhouette appeared before the forest reached 3/3")
+		return
 
 	game.meta["forest_fires"] = 3
 	game._sync_forest_discovery_from_progress()
@@ -46,6 +49,9 @@ func _init() -> void:
 		if game._forest_fire_state(index) != "restored":
 			fail("All fires should be restored at 3/3")
 			return
+	if not game._future_region_visible():
+		fail("Future region silhouette did not unlock after the forest reached 3/3")
+		return
 
 	# Opening the map acknowledges newly restored fires, so the table can stop showing its NEW badge.
 	game.mode = game.Mode.HUB
