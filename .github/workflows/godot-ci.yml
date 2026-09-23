@@ -87,6 +87,13 @@ jobs:
           godot --headless --path . -s res://tests/hub_settlement_sanity.gd 2>&1 | tee /tmp/hub-settlement.log
           grep -q "HUB_SETTLEMENT_SANITY_OK" /tmp/hub-settlement.log
 
+      - name: Route variation sanity test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . -s res://tests/route_variation_sanity.gd 2>&1 | tee /tmp/route-variation.log
+          grep -q "ROUTE_VARIATION_SANITY_OK" /tmp/route-variation.log
+
       - name: Export Web build
         shell: bash
         run: |
