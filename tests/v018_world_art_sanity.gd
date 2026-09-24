@@ -28,7 +28,12 @@ func _init() -> void:
 		game.TEX_HEARTH_5_V018,
 		game.TEX_MASTER_HUT_V018,
 		game.TEX_WORKSHOP_V018,
-		game.TEX_WATCHTOWER_V018
+		game.TEX_WATCHTOWER_V018,
+		game.TEX_FOREST_TREE_FALLEN_V018,
+		game.TEX_FOREST_STUMP_V018,
+		game.TEX_LOG_PICKUP_V018,
+		game.TEX_STONE_PICKUP_V018,
+		game.TEX_CARGO_FRAME_V018
 	]
 	for texture in world_textures:
 		if texture == null:

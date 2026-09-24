@@ -74,6 +74,11 @@ const TEX_HEARTH_5_V018: Texture2D = preload("res://assets/v018/world/hearth_5.s
 const TEX_MASTER_HUT_V018: Texture2D = preload("res://assets/v018/world/master_hut.svg")
 const TEX_WORKSHOP_V018: Texture2D = preload("res://assets/v018/world/workshop.svg")
 const TEX_WATCHTOWER_V018: Texture2D = preload("res://assets/v018/world/watchtower.svg")
+const TEX_FOREST_TREE_FALLEN_V018: Texture2D = preload("res://assets/v018/world/forest_tree_fallen.svg")
+const TEX_FOREST_STUMP_V018: Texture2D = preload("res://assets/v018/world/forest_stump.svg")
+const TEX_LOG_PICKUP_V018: Texture2D = preload("res://assets/v018/world/log_pickup.svg")
+const TEX_STONE_PICKUP_V018: Texture2D = preload("res://assets/v018/world/stone_pickup.svg")
+const TEX_CARGO_FRAME_V018: Texture2D = preload("res://assets/v018/world/cargo_frame.svg")
 const TEX_TREE_A: Texture2D = preload("res://assets/v08/sprint1/tree_a.svg")
 const TEX_TREE_B: Texture2D = preload("res://assets/v08/sprint1/tree_b.svg")
 const TEX_TREE_C: Texture2D = preload("res://assets/v08/sprint1/tree_c.svg")
@@ -464,6 +469,7 @@ func _setup_audio() -> void:
 		"chop": _make_wave(0.11, 118.0, 72.0, 0.18),
 		"stone": _make_wave(0.10, 245.0, 92.0, 0.24),
 		"pickup": _make_wave(0.10, 620.0, 940.0, 0.02),
+		"unload": _make_wave(0.12, 360.0, 180.0, 0.08),
 		"shot": _make_wave(0.065, 980.0, 520.0, 0.05),
 		"enemy_down": _make_wave(0.18, 170.0, 62.0, 0.20),
 		"night": _make_wave(0.48, 104.0, 48.0, 0.10),
@@ -500,6 +506,17 @@ func _play_sfx(kind: String, volume_offset_db: float = 0.0) -> void:
 	player.stop()
 	player.stream = audio_sfx_streams[kind]
 	player.volume_db = -13.0 + volume_offset_db
+	match kind:
+		"chop":
+			player.pitch_scale = rng.randf_range(0.94, 1.04)
+		"stone":
+			player.pitch_scale = rng.randf_range(0.92, 1.03)
+		"pickup":
+			player.pitch_scale = rng.randf_range(1.00, 1.08)
+		"unload":
+			player.pitch_scale = rng.randf_range(0.94, 1.02)
+		_:
+			player.pitch_scale = rng.randf_range(0.97, 1.03)
 	player.play()
 
 
@@ -1995,6 +2012,8 @@ func _finish_hub_site(site: Dictionary) -> void:
 	_save_meta()
 	camera_shake = 2.4
 	flash_timer = 0.28
+	_play_sfx("home", 1.0)
+	_burst_typed(site["pos"], 18, "ember")
 	_banner(String(site["label"]) + " ГОТОВ", 2.0)
 	if id == "worker_home":
 		_story("Мастер ставит инструменты у двери. Теперь это не временный привал — у него есть место в Последнем Очаге.", 4.2)
@@ -2474,6 +2493,7 @@ func _deposit_resources_if_close(delta: float) -> void:
 		"t": 0.0,
 		"duration": 0.22
 	})
+	_play_sfx("unload", -6.0)
 	if stage == Stage.DAY2_BUILD:
 		_burst_typed(deposit_pos + Vector2(rng.randf_range(-12.0, 12.0), 4), 4, "wood" if kind == "wood" else "stone")
 		_float_text(deposit_pos + Vector2(0, -48), "СТРОЙКА +", Color("#dfc38d"))
@@ -2519,6 +2539,7 @@ func _check_day_progress() -> void:
 		camp_wood -= WORKSHOP_WOOD_COST
 		camp_stone -= WORKSHOP_STONE_COST
 		workshop_built = true
+		_play_sfx("home", 0.0)
 		stage = Stage.WORKSHOP_CHOICE
 		current_stage_wood_start = camp_wood
 		current_stage_stone_start = camp_stone
@@ -4764,15 +4785,15 @@ func _draw_resource(node: Dictionary) -> void:
 		elif not bool(node.get("drop_spawned", true)):
 			var progress := 1.0 - clampf(float(node.get("fall_timer", 0.0)) / 0.34, 0.0, 1.0)
 			var falling_pos := pos + Vector2(22.0 * progress, -10.0 + progress * 13.0)
-			_draw_centered_texture(TEX_TREE_FALLING, falling_pos, Vector2(112, 78), modulate)
+			_draw_centered_texture(TEX_FOREST_TREE_FALLEN_V018, falling_pos, Vector2(122, 61), modulate)
 		else:
-			_draw_centered_texture(TEX_STUMP, pos + Vector2(0, 4), Vector2(39, 39), modulate)
+			_draw_centered_texture(TEX_FOREST_STUMP_V018, pos + Vector2(0, 4), Vector2(48, 40), modulate)
 	else:
 		if alive:
-			_draw_centered_texture(TEX_ROCK, pos + Vector2(0, -2), Vector2(46, 42), modulate)
+			_draw_centered_texture(TEX_FOREST_ROCK_V018, pos + Vector2(0, -2), Vector2(58, 40), modulate)
 		elif not bool(node.get("drop_spawned", true)):
-			_draw_centered_texture(TEX_ROCK, pos + Vector2(-7, 2), Vector2(30, 28), modulate)
-			_draw_centered_texture(TEX_ROCK, pos + Vector2(9, 7), Vector2(23, 21), modulate)
+			_draw_centered_texture(TEX_STONE_PICKUP_V018, pos + Vector2(-8, 2), Vector2(34, 27), modulate)
+			_draw_centered_texture(TEX_STONE_PICKUP_V018, pos + Vector2(10, 7), Vector2(27, 22), modulate)
 		else:
 			draw_circle(pos, 5.5, Color(0.42, 0.47, 0.45, maxf(0.08, visibility * 0.6)))
 
@@ -4783,9 +4804,9 @@ func _draw_resource_pickup(pickup: Dictionary) -> void:
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.006 + pos.x * 0.04) * 0.05
 	draw_circle(pos + Vector2(0, 7), 10.0, Color(0.02, 0.03, 0.02, 0.20))
 	if kind == "wood":
-		_draw_centered_texture(TEX_LOG, pos, Vector2(36, 18) * pulse, _asset_modulate(pos, 0.20))
+		_draw_centered_texture(TEX_LOG_PICKUP_V018, pos, Vector2(42, 21) * pulse, _asset_modulate(pos, 0.20))
 	else:
-		_draw_centered_texture(TEX_ROCK, pos, Vector2(27, 24) * pulse, _asset_modulate(pos, 0.18))
+		_draw_centered_texture(TEX_STONE_PICKUP_V018, pos, Vector2(31, 25) * pulse, _asset_modulate(pos, 0.18))
 
 
 func _draw_resource_flights() -> void:
@@ -4798,9 +4819,9 @@ func _draw_resource_flights() -> void:
 		var p := from * inv * inv + mid * 2.0 * inv * t + to * t * t
 		var kind := String(flight.get("kind", "wood"))
 		if kind == "wood":
-			_draw_centered_texture(TEX_LOG, p, Vector2(29, 15), Color.WHITE)
+			_draw_centered_texture(TEX_LOG_PICKUP_V018, p, Vector2(31, 16), Color.WHITE)
 		else:
-			_draw_centered_texture(TEX_ROCK, p, Vector2(19, 17), Color.WHITE)
+			_draw_centered_texture(TEX_STONE_PICKUP_V018, p, Vector2(22, 18), Color.WHITE)
 
 
 func _draw_hearth(pos: Vector2, level: int) -> void:
@@ -5029,31 +5050,21 @@ func _nearby_resource_kind() -> String:
 
 
 func _draw_back_cargo(pos: Vector2) -> void:
-	var visible_logs := mini(carried_wood, 7)
-	if visible_logs > 0:
-		# A visible carrying frame keeps the logs clearly behind the character.
-		draw_line(pos + Vector2(-13, -25), pos + Vector2(-13, 9), Color("#6d5235"), 3.0, true)
-		draw_line(pos + Vector2(13, -25), pos + Vector2(13, 9), Color("#6d5235"), 3.0, true)
-		draw_line(pos + Vector2(-13, -10), pos + Vector2(13, -10), Color("#876540"), 2.0, true)
-		for i in range(visible_logs):
-			var row := i / 2
-			var side := -1.0 if i % 2 == 0 else 1.0
-			var center := pos + Vector2(side * 4.0, -7.0 - float(row) * 7.0)
-			var tilt := 0.06 * side
-			var axis := Vector2(cos(tilt), sin(tilt))
-			draw_line(center - axis * 16.0, center + axis * 16.0, Color("#8d5c32"), 6.5, true)
-			draw_circle(center - axis * 16.0, 3.2, Color("#c78e56"))
-			draw_circle(center + axis * 16.0, 3.2, Color("#c78e56"))
-		draw_line(pos + Vector2(-13, -1), pos + Vector2(10, -27), Color(0.73, 0.60, 0.39, 0.88), 2.3)
-		draw_line(pos + Vector2(13, -1), pos + Vector2(-10, -27), Color(0.73, 0.60, 0.39, 0.88), 2.3)
+	# One authored carrying frame keeps the cargo attached to the hero silhouette.
+	_draw_centered_texture(TEX_CARGO_FRAME_V018, pos + Vector2(0, -9), Vector2(46, 52), Color(0.95, 0.92, 0.82, 0.92))
+
+	var visible_logs := mini(carried_wood, 6)
+	for i in range(visible_logs):
+		var row := i / 2
+		var side := -1.0 if i % 2 == 0 else 1.0
+		var center := pos + Vector2(side * 6.0, -6.0 - float(row) * 7.0)
+		_draw_centered_texture(TEX_LOG_PICKUP_V018, center, Vector2(28, 14), Color(0.95, 0.90, 0.78, 0.96))
 
 	if carried_stone > 0:
-		var sack := pos + Vector2(-19, 6)
-		draw_circle(sack, 9.5, Color("#746b59"))
-		draw_line(sack + Vector2(-6, -5), sack + Vector2(6, -5), Color("#a9997f"), 2.0)
-		for i in range(mini(carried_stone, 4)):
-			var p := sack + Vector2(-4 + float(i % 2) * 8.0, -2 + float(i / 2) * 6.0)
-			draw_circle(p, 2.7, Color("#a4aaa7"))
+		var shown_stone := mini(carried_stone, 3)
+		for i in range(shown_stone):
+			var stone_pos := pos + Vector2(-16.0 + float(i) * 7.0, 4.0 - float(i % 2) * 5.0)
+			_draw_centered_texture(TEX_STONE_PICKUP_V018, stone_pos, Vector2(19, 15), Color(0.90, 0.92, 0.88, 0.94))
 
 
 func _draw_companions() -> void:
@@ -5334,24 +5345,22 @@ func _draw_stockpile() -> void:
 	var visible_stone := maxi(0, camp_stone - current_stage_stone_start) if stage == Stage.DAY2_BUILD else camp_stone
 	if visible_wood > 0:
 		var wood_pos := storage_center + Vector2(-76, 47)
-		var shown := mini(visible_wood, 6)
-		for i in range(shown):
+		var shown_wood := mini(visible_wood, 6)
+		for i in range(shown_wood):
 			var row := i / 3
 			var col := i % 3
-			var p := wood_pos + Vector2(float(col) * 11.0 - 11.0, -float(row) * 7.0)
-			draw_line(p + Vector2(-6, 0), p + Vector2(6, 0), Color("#8f5d33"), 5.0, true)
-			draw_circle(p + Vector2(-6, 0), 2.3, Color("#c58b54"))
-			draw_circle(p + Vector2(6, 0), 2.3, Color("#c58b54"))
+			var p := wood_pos + Vector2(float(col) * 13.0 - 13.0, -float(row) * 8.0)
+			_draw_centered_texture(TEX_LOG_PICKUP_V018, p, Vector2(25, 13), Color.WHITE)
 		draw_string(font, wood_pos + Vector2(-24, 19), "%d" % visible_wood, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#d9bf91"))
 
 	if visible_stone > 0:
 		var stone_pos := storage_center + Vector2(76, 48)
-		var shown := mini(visible_stone, 6)
-		for i in range(shown):
+		var shown_stone := mini(visible_stone, 6)
+		for i in range(shown_stone):
 			var row := i / 3
 			var col := i % 3
-			var p := stone_pos + Vector2(float(col) * 10.0 - 10.0, -float(row) * 7.0)
-			draw_circle(p, 4.2, Color("#858f8c"))
+			var p := stone_pos + Vector2(float(col) * 11.0 - 11.0, -float(row) * 8.0)
+			_draw_centered_texture(TEX_STONE_PICKUP_V018, p, Vector2(20, 16), Color.WHITE)
 		draw_string(font, stone_pos + Vector2(-24, 19), "%d" % visible_stone, HORIZONTAL_ALIGNMENT_CENTER, 48, 9, Color("#c5ccc8"))
 
 
