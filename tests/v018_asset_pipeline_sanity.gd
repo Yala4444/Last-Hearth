@@ -108,5 +108,28 @@ func _init() -> void:
 		fail("Survivor identity lookup created a false duplicate")
 		return
 
+	# Regression: sector 3 can offer the Scout on day 1 and reference him again on day 2.
+	# The second beat must upgrade the existing Scout, never clone him.
+	game.survivor_agents.clear()
+	game.survivors = 1
+	game._add_survivor("guard", Vector2(210, 210), "РАЗВЕДЧИК")
+	game.stage = game.Stage.DAY2_RESCUE
+	game.area = game.Area.WORKER_RUINS
+	game.day2_mission = "scout"
+	game.worker_route_complete = false
+	game.worker_clear_announced = false
+	game.survivor_two_pos = Vector2(250, 185)
+	game.hero_pos = game.survivor_two_pos
+	game.enemies.clear()
+	game.hero_damage = 24.0
+	game._update_worker_route()
+	game._update_worker_route()
+	if game.survivor_agents.size() != 1 or game.survivors != 2:
+		fail("Day 2 Scout beat duplicated an existing Scout")
+		return
+	if game.hero_damage <= 24.0:
+		fail("Existing Scout route did not grant its replacement route bonus")
+		return
+
 	print("V018_ASSET_PIPELINE_SANITY_OK")
 	quit(0)

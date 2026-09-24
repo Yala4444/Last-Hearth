@@ -1520,7 +1520,7 @@ func _update_worker_route() -> void:
 		if _has_survivor_label("РАЗВЕДЧИК"):
 			var old_damage := hero_damage
 			hero_damage *= 1.08
-			_story("МЕТКА ПРОВЕРЕНА\nТвой разведчик находит безопасный обход. Урон %d > %d (+8%%). Второй разведчик из воздуха больше не появляется." % [roundi(old_damage), roundi(hero_damage)], 4.2)
+			_story("МЕТКА ПРОВЕРЕНА\nРазведчик узнаёт старый обход и проводит тебя по безопасной тропе. Урон %d > %d (+8%%)." % [roundi(old_damage), roundi(hero_damage)], 4.2)
 		else:
 			_add_survivor("guard", survivor_two_pos, "РАЗВЕДЧИК")
 			_story("РАЗВЕДЧИК СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. «До сердца леса осталось недалеко.»", 4.0)
