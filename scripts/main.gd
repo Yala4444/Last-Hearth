@@ -4789,7 +4789,7 @@ func _draw_v018_character(pos: Vector2, role: String, direction: String, frame_i
 	# Keep the logical gameplay position at the feet, matching the v0.18-A hero anchor.
 	var destination := Rect2(pos + Vector2(-30.0, -60.0 + bob), V018_CHARACTER_FRAME)
 	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(17, 5.5), Color(0.01, 0.02, 0.015, 0.32 * maxf(0.2, modulate.a)))
-	draw_texture_rect_region(destination, texture, source, modulate)
+	draw_texture_rect_region(texture, destination, source, modulate)
 
 
 func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
