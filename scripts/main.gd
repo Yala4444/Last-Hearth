@@ -45,14 +45,15 @@ const TEX_HERO_CARRY_3: Texture2D = preload("res://assets/v08/sprint1/hero_carry
 
 # v0.18-A production hero frames. These are cropped from the approved Package 5 artwork,
 # normalized to one 96x128 transparent canvas so every direction keeps the same in-world scale.
-const TEX_HERO_V018_DOWN_0: Texture2D = preload("res://assets/v018/characters/hero_down_0.webp")
-const TEX_HERO_V018_DOWN_1: Texture2D = preload("res://assets/v018/characters/hero_down_1.webp")
-const TEX_HERO_V018_LEFT_0: Texture2D = preload("res://assets/v018/characters/hero_left_0.webp")
-const TEX_HERO_V018_LEFT_1: Texture2D = preload("res://assets/v018/characters/hero_left_1.webp")
-const TEX_HERO_V018_RIGHT_0: Texture2D = preload("res://assets/v018/characters/hero_right_0.webp")
-const TEX_HERO_V018_RIGHT_1: Texture2D = preload("res://assets/v018/characters/hero_right_1.webp")
-const TEX_HERO_V018_UP_0: Texture2D = preload("res://assets/v018/characters/hero_up_0.webp")
-const TEX_HERO_V018_UP_1: Texture2D = preload("res://assets/v018/characters/hero_up_1.webp")
+# v0.18-A2 production character sheets.
+# PNG + fixed source regions are used deliberately for iPhone/Safari stability.
+# Grid: 2 frames x 4 directions. Rows: down, left, right, up. Cell: 60x80.
+const TEX_HERO_V018: Texture2D = preload("res://assets/v018/characters/hero_v018.png")
+const TEX_HUNTER_V018: Texture2D = preload("res://assets/v018/characters/hunter_v018.png")
+const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_v018.png")
+const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_v018.png")
+const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_v018.png")
+const V018_CHARACTER_FRAME := Vector2(60.0, 80.0)
 const TEX_TREE_A: Texture2D = preload("res://assets/v08/sprint1/tree_a.svg")
 const TEX_TREE_B: Texture2D = preload("res://assets/v08/sprint1/tree_b.svg")
 const TEX_TREE_C: Texture2D = preload("res://assets/v08/sprint1/tree_c.svg")
@@ -3597,7 +3598,7 @@ func _draw_hub() -> void:
 	var master_state := String(meta.get("master_relationship_state", "unknown"))
 	if master_state in ["joining_home", "resident"]:
 		var master_pos := HUB_WORKER_HOME_POS + Vector2(-50, 48)
-		_draw_humanoid(master_pos, Color("#9b7856"), 0.0, "worker", -1.0)
+		_draw_v018_character(master_pos, "worker", "down", 0, _character_v018_modulate(master_pos), 0.0)
 	_draw_master_arrival_focus()
 
 	var has_construction := _hub_has_pending_construction()
@@ -4293,7 +4294,7 @@ func _draw_event_nest(pos: Vector2, alpha: float, triggered: bool) -> void:
 func _draw_event_signal_survivor(pos: Vector2, alpha: float, triggered: bool) -> void:
 	if triggered:
 		return
-	_draw_humanoid(pos, Color(0.46, 0.51, 0.45, alpha), 0.0, "guard", 1.0)
+	_draw_v018_character(pos, "guard", "down", 0, _character_v018_modulate(pos, alpha), 0.0)
 	draw_line(pos + Vector2(15, -20), pos + Vector2(15, -43), Color(0.52, 0.40, 0.26, alpha), 3.0)
 	draw_circle(pos + Vector2(15, -47), 4.0, Color(0.94, 0.58, 0.25, 0.9 * alpha))
 	draw_string(font, pos + Vector2(-58, -55), "РАЗВЕДЧИК", HORIZONTAL_ALIGNMENT_CENTER, 116, 9, Color(0.84, 0.78, 0.67, 0.86 * alpha))
@@ -4348,7 +4349,7 @@ func _draw_event_wagon(pos: Vector2, alpha: float, triggered: bool) -> void:
 
 func _draw_event_wounded(pos: Vector2, alpha: float, triggered: bool) -> void:
 	if not triggered:
-		_draw_humanoid(pos, Color(0.48, 0.43, 0.39, alpha), 0.0, "civilian", 1.0)
+		_draw_v018_character(pos, "civilian", "down", 0, _character_v018_modulate(pos, alpha), 0.0)
 		draw_line(pos + Vector2(-18, 12), pos + Vector2(20, 12), Color(0.28, 0.23, 0.19, alpha), 3.0)
 		draw_string(font, pos + Vector2(-52, -36), "РАНЕНЫЙ", HORIZONTAL_ALIGNMENT_CENTER, 104, 9, Color(0.84, 0.78, 0.67, 0.82))
 
@@ -4724,6 +4725,73 @@ func _draw_centered_texture(texture: Texture2D, pos: Vector2, size: Vector2, mod
 	draw_texture_rect(texture, rect, false, modulate)
 
 
+func _character_v018_texture(role: String) -> Texture2D:
+	match role:
+		"hero":
+			return TEX_HERO_V018
+		"hunter":
+			return TEX_HUNTER_V018
+		"worker", "master":
+			return TEX_MASTER_V018
+		"guard", "scout":
+			return TEX_SCOUT_V018
+		_:
+			return TEX_SETTLER_V018
+
+
+func _character_v018_direction_key(motion: Vector2, fallback: Vector2 = Vector2(0.0, 1.0)) -> String:
+	var direction := motion
+	if direction.length() < 0.05:
+		direction = fallback
+	if direction.length() < 0.05:
+		return "down"
+	if absf(direction.x) > absf(direction.y):
+		return "left" if direction.x < 0.0 else "right"
+	return "up" if direction.y < 0.0 else "down"
+
+
+func _character_v018_direction_row(direction: String) -> int:
+	match direction:
+		"left":
+			return 1
+		"right":
+			return 2
+		"up":
+			return 3
+		_:
+			return 0
+
+
+func _character_v018_source_rect(direction: String, frame_index: int) -> Rect2:
+	var column := posmod(frame_index, 2)
+	var row := _character_v018_direction_row(direction)
+	return Rect2(
+		Vector2(float(column) * V018_CHARACTER_FRAME.x, float(row) * V018_CHARACTER_FRAME.y),
+		V018_CHARACTER_FRAME
+	)
+
+
+func _character_v018_phase_frame(phase: float, moving: bool) -> int:
+	if not moving:
+		return 0
+	return int(floor(absf(phase) / 2.4)) % 2
+
+
+func _character_v018_modulate(pos: Vector2, alpha: float = 1.0) -> Color:
+	var tint := _asset_modulate(pos, 0.42)
+	tint.a *= clampf(alpha, 0.0, 1.0)
+	return tint
+
+
+func _draw_v018_character(pos: Vector2, role: String, direction: String, frame_index: int, modulate: Color, bob: float = 0.0) -> void:
+	var texture := _character_v018_texture(role)
+	var source := _character_v018_source_rect(direction, frame_index)
+	# Keep the logical gameplay position at the feet, matching the v0.18-A hero anchor.
+	var destination := Rect2(pos + Vector2(-30.0, -60.0 + bob), V018_CHARACTER_FRAME)
+	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(17, 5.5), Color(0.01, 0.02, 0.015, 0.32 * maxf(0.2, modulate.a)))
+	draw_texture_rect_region(destination, texture, source, modulate)
+
+
 func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
 	var visibility := maxf(minimum_visibility, _light_visibility(pos))
 	var distance := pos.distance_to(_active_light_center())
@@ -4734,52 +4802,30 @@ func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
 
 
 func _hero_v018_direction_key(facing: Vector2 = hero_facing) -> String:
-	if facing.length() < 0.05:
-		return "down"
-	if absf(facing.x) > absf(facing.y):
-		return "left" if facing.x < 0.0 else "right"
-	return "up" if facing.y < 0.0 else "down"
+	return _character_v018_direction_key(facing, Vector2(0.0, 1.0))
 
 
 func _hero_v018_frame_index(moving: bool) -> int:
-	if not moving:
-		return 0
-	return int(floor(hero_walk_phase / 2.4)) % 2
-
-
-func _hero_v018_texture(direction: String, frame_index: int) -> Texture2D:
-	var second := frame_index % 2 == 1
-	match direction:
-		"up":
-			return TEX_HERO_V018_UP_1 if second else TEX_HERO_V018_UP_0
-		"left":
-			return TEX_HERO_V018_LEFT_1 if second else TEX_HERO_V018_LEFT_0
-		"right":
-			return TEX_HERO_V018_RIGHT_1 if second else TEX_HERO_V018_RIGHT_0
-		_:
-			return TEX_HERO_V018_DOWN_1 if second else TEX_HERO_V018_DOWN_0
+	return _character_v018_phase_frame(hero_walk_phase, moving)
 
 
 func _draw_hero(pos: Vector2) -> void:
 	var moving := hero_velocity.length() > 7.0 or hero_pos.distance_to(hero_target) > 3.0 or joystick_vector.length() > JOYSTICK_DEADZONE
 	var direction := _hero_v018_direction_key()
 	var frame_index := _hero_v018_frame_index(moving)
-	var texture := _hero_v018_texture(direction, frame_index)
-
-	# The gameplay anchor stays at the hero's feet. The art is taller than the old prototype icon,
-	# but collision, interaction radius, joystick and movement are intentionally untouched.
 	var bob := sin(hero_walk_phase * 1.15) * 0.65 if moving else 0.0
-	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(17, 5.5), Color(0.01, 0.02, 0.015, 0.32))
 
-	# Cargo is still a gameplay-readable overlay until the dedicated v0.18 carry animation pass.
+	# Cargo remains gameplay-readable until its dedicated carry animation pass.
 	if carried_wood > 0 or carried_stone > 0:
 		_draw_back_cargo(pos + Vector2(0, bob))
 
-	_draw_centered_texture(
-		texture,
-		pos + Vector2(0, -20 + bob),
-		Vector2(60, 80),
-		_asset_modulate(pos, 0.42)
+	_draw_v018_character(
+		pos,
+		"hero",
+		direction,
+		frame_index,
+		_character_v018_modulate(pos),
+		bob
 	)
 
 
@@ -4829,75 +4875,43 @@ func _draw_companions() -> void:
 	for agent: Dictionary in survivor_agents:
 		var role := String(agent.get("role", "guard"))
 		var pos: Vector2 = agent["pos"]
+		var velocity: Vector2 = agent.get("vel", Vector2.ZERO)
 		var phase := float(agent.get("phase", 0.0))
-		var body_color := Color("#6f8663")
-		if role == "worker":
-			body_color = Color("#a07149")
-		elif role == "guard":
-			body_color = Color("#667d91")
-		var facing := float(agent.get("facing", 1.0))
-		_draw_humanoid(pos, body_color, phase, role, facing)
+		var facing_x := float(agent.get("facing", 1.0))
+		var fallback := Vector2(facing_x, 0.0)
+		var direction := _character_v018_direction_key(velocity, fallback)
+		var moving := velocity.length() > 3.0
+		var frame_index := _character_v018_phase_frame(phase, moving)
+		var bob := sin(phase) * 0.45 if moving else 0.0
+		_draw_v018_character(pos, role, direction, frame_index, _character_v018_modulate(pos), bob)
 
 
 func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facing: float = 1.0) -> void:
-	var moving_stride: float = sin(phase) * 4.0
-	var bob: float = absf(sin(phase * 0.5)) * 1.4
-	var base: Vector2 = pos + Vector2(0, -bob)
-	var visibility := _light_visibility(pos)
-	var lit_coat := _lit_world_color(coat, pos)
-	var skin := _lit_world_color(Color("#c69c7d"), pos)
-	var dark_leg := _lit_world_color(Color("#403c34"), pos)
-	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(14, 5), Color(0.01, 0.02, 0.015, 0.30 * maxf(0.2, visibility)))
-
-	draw_line(base + Vector2(-5, 8), base + Vector2(-7 + moving_stride, 19), dark_leg, 4.0, true)
-	draw_line(base + Vector2(5, 8), base + Vector2(7 - moving_stride, 19), dark_leg, 4.0, true)
-	draw_line(base + Vector2(-10 + moving_stride, 19), base + Vector2(-4 + moving_stride, 19), _lit_world_color(Color("#272824"), pos), 4.0, true)
-	draw_line(base + Vector2(4 - moving_stride, 19), base + Vector2(10 - moving_stride, 19), _lit_world_color(Color("#272824"), pos), 4.0, true)
-
-	var torso := PackedVector2Array([
-		base + Vector2(-10, -10), base + Vector2(10, -10),
-		base + Vector2(12, 9), base + Vector2(-12, 9)
-	])
-	draw_colored_polygon(torso, lit_coat)
-	draw_rect(Rect2(base + Vector2(-11, 4), Vector2(22, 3)), _lit_world_color(Color("#5a4630"), pos))
-
-	var arm_sway := sin(phase + 1.2) * 3.0
-	draw_line(base + Vector2(-9, -5), base + Vector2(-14 - arm_sway, 6), lit_coat.lightened(0.06), 4.0, true)
-	draw_line(base + Vector2(9, -5), base + Vector2(14 + arm_sway, 5), lit_coat.lightened(0.06), 4.0, true)
-
-	draw_circle(base + Vector2(0, -17), 7.2, skin)
-	draw_arc(base + Vector2(0, -18), 7.0, PI, TAU, 16, _lit_world_color(Color("#5b4737"), pos), 4.0)
-	draw_circle(base + Vector2(2.5 * facing, -17), 0.9, _lit_world_color(Color("#342f28"), pos))
-
-	if visibility > 0.30:
-		var fire_dir := (HEARTH_POS - pos).normalized()
-		draw_line(base + fire_dir * 8.0 + Vector2(0, -5), base + fire_dir * 10.0 + Vector2(0, 7), Color(1.0, 0.67, 0.30, 0.20 * visibility), 2.2, true)
-		draw_circle(base + Vector2(0, -17) + fire_dir * 4.8, 2.2, Color(1.0, 0.73, 0.42, 0.18 * visibility))
-
-	if role == "hunter":
-		var hand := base + Vector2(13, 0)
-		draw_arc(hand + Vector2(7, -2), 9.0, -1.55, 1.55, 12, _lit_world_color(Color("#d1b989"), pos), 2.0)
-		draw_line(hand + Vector2(7, -11), hand + Vector2(7, 7), _lit_world_color(Color("#b69a6c"), pos), 1.5)
-	elif role == "worker":
-		var work := 0.25 + sin(phase) * 0.45
-		var hand := base + Vector2(13, 0)
-		var tip := hand + Vector2(cos(-0.8 + work), sin(-0.8 + work)) * 20.0
-		draw_line(hand, tip, _lit_world_color(Color("#b2875b"), pos), 3.0)
-		draw_rect(Rect2(tip + Vector2(-4, -4), Vector2(8, 6)), _lit_world_color(Color("#8d8c83"), pos))
-	elif role == "guard":
-		draw_line(base + Vector2(11, -1), base + Vector2(24, -13), _lit_world_color(Color("#c5c9c4"), pos), 2.5)
-		draw_line(base + Vector2(19, -14), base + Vector2(26, -9), _lit_world_color(Color("#c5c9c4"), pos), 2.0)
+	# Compatibility entry point for story/event callers. The procedural mannequin is retired;
+	# named NPC roles now always use the same production sprite pipeline as the hero.
+	var moving := absf(phase) > 0.05
+	var direction := "down" if not moving else ("left" if facing < 0.0 else "right")
+	var frame_index := _character_v018_phase_frame(phase, moving)
+	_draw_v018_character(pos, role, direction, frame_index, _character_v018_modulate(pos), 0.0)
 
 
 func _draw_person(pos: Vector2, color: Color, phase: float) -> void:
-	_draw_humanoid(pos, color, phase, "civilian", 1.0)
+	var moving := absf(phase) > 0.05
+	_draw_v018_character(
+		pos,
+		"civilian",
+		"down",
+		_character_v018_phase_frame(phase, moving),
+		_character_v018_modulate(pos),
+		0.0
+	)
 
 
 func _draw_survivor(pos: Vector2, mark: String) -> void:
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.007) * 0.06
 	draw_circle(pos, 26.0 * pulse, Color(0.77, 0.83, 0.70, 0.07))
-	_draw_humanoid(pos, Color("#8c8974"), Time.get_ticks_msec() * 0.002, "civilian", 1.0)
-	draw_string(font, pos + Vector2(-12, -40), mark, HORIZONTAL_ALIGNMENT_CENTER, 24, 16, Color("#f4ead4"))
+	_draw_v018_character(pos, "civilian", "down", 0, _character_v018_modulate(pos), 0.0)
+	draw_string(font, pos + Vector2(-12, -52), mark, HORIZONTAL_ALIGNMENT_CENTER, 24, 16, Color("#f4ead4"))
 
 
 func _draw_enemy(enemy: Dictionary) -> void:
@@ -5340,7 +5354,7 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(416, 55), "v0.18-A", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(406, 55), "v0.18-A2", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
