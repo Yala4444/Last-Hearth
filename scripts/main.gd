@@ -42,6 +42,17 @@ const TEX_HERO_ATTACK: Texture2D = preload("res://assets/v08/sprint1/hero_attack
 const TEX_HERO_CARRY_1: Texture2D = preload("res://assets/v08/sprint1/hero_carry_1.svg")
 const TEX_HERO_CARRY_2: Texture2D = preload("res://assets/v08/sprint1/hero_carry_2.svg")
 const TEX_HERO_CARRY_3: Texture2D = preload("res://assets/v08/sprint1/hero_carry_3.svg")
+
+# v0.18-A production hero frames. These are cropped from the approved Package 5 artwork,
+# normalized to one 96x128 transparent canvas so every direction keeps the same in-world scale.
+const TEX_HERO_V018_DOWN_0: Texture2D = preload("res://assets/v018/characters/hero_down_0.webp")
+const TEX_HERO_V018_DOWN_1: Texture2D = preload("res://assets/v018/characters/hero_down_1.webp")
+const TEX_HERO_V018_LEFT_0: Texture2D = preload("res://assets/v018/characters/hero_left_0.webp")
+const TEX_HERO_V018_LEFT_1: Texture2D = preload("res://assets/v018/characters/hero_left_1.webp")
+const TEX_HERO_V018_RIGHT_0: Texture2D = preload("res://assets/v018/characters/hero_right_0.webp")
+const TEX_HERO_V018_RIGHT_1: Texture2D = preload("res://assets/v018/characters/hero_right_1.webp")
+const TEX_HERO_V018_UP_0: Texture2D = preload("res://assets/v018/characters/hero_up_0.webp")
+const TEX_HERO_V018_UP_1: Texture2D = preload("res://assets/v018/characters/hero_up_1.webp")
 const TEX_TREE_A: Texture2D = preload("res://assets/v08/sprint1/tree_a.svg")
 const TEX_TREE_B: Texture2D = preload("res://assets/v08/sprint1/tree_b.svg")
 const TEX_TREE_C: Texture2D = preload("res://assets/v08/sprint1/tree_c.svg")
@@ -4722,40 +4733,54 @@ func _asset_modulate(pos: Vector2, minimum_visibility: float = 0.10) -> Color:
 	return base.lerp(warm, warmth * 0.58)
 
 
+func _hero_v018_direction_key(facing: Vector2 = hero_facing) -> String:
+	if facing.length() < 0.05:
+		return "down"
+	if absf(facing.x) > absf(facing.y):
+		return "left" if facing.x < 0.0 else "right"
+	return "up" if facing.y < 0.0 else "down"
+
+
+func _hero_v018_frame_index(moving: bool) -> int:
+	if not moving:
+		return 0
+	return int(floor(hero_walk_phase / 2.4)) % 2
+
+
+func _hero_v018_texture(direction: String, frame_index: int) -> Texture2D:
+	var second := frame_index % 2 == 1
+	match direction:
+		"up":
+			return TEX_HERO_V018_UP_1 if second else TEX_HERO_V018_UP_0
+		"left":
+			return TEX_HERO_V018_LEFT_1 if second else TEX_HERO_V018_LEFT_0
+		"right":
+			return TEX_HERO_V018_RIGHT_1 if second else TEX_HERO_V018_RIGHT_0
+		_:
+			return TEX_HERO_V018_DOWN_1 if second else TEX_HERO_V018_DOWN_0
+
+
 func _draw_hero(pos: Vector2) -> void:
 	var moving := hero_velocity.length() > 7.0 or hero_pos.distance_to(hero_target) > 3.0 or joystick_vector.length() > JOYSTICK_DEADZONE
-	var work_kind := _nearby_resource_kind()
-	var texture: Texture2D = TEX_HERO_IDLE
-	var size := Vector2(64, 64)
+	var direction := _hero_v018_direction_key()
+	var frame_index := _hero_v018_frame_index(moving)
+	var texture := _hero_v018_texture(direction, frame_index)
 
-	if carried_wood > 0:
-		if carried_wood == 1:
-			texture = TEX_HERO_CARRY_1
-		elif carried_wood == 2:
-			texture = TEX_HERO_CARRY_2
-		else:
-			texture = TEX_HERO_CARRY_3
-	elif work_kind != "" and gather_cd > 0.04:
-		texture = TEX_HERO_ATTACK
-		size = Vector2(72, 62)
-	elif moving:
-		texture = TEX_HERO_WALK
+	# The gameplay anchor stays at the hero's feet. The art is taller than the old prototype icon,
+	# but collision, interaction radius, joystick and movement are intentionally untouched.
+	var bob := sin(hero_walk_phase * 1.15) * 0.65 if moving else 0.0
+	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(17, 5.5), Color(0.01, 0.02, 0.015, 0.32))
 
-	var bob := 0.0
-	if moving:
-		bob = sin(hero_walk_phase * 1.15) * 1.6
+	# Cargo is still a gameplay-readable overlay until the dedicated v0.18 carry animation pass.
+	if carried_wood > 0 or carried_stone > 0:
+		_draw_back_cargo(pos + Vector2(0, bob))
 
-	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(16, 5), Color(0.01, 0.02, 0.015, 0.30))
-	_draw_centered_texture(texture, pos + Vector2(0, -9 + bob), size, _asset_modulate(pos, 0.34))
-
-	# Stone cargo remains readable until its dedicated production sprite arrives in Sprint 2.
-	if carried_stone > 0:
-		var sack := pos + Vector2(-19, 5 + bob)
-		draw_circle(sack, 8.5, Color("#746b59"))
-		draw_line(sack + Vector2(-6, -5), sack + Vector2(6, -5), Color("#a9997f"), 2.0)
-		for i in range(mini(carried_stone, 4)):
-			var p := sack + Vector2(-4 + float(i % 2) * 8.0, -2 + float(i / 2) * 6.0)
-			draw_circle(p, 2.7, Color("#a4aaa7"))
+	_draw_centered_texture(
+		texture,
+		pos + Vector2(0, -20 + bob),
+		Vector2(60, 80),
+		_asset_modulate(pos, 0.42)
+	)
 
 
 func _nearby_resource_kind() -> String:
@@ -5315,7 +5340,7 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(426, 55), "v0.17", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(416, 55), "v0.18-A", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:

@@ -115,6 +115,13 @@ jobs:
           godot --headless --path . -s res://tests/v017_world_shape_sanity.gd 2>&1 | tee /tmp/v017-world-shape.log
           grep -q "V017_WORLD_SHAPE_SANITY_OK" /tmp/v017-world-shape.log
 
+      - name: v0.18 asset pipeline sanity test
+        shell: bash
+        run: |
+          set -euo pipefail
+          godot --headless --path . -s res://tests/v018_asset_pipeline_sanity.gd 2>&1 | tee /tmp/v018-assets.log
+          grep -q "V018_ASSET_PIPELINE_SANITY_OK" /tmp/v018-assets.log
+
       - name: Export Web build
         shell: bash
         run: |
