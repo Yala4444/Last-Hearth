@@ -45,14 +45,14 @@ const TEX_HERO_CARRY_3: Texture2D = preload("res://assets/v08/sprint1/hero_carry
 
 # v0.18-A production hero frames. These are cropped from the approved Package 5 artwork,
 # normalized to one 96x128 transparent canvas so every direction keeps the same in-world scale.
-# v0.18-A2 production character sheets.
+# v0.18-A7.2 final NPC movement sheets.
 # PNG + fixed source regions are used deliberately for iPhone/Safari stability.
-# Grid: 2 frames x 4 directions. Rows: down, left, right, up. Cell: 60x80.
+# Hero grid: 2x4 at 60x80. NPC grid: 3x4 at 60x90. Rows: down, left, right, up.
 const TEX_HERO_V018: Texture2D = preload("res://assets/v018/characters/hero_v018.png")
-const TEX_HUNTER_V018: Texture2D = preload("res://assets/v018/characters/hunter_production.png")
-const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_production.png")
-const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_production.png")
-const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_production.png")
+const TEX_HUNTER_V018: Texture2D = preload("res://assets/v018/characters/hunter_production_v2_opt.png")
+const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_production_v2_opt.png")
+const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_production_v2_opt.png")
+const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_production_v2_opt.png")
 # Hero remains on the proven iPhone-safe 2x4 atlas. NPC production sheets use 3x4.
 const V018_CHARACTER_FRAME := Vector2(60.0, 80.0)
 const V018_NPC_FRAME := Vector2(60.0, 90.0)
@@ -4913,8 +4913,16 @@ func _character_v018_phase_frame_for_role(role: String, phase: float, moving: bo
 		return 0
 	if role == "hero":
 		return _character_v018_phase_frame(phase, true)
-	# Production NPCs use all three authored walk frames.
-	return int(floor(absf(phase) / 1.8)) % 3
+	# A7.2: neutral -> first step -> neutral -> second step.
+	# The neutral beat between authored steps makes down-facing movement read as walking, not sliding.
+	var gait_step := int(floor(absf(phase) / 1.8)) % 4
+	match gait_step:
+		1:
+			return 1
+		3:
+			return 2
+		_:
+			return 0
 
 
 func _character_v018_modulate(pos: Vector2, alpha: float = 1.0) -> Color:

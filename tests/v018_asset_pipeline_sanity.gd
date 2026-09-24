@@ -40,6 +40,17 @@ func _init() -> void:
 			fail("A7 production NPC sheets must use PNG assets")
 			return
 
+	var expected_v2_paths := [
+		"res://assets/v018/characters/hunter_production_v2_opt.png",
+		"res://assets/v018/characters/master_production_v2_opt.png",
+		"res://assets/v018/characters/scout_production_v2_opt.png",
+		"res://assets/v018/characters/settler_production_v2_opt.png"
+	]
+	for i in range(npc_sheets.size()):
+		if String(npc_sheets[i].resource_path) != expected_v2_paths[i]:
+			fail("A7.2 must use final v2 NPC sheet: %s" % expected_v2_paths[i])
+			return
+
 	if game._hero_v018_direction_key(Vector2(0, 1)) != "down":
 		fail("Hero down direction mapping is wrong")
 		return
@@ -79,8 +90,18 @@ func _init() -> void:
 	if game._hero_v018_frame_index(true) != 1:
 		fail("Hero two-frame walk cycle regressed")
 		return
-	if game._character_v018_phase_frame_for_role("guard", 3.7, true) != 2:
-		fail("Production NPC walk cycle does not reach authored third frame")
+	# A7.2 gait: neutral -> first step -> neutral -> second step.
+	if game._character_v018_phase_frame_for_role("guard", 0.2, true) != 0:
+		fail("Production NPC gait must start from neutral")
+		return
+	if game._character_v018_phase_frame_for_role("guard", 2.0, true) != 1:
+		fail("Production NPC gait does not reach first authored step")
+		return
+	if game._character_v018_phase_frame_for_role("guard", 3.7, true) != 0:
+		fail("Production NPC gait must return to neutral between steps")
+		return
+	if game._character_v018_phase_frame_for_role("guard", 5.5, true) != 2:
+		fail("Production NPC gait does not reach second authored step")
 		return
 	if game._character_v018_phase_frame_for_role("worker", 99.0, false) != 0:
 		fail("Production NPC idle must stay on frame zero")
