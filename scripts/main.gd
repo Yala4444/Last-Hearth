@@ -1338,7 +1338,7 @@ func _update_day1_route() -> void:
 	if day1_route == "hunter":
 		if area == Area.HUNTER_TRAIL and enemies.is_empty() and hero_pos.distance_to(survivor_one_pos) < 48.0:
 			survivor_one_found = true
-			_add_survivor("hunter", survivor_one_pos)
+			_add_survivor("hunter", survivor_one_pos, "ОХОТНИК")
 			day1_route_complete = true
 			run_embers += 1
 			_story("ОХОТНИК СПАСЁН\nСОЮЗНИК +1 • стреляет издалека. «Ночью они идут на огонь. Я прикрою край света.»", 4.2)
@@ -1366,7 +1366,7 @@ func _update_day1_route() -> void:
 			carry_limit += 1
 			hearth_max_hp += 20.0
 			hearth_hp = hearth_max_hp
-			_add_survivor("guard", Vector2(240.0, 220.0))
+			_add_survivor("guard", Vector2(240.0, 220.0), "ВОЗНИЦА")
 			run_embers += 1
 			_story("ВОЗНИЦА СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. Слоты %d > %d • прочность огня +20." % [old_slots, carry_limit], 4.3)
 		"nest":
@@ -1489,7 +1489,7 @@ func _update_worker_route() -> void:
 
 	if day2_mission == "worker":
 		survivor_two_found = true
-		_add_survivor("worker", survivor_two_pos)
+		_add_survivor("worker", survivor_two_pos, "МАСТЕР")
 		worker_route_complete = true
 		run_embers += 1
 		_story("МАСТЕР СПАСЁН\nСОЮЗНИК +1 • ночью чинит Очаг. «Дай мне инструменты — удержим свет.»", 4.2)
@@ -1507,7 +1507,7 @@ func _update_worker_route() -> void:
 		_story("СКЛАД РАЗОБРАН\nСлоты %d > %d • здоровье %d > %d.%s" % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp), solo_note], 4.5)
 	else:
 		survivor_two_found = true
-		_add_survivor("guard", survivor_two_pos)
+		_add_survivor("guard", survivor_two_pos, "РАЗВЕДЧИК")
 		worker_route_complete = true
 		run_embers += 2
 		_story("РАЗВЕДЧИК СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. «До сердца леса осталось недалеко.»", 4.0)
@@ -1723,7 +1723,7 @@ func _update_world_events(delta: float) -> void:
 				event["outcome"] = "arrows"
 				_story("СЛОМАННЫЙ ДОЗОР\nВ ящике сохранилась связка хороших стрел.", 3.0)
 			"whisper":
-				_add_survivor("guard", pos)
+				_add_survivor("guard", pos, "ВЫЖИВШИЙ")
 				event["outcome"] = "rescued"
 				_story("ШЁПОТ ИЗ ТЬМЫ\nЕщё один человек успел добежать до света.", 3.0)
 			"sawmill":
@@ -1764,7 +1764,7 @@ func _update_world_events(delta: float) -> void:
 				_story("ЛОГОВО ПРОСНУЛОСЬ\nКорни разошлись, и из-под земли полезли твари.", 3.2)
 			"signal_survivor":
 				event["outcome"] = "rescued"
-				_add_survivor("guard", pos)
+				_add_survivor("guard", pos, "РАЗВЕДЧИК")
 				_burst_typed(pos, 10, "ember")
 				_story("СИГНАЛ ОТВЕЧЕН\nИз-за камней выходит разведчик и присоединяется к тебе.", 3.2)
 			"dead_fire_route":
@@ -2512,8 +2512,8 @@ func _spawn_rescue_guards() -> void:
 func _update_expedition_choice() -> void:
 	if hero_pos.distance_to(left_choice_pos) < 50.0:
 		expedition_choice = "people"
-		_add_survivor("guard", left_choice_pos + Vector2(-20, 16))
-		_add_survivor("guard", left_choice_pos + Vector2(20, 16))
+		_add_survivor("guard", left_choice_pos + Vector2(-20, 16), "БОЕЦ")
+		_add_survivor("guard", left_choice_pos + Vector2(20, 16), "БОЕЦ")
 		_banner("Два бойца вышли к свету", 2.0)
 		_start_night(3)
 	elif hero_pos.distance_to(right_choice_pos) < 50.0:
@@ -2782,10 +2782,24 @@ func _spawn_enemy_at(kind: String, pos: Vector2) -> void:
 	})
 
 
-func _add_survivor(role: String, spawn_pos: Vector2) -> void:
+func _default_survivor_label(role: String) -> String:
+	match role:
+		"hunter":
+			return "ОХОТНИК"
+		"worker":
+			return "МАСТЕР"
+		"guard":
+			return "РАЗВЕДЧИК"
+		_:
+			return "ПОСЕЛЕНЕЦ"
+
+
+func _add_survivor(role: String, spawn_pos: Vector2, identity_label: String = "") -> void:
 	var index := survivor_agents.size()
+	var resolved_label := identity_label if identity_label != "" else _default_survivor_label(role)
 	survivor_agents.append({
 		"role": role,
+		"label": resolved_label,
 		"pos": spawn_pos,
 		"vel": Vector2.ZERO,
 		"facing": 1.0,
@@ -3599,6 +3613,7 @@ func _draw_hub() -> void:
 	if master_state in ["joining_home", "resident"]:
 		var master_pos := HUB_WORKER_HOME_POS + Vector2(-50, 48)
 		_draw_v018_character(master_pos, "worker", "down", 0, _character_v018_modulate(master_pos), 0.0)
+		_draw_character_label(master_pos, "МАСТЕР")
 	_draw_master_arrival_focus()
 
 	var has_construction := _hub_has_pending_construction()
@@ -4809,6 +4824,30 @@ func _hero_v018_frame_index(moving: bool) -> int:
 	return _character_v018_phase_frame(hero_walk_phase, moving)
 
 
+func _draw_character_label(pos: Vector2, label: String, is_hero: bool = false) -> void:
+	if label == "":
+		return
+	# Compact world-space nameplate: readable on the phone without becoming another HUD block.
+	var width := 76.0
+	if label.length() >= 9:
+		width = 92.0
+	elif label.length() <= 3:
+		width = 52.0
+	var rect := Rect2(pos + Vector2(-width * 0.5, -79.0), Vector2(width, 17.0))
+	draw_rect(rect, Color(0.025, 0.035, 0.030, 0.78))
+	var accent := Color("#e4bd76") if is_hero else Color("#c9b989")
+	draw_line(rect.position + Vector2(5, rect.size.y - 1), rect.position + Vector2(rect.size.x - 5, rect.size.y - 1), Color(accent.r, accent.g, accent.b, 0.58), 1.0)
+	draw_string(
+		font,
+		pos + Vector2(-width * 0.5 + 2.0, -66.0),
+		label,
+		HORIZONTAL_ALIGNMENT_CENTER,
+		width - 4.0,
+		9,
+		Color(0.92, 0.89, 0.80, 0.96) if not is_hero else Color("#f0cf8a")
+	)
+
+
 func _draw_hero(pos: Vector2) -> void:
 	var moving := hero_velocity.length() > 7.0 or hero_pos.distance_to(hero_target) > 3.0 or joystick_vector.length() > JOYSTICK_DEADZONE
 	var direction := _hero_v018_direction_key()
@@ -4827,6 +4866,7 @@ func _draw_hero(pos: Vector2) -> void:
 		_character_v018_modulate(pos),
 		bob
 	)
+	_draw_character_label(pos + Vector2(0, bob), "ТЫ", true)
 
 
 func _nearby_resource_kind() -> String:
@@ -4884,6 +4924,7 @@ func _draw_companions() -> void:
 		var frame_index := _character_v018_phase_frame(phase, moving)
 		var bob := sin(phase) * 0.45 if moving else 0.0
 		_draw_v018_character(pos, role, direction, frame_index, _character_v018_modulate(pos), bob)
+		_draw_character_label(pos + Vector2(0, bob), String(agent.get("label", _default_survivor_label(role))))
 
 
 func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facing: float = 1.0) -> void:
@@ -5354,7 +5395,7 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(406, 55), "v0.18-A2", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(406, 55), "v0.18-A3", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:

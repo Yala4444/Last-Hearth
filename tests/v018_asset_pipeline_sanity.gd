@@ -86,5 +86,17 @@ func _init() -> void:
 		fail("Settler is not mapped to its production sheet")
 		return
 
+	if game._default_survivor_label("hunter") != "ОХОТНИК":
+		fail("Hunter identity label is wrong")
+		return
+	if game._default_survivor_label("worker") != "МАСТЕР":
+		fail("Master identity label is wrong")
+		return
+	game.survivor_agents.clear()
+	game._add_survivor("guard", Vector2(200, 200), "ВОЗНИЦА")
+	if String(game.survivor_agents[0].get("label", "")) != "ВОЗНИЦА":
+		fail("Explicit NPC identity was not stored")
+		return
+
 	print("V018_ASSET_PIPELINE_SANITY_OK")
 	quit(0)
