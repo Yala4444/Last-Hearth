@@ -353,20 +353,12 @@ var audio_wind: AudioStreamPlayer
 var audio_fire: AudioStreamPlayer
 
 
-func _detect_dev_mode_from_url() -> bool:
-	if not OS.has_feature("web"):
-		return false
-	if not Engine.has_singleton("JavaScriptBridge"):
-		return false
-	var bridge: Object = Engine.get_singleton("JavaScriptBridge")
-	var query := String(bridge.call("eval", "window.location.search", true))
-	return query.contains("dev=1")
-
-
 func _ready() -> void:
 	font = ThemeDB.fallback_font
 	rng.randomize()
-	dev_mode = _detect_dev_mode_from_url()
+	# Prototype builds always expose the isolated review menu after the forest is complete.
+	# This avoids browser-specific URL/JavaScriptBridge issues during development.
+	dev_mode = true
 	_setup_audio()
 	_load_meta()
 	if bool(meta.get("first_run", true)):
