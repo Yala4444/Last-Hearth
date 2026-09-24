@@ -338,6 +338,14 @@ var hub_zone_lock := ""
 var result_title := ""
 var result_subtitle := ""
 
+# Developer review mode is enabled only from the special ?dev=1 web URL.
+# It never changes the player's canonical chapter progress.
+var dev_mode := false
+var dev_test_menu_open := false
+var dev_enemy_showcase_open := false
+var dev_test_run := false
+var dev_meta_snapshot: Dictionary = {}
+
 var audio_sfx_players: Array[AudioStreamPlayer] = []
 var audio_sfx_cursor := 0
 var audio_sfx_streams: Dictionary = {}
@@ -345,9 +353,20 @@ var audio_wind: AudioStreamPlayer
 var audio_fire: AudioStreamPlayer
 
 
+func _detect_dev_mode_from_url() -> bool:
+	if not OS.has_feature("web"):
+		return false
+	if not Engine.has_singleton("JavaScriptBridge"):
+		return false
+	var bridge: Object = Engine.get_singleton("JavaScriptBridge")
+	var query := String(bridge.call("eval", "window.location.search", true))
+	return query.contains("dev=1")
+
+
 func _ready() -> void:
 	font = ThemeDB.fallback_font
 	rng.randomize()
+	dev_mode = _detect_dev_mode_from_url()
 	_setup_audio()
 	_load_meta()
 	if bool(meta.get("first_run", true)):
@@ -654,6 +673,8 @@ func _enter_hub(message: String = "") -> void:
 	region_map_open = false
 	region_map_selected_fire = 0
 	help_open = false
+	dev_test_menu_open = false
+	dev_enemy_showcase_open = false
 	hub_feedback_text = ""
 	hub_feedback_timer = 0.0
 	master_arrival_focus_timer = 0.0
@@ -679,8 +700,8 @@ func _enter_hub(message: String = "") -> void:
 	elif message != "":
 		_hub_feedback("ВОЗВРАЩЕНИЕ К ПОСЛЕДНЕМУ ОЧАГУ", HEARTH_POS, 1.8)
 
-func _configure_expedition_sector() -> void:
-	expedition_sector = clampi(int(meta.get("forest_fires", 0)), 0, 2)
+func _configure_expedition_sector(forced_sector: int = -1) -> void:
+	expedition_sector = clampi(forced_sector, 0, 2) if forced_sector >= 0 else clampi(int(meta.get("forest_fires", 0)), 0, 2)
 	var day1_pair: Array[String] = []
 	var day3_pair: Array[String] = []
 	match expedition_sector:
@@ -786,16 +807,29 @@ func _route_event_triggered(kind: String) -> bool:
 	return false
 
 
-func _start_expedition() -> void:
+func _start_dev_expedition(sector: int) -> void:
+	if not dev_mode:
+		return
+	dev_meta_snapshot = meta.duplicate(true)
+	dev_test_run = true
+	dev_test_menu_open = false
+	dev_enemy_showcase_open = false
+	region_map_open = false
+	_start_expedition(clampi(sector, 0, 2))
+
+
+func _start_expedition(forced_sector: int = -1) -> void:
 	mode = Mode.EXPEDITION
 	stage = Stage.DAY1_GATHER
-	meta["attempts"] = int(meta.get("attempts", 0)) + 1
-	_save_meta()
+	if not dev_test_run:
+		meta["attempts"] = int(meta.get("attempts", 0)) + 1
+		_save_meta()
 
 	run_seed = rng.randi()
 	rng.seed = run_seed
-	_configure_expedition_sector()
-	_mark_current_forest_fire_seen()
+	_configure_expedition_sector(forced_sector)
+	if not dev_test_run:
+		_mark_current_forest_fire_seen()
 
 	if int(meta.get("attempts", 1)) <= 1:
 		hero_pos = Vector2(240.0, 688.0)
@@ -891,7 +925,11 @@ func _start_expedition() -> void:
 	_stop_joystick()
 
 	_generate_layout()
-	if int(meta.get("attempts", 1)) == 1:
+	if dev_test_run:
+		var test_sector_name: String = String(["ОПУШКА", "СТАРАЯ ДОРОГА", "СЕРДЦЕ ЛЕСА"][expedition_sector])
+		_banner("ТЕСТ • %s" % test_sector_name, 2.4)
+		_story("РЕЖИМ РАЗРАБОТКИ\nЭта вылазка не изменит сохранение, угли или состояние огней. Можно спокойно проверять дизайн и бой.", 4.6)
+	elif int(meta.get("attempts", 1)) == 1:
 		_banner("ПЕРВЫЙ СВЕТ", 2.2)
 		_story("Тьма погасила старые огни. Последний Очаг — твой дом. Разжигай новые огни и возвращай людей к свету. Начни с дерева перед тобой.", 5.4)
 	else:
@@ -3229,6 +3267,17 @@ func _finish_run(win: bool, reason: String = "") -> void:
 		return
 	mode = Mode.RESULT
 	result_win = win
+
+	if dev_test_run:
+		if not dev_meta_snapshot.is_empty():
+			meta = dev_meta_snapshot.duplicate(true)
+		dev_meta_snapshot.clear()
+		dev_test_run = false
+		result_title = "ТЕСТ ЗАВЕРШЁН" if win else "ТЕСТ ОСТАНОВЛЕН"
+		result_subtitle = "Прогресс и сохранение не изменены. Нажми экран, чтобы вернуться к Последнему Очагу."
+		_stop_joystick()
+		return
+
 	meta["embers"] = int(meta.get("embers", 0)) + run_embers
 
 	if win:
@@ -3466,6 +3515,20 @@ func _unhandled_input(event: InputEvent) -> void:
 			_enter_hub("Ты вернулся к Последнему Очагу.")
 		return
 
+	if mode == Mode.HUB and dev_enemy_showcase_open:
+		if event is InputEventScreenTouch and event.pressed:
+			_handle_dev_enemy_showcase_press(event.position)
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			_handle_dev_enemy_showcase_press(event.position)
+		return
+
+	if mode == Mode.HUB and dev_test_menu_open:
+		if event is InputEventScreenTouch and event.pressed:
+			_handle_dev_test_menu_press(event.position)
+		elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			_handle_dev_test_menu_press(event.position)
+		return
+
 	if mode == Mode.HUB and region_map_open:
 		if event is InputEventScreenTouch and event.pressed:
 			_handle_region_map_press(event.position)
@@ -3542,6 +3605,8 @@ func _handle_region_map_press(pos: Vector2) -> void:
 		if fires < 3:
 			region_map_open = false
 			_start_expedition()
+		elif dev_mode:
+			dev_test_menu_open = true
 		else:
 			region_map_open = false
 			_hub_feedback("ЗАБЫТЫЙ ЛЕС ВОССТАНОВЛЕН • НОВЫЙ ПУТЬ ЕЩЁ ВО ТЬМЕ", HUB_MAP_POS + Vector2(0, 120), 2.8)
@@ -3596,6 +3661,10 @@ func _draw() -> void:
 
 	if mode == Mode.HUB and region_map_open:
 		_draw_region_map_overlay()
+	if mode == Mode.HUB and dev_test_menu_open:
+		_draw_dev_test_menu()
+	if mode == Mode.HUB and dev_enemy_showcase_open:
+		_draw_dev_enemy_showcase()
 	if mode == Mode.HUB and help_open:
 		_draw_help_overlay()
 	if mode == Mode.RESULT:
@@ -5853,12 +5922,115 @@ func _draw_region_map_overlay() -> void:
 
 	var continue_rect := Rect2(Vector2(105, 540), Vector2(270, 44))
 	draw_rect(continue_rect, Color("#2a382e"))
-	var continue_text := "ИДТИ К СЛЕДУЮЩЕМУ СИГНАЛУ" if fires < 3 else "ЛЕС ВОССТАНОВЛЕН"
+	var continue_text := "ИДТИ К СЛЕДУЮЩЕМУ СИГНАЛУ" if fires < 3 else ("ТЕСТИРОВАТЬ ЛЕС" if dev_mode else "ЛЕС ВОССТАНОВЛЕН")
 	draw_string(font, continue_rect.position + Vector2(8, 27), continue_text, HORIZONTAL_ALIGNMENT_CENTER, 254, 10, Color("#edd5a2"))
 
 	var close_rect := Rect2(Vector2(150, 616), Vector2(180, 36))
 	draw_rect(close_rect, Color("#202c25"))
 	draw_string(font, close_rect.position + Vector2(6, 23), "ЗАКРЫТЬ КАРТУ", HORIZONTAL_ALIGNMENT_CENTER, 168, 9, Color("#9fb0a4"))
+
+func _dev_test_button_rect(index: int) -> Rect2:
+	var y_values := [230.0, 292.0, 354.0, 430.0]
+	return Rect2(Vector2(74, y_values[index]), Vector2(332, 48))
+
+
+func _handle_dev_test_menu_press(pos: Vector2) -> void:
+	if not dev_mode:
+		dev_test_menu_open = false
+		return
+	for index in range(3):
+		if _dev_test_button_rect(index).has_point(pos):
+			_start_dev_expedition(index)
+			return
+	if _dev_test_button_rect(3).has_point(pos):
+		dev_enemy_showcase_open = true
+		return
+	var close_rect := Rect2(Vector2(150, 610), Vector2(180, 38))
+	if close_rect.has_point(pos) or pos.y < 128.0:
+		dev_test_menu_open = false
+
+
+func _handle_dev_enemy_showcase_press(pos: Vector2) -> void:
+	var close_rect := Rect2(Vector2(150, 626), Vector2(180, 38))
+	if close_rect.has_point(pos) or pos.y < 128.0:
+		dev_enemy_showcase_open = false
+
+
+func _draw_dev_test_menu() -> void:
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.010, 0.008, 0.86))
+	var panel := Rect2(Vector2(42, 142), Vector2(396, 532))
+	draw_rect(panel, Color("#14221b"))
+	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#c69250"))
+	draw_string(font, Vector2(62, 182), "РЕЖИМ ТЕСТА", HORIZONTAL_ALIGNMENT_CENTER, 356, 20, Color("#f2e5cf"))
+	draw_string(font, Vector2(62, 207), "Не меняет сохранение, угли или состояние огней", HORIZONTAL_ALIGNMENT_CENTER, 356, 9, Color("#9eafa3"))
+
+	var labels := [
+		"1/3 • ОПУШКА",
+		"2/3 • СТАРАЯ ДОРОГА",
+		"3/3 • СЕРДЦЕ ЛЕСА",
+		"ВИТРИНА ВРАГОВ"
+	]
+	var sublabels := [
+		"первая вылазка • Чёрный Вепрь",
+		"вторая вылазка • Корневик",
+		"финал главы • Хранитель леса",
+		"все 6 типов рядом • быстрая проверка дизайна"
+	]
+	for index in range(4):
+		var rect := _dev_test_button_rect(index)
+		draw_rect(rect, Color("#26362d"))
+		draw_rect(Rect2(rect.position, Vector2(4, rect.size.y)), Color("#b9834c"))
+		draw_string(font, rect.position + Vector2(12, 20), labels[index], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24, 11, Color("#efd8aa"))
+		draw_string(font, rect.position + Vector2(12, 38), sublabels[index], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 24, 8, Color("#9faea3"))
+
+	draw_string(font, Vector2(82, 515), "Полные вылазки нужны для движения, света и боя.", HORIZONTAL_ALIGNMENT_CENTER, 316, 9, Color("#aab9ad"))
+	draw_string(font, Vector2(82, 533), "Витрина — чтобы сразу сравнить силуэты и масштаб.", HORIZONTAL_ALIGNMENT_CENTER, 316, 9, Color("#aab9ad"))
+
+	var close_rect := Rect2(Vector2(150, 610), Vector2(180, 38))
+	draw_rect(close_rect, Color("#202c25"))
+	draw_string(font, close_rect.position + Vector2(6, 24), "НАЗАД К КАРТЕ", HORIZONTAL_ALIGNMENT_CENTER, 168, 9, Color("#aab9ad"))
+
+
+func _draw_dev_enemy_preview(kind: String, pos: Vector2, label: String) -> void:
+	var source := _enemy_v018_source_rect(kind, "down", 0)
+	var size := _enemy_v018_visual_size(kind)
+	var preview_scale := 0.78
+	if kind in ["black_boar", "rootborn", "forest_guardian"]:
+		preview_scale = 0.68
+	var preview_size := size * preview_scale
+	_draw_ellipse_custom(pos + Vector2(0, preview_size.y * 0.28), Vector2(preview_size.x * 0.30, maxf(4.0, preview_size.y * 0.08)), Color(0.01, 0.015, 0.012, 0.45))
+	draw_texture_rect_region(
+		TEX_ENEMIES_V018,
+		Rect2(pos + Vector2(-preview_size.x * 0.5, -preview_size.y * 0.48), preview_size),
+		source,
+		Color.WHITE
+	)
+	draw_string(font, pos + Vector2(-72, preview_size.y * 0.46 + 17), label, HORIZONTAL_ALIGNMENT_CENTER, 144, 9, Color("#e7d2a6"))
+
+
+func _draw_dev_enemy_showcase() -> void:
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(0.005, 0.010, 0.008, 0.90))
+	var panel := Rect2(Vector2(26, 126), Vector2(428, 558))
+	draw_rect(panel, Color("#14221b"))
+	draw_rect(Rect2(panel.position, Vector2(panel.size.x, 5)), Color("#c69250"))
+	draw_string(font, Vector2(48, 163), "ВИТРИНА ВРАГОВ", HORIZONTAL_ALIGNMENT_CENTER, 384, 19, Color("#f2e5cf"))
+	draw_string(font, Vector2(48, 187), "Сравнение игрового масштаба • фронтальный ракурс", HORIZONTAL_ALIGNMENT_CENTER, 384, 8, Color("#9eafa3"))
+
+	var previews := [
+		{"kind": "basic", "pos": Vector2(135, 255), "label": "ЛЕСНАЯ ТВАРЬ"},
+		{"kind": "fast", "pos": Vector2(345, 255), "label": "ГОНЧАЯ"},
+		{"kind": "elite", "pos": Vector2(135, 385), "label": "СТРАЖ ЧАЩИ"},
+		{"kind": "black_boar", "pos": Vector2(345, 385), "label": "ЧЁРНЫЙ ВЕПРЬ"},
+		{"kind": "rootborn", "pos": Vector2(135, 525), "label": "КОРНЕВИК"},
+		{"kind": "forest_guardian", "pos": Vector2(345, 525), "label": "ХРАНИТЕЛЬ"}
+	]
+	for item: Dictionary in previews:
+		_draw_dev_enemy_preview(String(item["kind"]), item["pos"], String(item["label"]))
+
+	var close_rect := Rect2(Vector2(150, 626), Vector2(180, 38))
+	draw_rect(close_rect, Color("#202c25"))
+	draw_string(font, close_rect.position + Vector2(6, 24), "НАЗАД", HORIZONTAL_ALIGNMENT_CENTER, 168, 9, Color("#aab9ad"))
+
 
 func _draw_enemy_deaths() -> void:
 	for death: Dictionary in enemy_deaths:
