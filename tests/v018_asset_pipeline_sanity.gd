@@ -15,31 +15,30 @@ func _init() -> void:
 	root.add_child(game)
 	await process_frame
 
-	var sheets: Array[Texture2D] = [
-		game.TEX_HERO_V018,
+	var hero: Texture2D = game.TEX_HERO_V018
+	if hero == null or hero.get_width() != 120 or hero.get_height() != 320:
+		fail("Hero must keep the proven 120x320 two-frame production sheet")
+		return
+	if not String(hero.resource_path).ends_with(".png"):
+		fail("Hero production sheet must stay PNG on the iPhone/Web path")
+		return
+
+	var npc_sheets: Array[Texture2D] = [
 		game.TEX_HUNTER_V018,
 		game.TEX_MASTER_V018,
 		game.TEX_SCOUT_V018,
 		game.TEX_SETTLER_V018
 	]
-	for texture in sheets:
+	for texture in npc_sheets:
 		if texture == null:
-			fail("A v0.18-A2 production character sheet failed to load")
+			fail("An A7 production NPC sheet failed to load")
 			return
-		if texture.get_width() != 120 or texture.get_height() != 320:
-			fail("A production character sheet lost its normalized 120x320 grid")
+		if texture.get_width() != 180 or texture.get_height() != 360:
+			fail("A7 NPC sheets must use the normalized 180x360 3x4 grid")
 			return
-
-	# The iPhone corruption fix is specifically the hero path: no per-frame transparent WebP.
-	if not String(game.TEX_HERO_V018.resource_path).ends_with(".png"):
-		fail("Hero production sheet must use PNG on the iPhone/Web path")
-		return
-	if not String(game.TEX_MASTER_V018.resource_path).ends_with(".svg"):
-		fail("Master sheet must use the stable SVG import path")
-		return
-	if not String(game.TEX_SCOUT_V018.resource_path).ends_with(".svg"):
-		fail("Scout sheet must use its distinct SVG production path")
-		return
+		if not String(texture.resource_path).ends_with(".png"):
+			fail("A7 production NPC sheets must use PNG assets")
+			return
 
 	if game._hero_v018_direction_key(Vector2(0, 1)) != "down":
 		fail("Hero down direction mapping is wrong")
@@ -54,17 +53,22 @@ func _init() -> void:
 		fail("Hero right direction mapping is wrong")
 		return
 
-	var down0: Rect2 = game._character_v018_source_rect("down", 0)
-	var down1: Rect2 = game._character_v018_source_rect("down", 1)
-	var up0: Rect2 = game._character_v018_source_rect("up", 0)
-	if down0.position != Vector2(0, 0) or down0.size != Vector2(60, 80):
-		fail("Down frame zero does not use the clean first PNG cell")
+	var hero_down0: Rect2 = game._character_v018_source_rect_for_role("hero", "down", 0)
+	var hero_down1: Rect2 = game._character_v018_source_rect_for_role("hero", "down", 1)
+	if hero_down0.position != Vector2(0, 0) or hero_down0.size != Vector2(60, 80):
+		fail("Hero frame zero mapping changed")
 		return
-	if down1.position != Vector2(60, 0):
-		fail("Down walk frame does not use the second PNG cell")
+	if hero_down1.position != Vector2(60, 0):
+		fail("Hero walk frame one mapping changed")
 		return
-	if up0.position != Vector2(0, 240):
-		fail("Up row mapping is wrong")
+
+	var scout_right2: Rect2 = game._character_v018_source_rect_for_role("guard", "right", 2)
+	var master_up1: Rect2 = game._character_v018_source_rect_for_role("worker", "up", 1)
+	if scout_right2.position != Vector2(120, 180) or scout_right2.size != Vector2(60, 90):
+		fail("Scout production sheet right/frame2 mapping is wrong")
+		return
+	if master_up1.position != Vector2(60, 270):
+		fail("Master production sheet up/frame1 mapping is wrong")
 		return
 
 	game.hero_walk_phase = 0.0
@@ -73,7 +77,13 @@ func _init() -> void:
 		return
 	game.hero_walk_phase = 2.6
 	if game._hero_v018_frame_index(true) != 1:
-		fail("Walking did not advance to frame one")
+		fail("Hero two-frame walk cycle regressed")
+		return
+	if game._character_v018_phase_frame_for_role("guard", 3.7, true) != 2:
+		fail("Production NPC walk cycle does not reach authored third frame")
+		return
+	if game._character_v018_phase_frame_for_role("worker", 99.0, false) != 0:
+		fail("Production NPC idle must stay on frame zero")
 		return
 
 	if game._character_v018_texture("hunter") != game.TEX_HUNTER_V018:
@@ -99,6 +109,9 @@ func _init() -> void:
 	game._add_survivor("guard", Vector2(200, 200), "ВОЗНИЦА")
 	if String(game.survivor_agents[0].get("label", "")) != "ВОЗНИЦА":
 		fail("Explicit NPC identity was not stored")
+		return
+	if String(game.survivor_agents[0].get("visual_role", "")) != "civilian":
+		fail("Behavior role leaked into Voznica visual identity")
 		return
 
 	if not game._has_survivor_label("ВОЗНИЦА"):

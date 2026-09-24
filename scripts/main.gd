@@ -49,11 +49,13 @@ const TEX_HERO_CARRY_3: Texture2D = preload("res://assets/v08/sprint1/hero_carry
 # PNG + fixed source regions are used deliberately for iPhone/Safari stability.
 # Grid: 2 frames x 4 directions. Rows: down, left, right, up. Cell: 60x80.
 const TEX_HERO_V018: Texture2D = preload("res://assets/v018/characters/hero_v018.png")
-const TEX_HUNTER_V018: Texture2D = preload("res://assets/v018/characters/hunter_v018.png")
-const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_v018.svg")
-const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_v018.svg")
-const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_v018.png")
+const TEX_HUNTER_V018: Texture2D = preload("res://assets/v018/characters/hunter_production.png")
+const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_production.png")
+const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_production.png")
+const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_production.png")
+# Hero remains on the proven iPhone-safe 2x4 atlas. NPC production sheets use 3x4.
 const V018_CHARACTER_FRAME := Vector2(60.0, 80.0)
+const V018_NPC_FRAME := Vector2(60.0, 90.0)
 const TEX_ENEMIES_V018: Texture2D = preload("res://assets/v018/enemies/enemies_v018.svg")
 const V018_ENEMY_FRAME := Vector2(96.0, 96.0)
 const TEX_TREE_A: Texture2D = preload("res://assets/v08/sprint1/tree_a.svg")
@@ -2838,6 +2840,20 @@ func _default_survivor_label(role: String) -> String:
 			return "ПОСЕЛЕНЕЦ"
 
 
+func _survivor_visual_role(role: String, identity_label: String) -> String:
+	match identity_label:
+		"ОХОТНИК":
+			return "hunter"
+		"МАСТЕР":
+			return "worker"
+		"РАЗВЕДЧИК":
+			return "guard"
+		"ВОЗНИЦА", "ВЫЖИВШИЙ", "ПОСЕЛЕНЕЦ":
+			return "civilian"
+		_:
+			return role
+
+
 func _has_survivor_label(identity_label: String) -> bool:
 	for agent: Dictionary in survivor_agents:
 		if String(agent.get("label", "")) == identity_label:
@@ -2848,8 +2864,10 @@ func _has_survivor_label(identity_label: String) -> bool:
 func _add_survivor(role: String, spawn_pos: Vector2, identity_label: String = "") -> void:
 	var index := survivor_agents.size()
 	var resolved_label := identity_label if identity_label != "" else _default_survivor_label(role)
+	var visual_role := _survivor_visual_role(role, resolved_label)
 	survivor_agents.append({
 		"role": role,
+		"visual_role": visual_role,
 		"label": resolved_label,
 		"pos": spawn_pos,
 		"vel": Vector2.ZERO,
@@ -4056,11 +4074,12 @@ func _draw_expedition() -> void:
 	if stage == Stage.DAY1_RESCUE and day1_route == "hunter" and area == Area.HUNTER_TRAIL and not survivor_one_found:
 		var survivor_visibility := _light_visibility(survivor_one_pos)
 		if survivor_visibility > 0.72:
-			_draw_survivor(survivor_one_pos, "?")
+			_draw_survivor(survivor_one_pos, "?", "hunter")
 		elif survivor_visibility > 0.18:
 			_draw_survivor_silhouette(survivor_one_pos, survivor_visibility)
 	if stage == Stage.DAY2_RESCUE and area == Area.WORKER_RUINS and day2_mission != "storehouse" and not survivor_two_found and _light_visibility(survivor_two_pos) > 0.72:
-		_draw_survivor(survivor_two_pos, "!")
+		var preview_role := "worker" if day2_mission == "worker" else "guard"
+		_draw_survivor(survivor_two_pos, "!", preview_role)
 	if stage == Stage.DAY2_BUILD and area == Area.CAMP and not workshop_built:
 		_draw_workshop_construction()
 	if area == Area.CAMP and workshop_built:
@@ -4862,6 +4881,7 @@ func _character_v018_direction_row(direction: String) -> int:
 
 
 func _character_v018_source_rect(direction: String, frame_index: int) -> Rect2:
+	# Legacy hero atlas: 2 frames x 4 directions, 60x80.
 	var column := posmod(frame_index, 2)
 	var row := _character_v018_direction_row(direction)
 	return Rect2(
@@ -4870,10 +4890,31 @@ func _character_v018_source_rect(direction: String, frame_index: int) -> Rect2:
 	)
 
 
+func _character_v018_source_rect_for_role(role: String, direction: String, frame_index: int) -> Rect2:
+	if role == "hero":
+		return _character_v018_source_rect(direction, frame_index)
+	var column := posmod(frame_index, 3)
+	var row := _character_v018_direction_row(direction)
+	return Rect2(
+		Vector2(float(column) * V018_NPC_FRAME.x, float(row) * V018_NPC_FRAME.y),
+		V018_NPC_FRAME
+	)
+
+
 func _character_v018_phase_frame(phase: float, moving: bool) -> int:
+	# Hero keeps the already-proven two-frame gait.
 	if not moving:
 		return 0
 	return int(floor(absf(phase) / 2.4)) % 2
+
+
+func _character_v018_phase_frame_for_role(role: String, phase: float, moving: bool) -> int:
+	if not moving:
+		return 0
+	if role == "hero":
+		return _character_v018_phase_frame(phase, true)
+	# Production NPCs use all three authored walk frames.
+	return int(floor(absf(phase) / 1.8)) % 3
 
 
 func _character_v018_modulate(pos: Vector2, alpha: float = 1.0) -> Color:
@@ -4884,9 +4925,14 @@ func _character_v018_modulate(pos: Vector2, alpha: float = 1.0) -> Color:
 
 func _draw_v018_character(pos: Vector2, role: String, direction: String, frame_index: int, modulate: Color, bob: float = 0.0) -> void:
 	var texture := _character_v018_texture(role)
-	var source := _character_v018_source_rect(direction, frame_index)
-	# Keep the logical gameplay position at the feet, matching the v0.18-A hero anchor.
-	var destination := Rect2(pos + Vector2(-30.0, -60.0 + bob), V018_CHARACTER_FRAME)
+	var source := _character_v018_source_rect_for_role(role, direction, frame_index)
+	var destination: Rect2
+	if role == "hero":
+		# Preserve the exact hero anchor that fixed iPhone downward rendering.
+		destination = Rect2(pos + Vector2(-30.0, -60.0 + bob), V018_CHARACTER_FRAME)
+	else:
+		# All production NPCs share one ground anchor and one authored 60x90 scale.
+		destination = Rect2(pos + Vector2(-30.0, -70.0 + bob), V018_NPC_FRAME)
 	_draw_ellipse_custom(pos + Vector2(0, 18), Vector2(17, 5.5), Color(0.01, 0.02, 0.015, 0.32 * maxf(0.2, modulate.a)))
 	draw_texture_rect_region(texture, destination, source, modulate)
 
@@ -4999,6 +5045,7 @@ func _draw_companions() -> void:
 	for index in range(survivor_agents.size()):
 		var agent: Dictionary = survivor_agents[index]
 		var role := String(agent.get("role", "guard"))
+		var visual_role := String(agent.get("visual_role", role))
 		var pos: Vector2 = agent["pos"]
 		var velocity: Vector2 = agent.get("vel", Vector2.ZERO)
 		var phase := float(agent.get("phase", 0.0))
@@ -5006,9 +5053,9 @@ func _draw_companions() -> void:
 		var fallback := Vector2(facing_x, 0.0)
 		var direction := _character_v018_direction_key(velocity, fallback)
 		var moving := velocity.length() > 3.0
-		var frame_index := _character_v018_phase_frame(phase, moving)
+		var frame_index := _character_v018_phase_frame_for_role(visual_role, phase, moving)
 		var bob := sin(phase) * 0.45 if moving else 0.0
-		_draw_v018_character(pos, role, direction, frame_index, _character_v018_modulate(pos), bob)
+		_draw_v018_character(pos, visual_role, direction, frame_index, _character_v018_modulate(pos), bob)
 
 		# Stack nearby labels upward instead of merging them into one black strip.
 		var stack_level := 0
@@ -5032,7 +5079,7 @@ func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facin
 	# named NPC roles now always use the same production sprite pipeline as the hero.
 	var moving := absf(phase) > 0.05
 	var direction := "down" if not moving else ("left" if facing < 0.0 else "right")
-	var frame_index := _character_v018_phase_frame(phase, moving)
+	var frame_index := _character_v018_phase_frame_for_role(role, phase, moving)
 	_draw_v018_character(pos, role, direction, frame_index, _character_v018_modulate(pos), 0.0)
 
 
@@ -5042,17 +5089,17 @@ func _draw_person(pos: Vector2, color: Color, phase: float) -> void:
 		pos,
 		"civilian",
 		"down",
-		_character_v018_phase_frame(phase, moving),
+		_character_v018_phase_frame_for_role("civilian", phase, moving),
 		_character_v018_modulate(pos),
 		0.0
 	)
 
 
-func _draw_survivor(pos: Vector2, mark: String) -> void:
+func _draw_survivor(pos: Vector2, mark: String, role: String = "civilian") -> void:
 	var pulse := 1.0 + sin(Time.get_ticks_msec() * 0.007) * 0.06
 	draw_circle(pos, 26.0 * pulse, Color(0.77, 0.83, 0.70, 0.07))
-	_draw_v018_character(pos, "civilian", "down", 0, _character_v018_modulate(pos), 0.0)
-	draw_string(font, pos + Vector2(-12, -52), mark, HORIZONTAL_ALIGNMENT_CENTER, 24, 16, Color("#f4ead4"))
+	_draw_v018_character(pos, role, "down", 0, _character_v018_modulate(pos), 0.0)
+	draw_string(font, pos + Vector2(-12, -58), mark, HORIZONTAL_ALIGNMENT_CENTER, 24, 16, Color("#f4ead4"))
 
 
 func _enemy_v018_kind_index(kind: String) -> int:
