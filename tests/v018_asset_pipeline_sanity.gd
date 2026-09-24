@@ -35,7 +35,10 @@ func _init() -> void:
 		fail("Hero production sheet must use PNG on the iPhone/Web path")
 		return
 	if not String(game.TEX_MASTER_V018.resource_path).ends_with(".svg"):
-		fail("Master fallback sheet must use the stable SVG import path")
+		fail("Master sheet must use the stable SVG import path")
+		return
+	if not String(game.TEX_SCOUT_V018.resource_path).ends_with(".svg"):
+		fail("Scout sheet must use its distinct SVG production path")
 		return
 
 	if game._hero_v018_direction_key(Vector2(0, 1)) != "down":
@@ -96,6 +99,13 @@ func _init() -> void:
 	game._add_survivor("guard", Vector2(200, 200), "ВОЗНИЦА")
 	if String(game.survivor_agents[0].get("label", "")) != "ВОЗНИЦА":
 		fail("Explicit NPC identity was not stored")
+		return
+
+	if not game._has_survivor_label("ВОЗНИЦА"):
+		fail("Survivor identity lookup failed")
+		return
+	if game._has_survivor_label("РАЗВЕДЧИК"):
+		fail("Survivor identity lookup created a false duplicate")
 		return
 
 	print("V018_ASSET_PIPELINE_SANITY_OK")

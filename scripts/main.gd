@@ -51,7 +51,7 @@ const TEX_HERO_CARRY_3: Texture2D = preload("res://assets/v08/sprint1/hero_carry
 const TEX_HERO_V018: Texture2D = preload("res://assets/v018/characters/hero_v018.png")
 const TEX_HUNTER_V018: Texture2D = preload("res://assets/v018/characters/hunter_v018.png")
 const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_v018.svg")
-const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_v018.png")
+const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_v018.svg")
 const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_v018.png")
 const V018_CHARACTER_FRAME := Vector2(60.0, 80.0)
 const TEX_ENEMIES_V018: Texture2D = preload("res://assets/v018/enemies/enemies_v018.svg")
@@ -1467,7 +1467,10 @@ func _enter_worker_ruins() -> void:
 			_spawn_enemy_at("fast", Vector2(205, 345))
 			_spawn_enemy_at("fast", Vector2(290, 350))
 			_spawn_enemy_at("elite", Vector2(250, 405))
-			_story("СИГНАЛ РАЗВЕДЧИКА\nНа обломке стены привязана красная лента. Кто-то ждёт наверху.", 3.8)
+			if _has_survivor_label("РАЗВЕДЧИК"):
+				_story("СТАРАЯ МЕТКА РАЗВЕДЧИКА\nКрасная лента знакома твоему спутнику. За стеной отмечен безопасный проход к сердцу леса.", 3.8)
+			else:
+				_story("СИГНАЛ РАЗВЕДЧИКА\nНа обломке стены привязана красная лента. Кто-то ждёт наверху.", 3.8)
 
 
 func _update_worker_route() -> void:
@@ -1483,7 +1486,10 @@ func _update_worker_route() -> void:
 			_story("За дверью виден старый походный тайник. Осталось открыть его.", 2.8)
 		else:
 			_banner("ПОДХОД ОЧИЩЕН", 1.5)
-			_story("Сверху отвечает короткий свист. Разведчик ещё жив.", 2.8)
+			if _has_survivor_label("РАЗВЕДЧИК"):
+				_story("Разведчик узнаёт старую отметку. Путь дальше действительно ещё цел.", 2.8)
+			else:
+				_story("Сверху отвечает короткий свист. Разведчик ещё жив.", 2.8)
 		return
 
 	if not enemies.is_empty() or hero_pos.distance_to(survivor_two_pos) >= 48.0:
@@ -1509,10 +1515,15 @@ func _update_worker_route() -> void:
 		_story("СКЛАД РАЗОБРАН\nСлоты %d > %d • здоровье %d > %d.%s" % [old_slots, carry_limit, roundi(old_hp), roundi(hero_max_hp), solo_note], 4.5)
 	else:
 		survivor_two_found = true
-		_add_survivor("guard", survivor_two_pos, "РАЗВЕДЧИК")
 		worker_route_complete = true
 		run_embers += 2
-		_story("РАЗВЕДЧИК СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. «До сердца леса осталось недалеко.»", 4.0)
+		if _has_survivor_label("РАЗВЕДЧИК"):
+			var old_damage := hero_damage
+			hero_damage *= 1.08
+			_story("МЕТКА ПРОВЕРЕНА\nТвой разведчик находит безопасный обход. Урон %d > %d (+8%%). Второй разведчик из воздуха больше не появляется." % [roundi(old_damage), roundi(hero_damage)], 4.2)
+		else:
+			_add_survivor("guard", survivor_two_pos, "РАЗВЕДЧИК")
+			_story("РАЗВЕДЧИК СПАСЁН\nСОЮЗНИК +1 • прикрывает огнём. «До сердца леса осталось недалеко.»", 4.0)
 
 
 func _return_from_worker_ruins() -> void:
@@ -2795,6 +2806,13 @@ func _default_survivor_label(role: String) -> String:
 			return "РАЗВЕДЧИК"
 		_:
 			return "ПОСЕЛЕНЕЦ"
+
+
+func _has_survivor_label(identity_label: String) -> bool:
+	for agent: Dictionary in survivor_agents:
+		if String(agent.get("label", "")) == identity_label:
+			return true
+	return false
 
 
 func _add_survivor(role: String, spawn_pos: Vector2, identity_label: String = "") -> void:
@@ -4829,7 +4847,7 @@ func _hero_v018_frame_index(moving: bool) -> int:
 	return _character_v018_phase_frame(hero_walk_phase, moving)
 
 
-func _draw_character_label(pos: Vector2, label: String, is_hero: bool = false) -> void:
+func _draw_character_label(pos: Vector2, label: String, is_hero: bool = false, vertical_offset: float = 0.0) -> void:
 	if label == "":
 		return
 	# Compact world-space nameplate: readable on the phone without becoming another HUD block.
@@ -4838,13 +4856,13 @@ func _draw_character_label(pos: Vector2, label: String, is_hero: bool = false) -
 		width = 92.0
 	elif label.length() <= 3:
 		width = 52.0
-	var rect := Rect2(pos + Vector2(-width * 0.5, -79.0), Vector2(width, 17.0))
+	var rect := Rect2(pos + Vector2(-width * 0.5, -79.0 + vertical_offset), Vector2(width, 17.0))
 	draw_rect(rect, Color(0.025, 0.035, 0.030, 0.78))
 	var accent := Color("#e4bd76") if is_hero else Color("#c9b989")
 	draw_line(rect.position + Vector2(5, rect.size.y - 1), rect.position + Vector2(rect.size.x - 5, rect.size.y - 1), Color(accent.r, accent.g, accent.b, 0.58), 1.0)
 	draw_string(
 		font,
-		pos + Vector2(-width * 0.5 + 2.0, -66.0),
+		pos + Vector2(-width * 0.5 + 2.0, -66.0 + vertical_offset),
 		label,
 		HORIZONTAL_ALIGNMENT_CENTER,
 		width - 4.0,
@@ -4917,7 +4935,8 @@ func _draw_back_cargo(pos: Vector2) -> void:
 
 
 func _draw_companions() -> void:
-	for agent: Dictionary in survivor_agents:
+	for index in range(survivor_agents.size()):
+		var agent: Dictionary = survivor_agents[index]
 		var role := String(agent.get("role", "guard"))
 		var pos: Vector2 = agent["pos"]
 		var velocity: Vector2 = agent.get("vel", Vector2.ZERO)
@@ -4929,7 +4948,22 @@ func _draw_companions() -> void:
 		var frame_index := _character_v018_phase_frame(phase, moving)
 		var bob := sin(phase) * 0.45 if moving else 0.0
 		_draw_v018_character(pos, role, direction, frame_index, _character_v018_modulate(pos), bob)
-		_draw_character_label(pos + Vector2(0, bob), String(agent.get("label", _default_survivor_label(role))))
+
+		# Stack nearby labels upward instead of merging them into one black strip.
+		var stack_level := 0
+		if pos.distance_to(hero_pos) < 76.0:
+			stack_level += 1
+		for previous_index in range(index):
+			var previous: Dictionary = survivor_agents[previous_index]
+			var previous_pos: Vector2 = previous.get("pos", Vector2.ZERO)
+			if pos.distance_to(previous_pos) < 82.0:
+				stack_level += 1
+		_draw_character_label(
+			pos + Vector2(0, bob),
+			String(agent.get("label", _default_survivor_label(role))),
+			false,
+			-float(stack_level) * 18.0
+		)
 
 
 func _draw_humanoid(pos: Vector2, coat: Color, phase: float, role: String, facing: float = 1.0) -> void:
@@ -4988,19 +5022,19 @@ func _enemy_v018_source_rect(kind: String, direction: String, frame_index: int) 
 func _enemy_v018_visual_size(kind: String) -> Vector2:
 	match kind:
 		"fast":
-			return Vector2(72.0, 54.0)
+			return Vector2(78.0, 58.0)
 		"elite":
-			return Vector2(76.0, 82.0)
+			return Vector2(82.0, 88.0)
 		"guard":
-			return Vector2(60.0, 66.0)
+			return Vector2(68.0, 74.0)
 		"black_boar":
-			return Vector2(98.0, 78.0)
+			return Vector2(106.0, 82.0)
 		"rootborn":
-			return Vector2(92.0, 96.0)
+			return Vector2(100.0, 104.0)
 		"forest_guardian", "boss":
-			return Vector2(104.0, 112.0)
+			return Vector2(112.0, 120.0)
 		_:
-			return Vector2(58.0, 64.0)
+			return Vector2(64.0, 70.0)
 
 
 func _enemy_v018_frame_index(enemy: Dictionary) -> int:
@@ -5428,7 +5462,6 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(406, 55), "v0.18-A4", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
