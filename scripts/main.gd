@@ -50,7 +50,7 @@ const TEX_HERO_CARRY_3: Texture2D = preload("res://assets/v08/sprint1/hero_carry
 # Grid: 2 frames x 4 directions. Rows: down, left, right, up. Cell: 60x80.
 const TEX_HERO_V018: Texture2D = preload("res://assets/v018/characters/hero_v018.png")
 const TEX_HUNTER_V018: Texture2D = preload("res://assets/v018/characters/hunter_v018.png")
-const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_v018.png")
+const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_v018.svg")
 const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_v018.png")
 const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_v018.png")
 const V018_CHARACTER_FRAME := Vector2(60.0, 80.0)

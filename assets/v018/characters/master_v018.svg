@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="320" viewBox="0 0 120 320">
+<defs>
+<style>.o{stroke:#2d251e;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}</style>
+<g id="front0">
+<ellipse cx="30" cy="69" rx="15" ry="4" fill="#10120f" opacity=".3"/>
+<path d="M20 40Q30 35 40 40L38 62Q30 66 22 62Z" fill="#8a6244" class="o"/>
+<rect x="22" y="51" width="16" height="4" fill="#4d3829"/>
+<circle cx="30" cy="29" r="10" fill="#caa17d" class="o"/>
+<path d="M20 28Q22 17 30 17Q39 17 40 28Q35 23 30 23Q25 23 20 28Z" fill="#5b4637"/>
+<path d="M23 32Q30 42 37 32Q36 46 30 47Q24 46 23 32Z" fill="#7b624e"/>
+<path d="M23 61L22 72M37 61L38 72M19 44L12 54M41 44L47 51" fill="none" stroke="#6f5139" stroke-width="5"/>
+<path d="M47 51L53 39" stroke="#7d5a39" stroke-width="3"/><rect x="49" y="35" width="8" height="7" rx="1" fill="#9aa09b" class="o"/>
+</g>
+<g id="front1">
+<ellipse cx="30" cy="69" rx="15" ry="4" fill="#10120f" opacity=".3"/>
+<path d="M20 40Q30 35 40 40L38 62Q30 66 22 62Z" fill="#8a6244" class="o"/>
+<rect x="22" y="51" width="16" height="4" fill="#4d3829"/>
+<circle cx="30" cy="29" r="10" fill="#caa17d" class="o"/>
+<path d="M20 28Q22 17 30 17Q39 17 40 28Q35 23 30 23Q25 23 20 28Z" fill="#5b4637"/>
+<path d="M23 32Q30 42 37 32Q36 46 30 47Q24 46 23 32Z" fill="#7b624e"/>
+<path d="M24 61L20 72M36 61L40 72M19 44L13 51M41 44L50 55" fill="none" stroke="#6f5139" stroke-width="5"/>
+<path d="M50 55L53 41" stroke="#7d5a39" stroke-width="3"/><rect x="49" y="37" width="8" height="7" rx="1" fill="#9aa09b" class="o"/>
+</g>
+<g id="left0">
+<ellipse cx="30" cy="69" rx="15" ry="4" fill="#10120f" opacity=".3"/>
+<path d="M21 40Q30 35 39 40L38 62Q30 66 22 62Z" fill="#8a6244" class="o"/>
+<circle cx="28" cy="29" r="10" fill="#caa17d" class="o"/>
+<path d="M19 27Q21 17 29 17Q36 18 38 27L31 23L22 29Z" fill="#5b4637"/>
+<path d="M20 31Q25 43 33 39Q31 47 25 46Q21 42 20 31Z" fill="#7b624e"/>
+<path d="M24 61L21 72M35 61L38 72M22 44L12 51M38 44L45 52" fill="none" stroke="#6f5139" stroke-width="5"/>
+<path d="M12 51L7 39" stroke="#7d5a39" stroke-width="3"/><rect x="3" y="34" width="8" height="7" rx="1" fill="#9aa09b" class="o"/>
+</g>
+<g id="left1">
+<ellipse cx="30" cy="69" rx="15" ry="4" fill="#10120f" opacity=".3"/>
+<path d="M21 40Q30 35 39 40L38 62Q30 66 22 62Z" fill="#8a6244" class="o"/>
+<circle cx="28" cy="29" r="10" fill="#caa17d" class="o"/>
+<path d="M19 27Q21 17 29 17Q36 18 38 27L31 23L22 29Z" fill="#5b4637"/>
+<path d="M20 31Q25 43 33 39Q31 47 25 46Q21 42 20 31Z" fill="#7b624e"/>
+<path d="M24 61L19 72M35 61L40 72M22 44L10 55M38 44L44 49" fill="none" stroke="#6f5139" stroke-width="5"/>
+<path d="M10 55L6 42" stroke="#7d5a39" stroke-width="3"/><rect x="2" y="37" width="8" height="7" rx="1" fill="#9aa09b" class="o"/>
+</g>
+<g id="back0">
+<ellipse cx="30" cy="69" rx="15" ry="4" fill="#10120f" opacity=".3"/>
+<path d="M20 40Q30 35 40 40L38 62Q30 66 22 62Z" fill="#74523b" class="o"/><rect x="22" y="51" width="16" height="4" fill="#4d3829"/>
+<circle cx="30" cy="29" r="10" fill="#b88967" class="o"/><path d="M20 29Q21 17 30 17Q39 17 40 29Q35 24 30 24Q25 24 20 29Z" fill="#5b4637"/>
+<path d="M23 61L22 72M37 61L38 72M19 44L12 54M41 44L47 51" fill="none" stroke="#654832" stroke-width="5"/>
+<path d="M47 51L53 39" stroke="#7d5a39" stroke-width="3"/><rect x="49" y="35" width="8" height="7" rx="1" fill="#9aa09b" class="o"/>
+</g>
+<g id="back1">
+<ellipse cx="30" cy="69" rx="15" ry="4" fill="#10120f" opacity=".3"/>
+<path d="M20 40Q30 35 40 40L38 62Q30 66 22 62Z" fill="#74523b" class="o"/><rect x="22" y="51" width="16" height="4" fill="#4d3829"/>
+<circle cx="30" cy="29" r="10" fill="#b88967" class="o"/><path d="M20 29Q21 17 30 17Q39 17 40 29Q35 24 30 24Q25 24 20 29Z" fill="#5b4637"/>
+<path d="M24 61L20 72M36 61L40 72M19 44L13 51M41 44L50 55" fill="none" stroke="#654832" stroke-width="5"/>
+<path d="M50 55L53 41" stroke="#7d5a39" stroke-width="3"/><rect x="49" y="37" width="8" height="7" rx="1" fill="#9aa09b" class="o"/>
+</g>
+</defs>
+<use href="#front0"/><use href="#front1" transform="translate(60 0)"/>
+<use href="#left0" transform="translate(0 80)"/><use href="#left1" transform="translate(60 80)"/>
+<use href="#left0" transform="translate(60 160) scale(-1 1)"/><use href="#left1" transform="translate(120 160) scale(-1 1)"/>
+<use href="#back0" transform="translate(0 240)"/><use href="#back1" transform="translate(60 240)"/>
+</svg>

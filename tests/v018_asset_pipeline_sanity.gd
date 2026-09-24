@@ -29,9 +29,14 @@ func _init() -> void:
 		if texture.get_width() != 120 or texture.get_height() != 320:
 			fail("A production character sheet lost its normalized 120x320 grid")
 			return
-		if not String(texture.resource_path).ends_with(".png"):
-			fail("Production characters must use PNG sheets on the iPhone/Web path")
-			return
+
+	# The iPhone corruption fix is specifically the hero path: no per-frame transparent WebP.
+	if not String(game.TEX_HERO_V018.resource_path).ends_with(".png"):
+		fail("Hero production sheet must use PNG on the iPhone/Web path")
+		return
+	if not String(game.TEX_MASTER_V018.resource_path).ends_with(".svg"):
+		fail("Master fallback sheet must use the stable SVG import path")
+		return
 
 	if game._hero_v018_direction_key(Vector2(0, 1)) != "down":
 		fail("Hero down direction mapping is wrong")
