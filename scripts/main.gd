@@ -54,6 +54,8 @@ const TEX_MASTER_V018: Texture2D = preload("res://assets/v018/characters/master_
 const TEX_SCOUT_V018: Texture2D = preload("res://assets/v018/characters/scout_v018.png")
 const TEX_SETTLER_V018: Texture2D = preload("res://assets/v018/characters/settler_v018.png")
 const V018_CHARACTER_FRAME := Vector2(60.0, 80.0)
+const TEX_ENEMIES_V018: Texture2D = preload("res://assets/v018/enemies/enemies_v018.svg")
+const V018_ENEMY_FRAME := Vector2(96.0, 96.0)
 const TEX_TREE_A: Texture2D = preload("res://assets/v08/sprint1/tree_a.svg")
 const TEX_TREE_B: Texture2D = preload("res://assets/v08/sprint1/tree_b.svg")
 const TEX_TREE_C: Texture2D = preload("res://assets/v08/sprint1/tree_c.svg")
@@ -2778,7 +2780,8 @@ func _spawn_enemy_at(kind: String, pos: Vector2) -> void:
 		"hit_cd": 0.0,
 		"hit_flash": 0.0,
 		"move_phase": rng.randf_range(0.0, TAU),
-		"boss_phase": 1
+		"boss_phase": 1,
+		"facing": Vector2(0.0, 1.0)
 	})
 
 
@@ -3057,6 +3060,8 @@ func _update_enemies(delta: float) -> void:
 		var target_pos := hero_pos if route_combat else HEARTH_POS
 		var to_target := target_pos - pos
 		var distance := to_target.length()
+		if to_target.length() > 0.01:
+			enemy["facing"] = to_target.normalized()
 		var radius := float(enemy.get("radius", 14.0))
 		var speed := float(enemy.get("speed", 35.0))
 		var hit_cd := maxf(0.0, float(enemy.get("hit_cd", 0.0)) - delta)
@@ -4955,97 +4960,125 @@ func _draw_survivor(pos: Vector2, mark: String) -> void:
 	draw_string(font, pos + Vector2(-12, -52), mark, HORIZONTAL_ALIGNMENT_CENTER, 24, 16, Color("#f4ead4"))
 
 
+func _enemy_v018_kind_index(kind: String) -> int:
+	match kind:
+		"fast":
+			return 1
+		"elite", "guard":
+			return 2
+		"black_boar":
+			return 3
+		"rootborn":
+			return 4
+		"forest_guardian", "boss":
+			return 5
+		_:
+			return 0
+
+
+func _enemy_v018_source_rect(kind: String, direction: String, frame_index: int) -> Rect2:
+	var row := _enemy_v018_kind_index(kind) * 4 + _character_v018_direction_row(direction)
+	var column := posmod(frame_index, 2)
+	return Rect2(
+		Vector2(float(column) * V018_ENEMY_FRAME.x, float(row) * V018_ENEMY_FRAME.y),
+		V018_ENEMY_FRAME
+	)
+
+
+func _enemy_v018_visual_size(kind: String) -> Vector2:
+	match kind:
+		"fast":
+			return Vector2(72.0, 54.0)
+		"elite":
+			return Vector2(76.0, 82.0)
+		"guard":
+			return Vector2(60.0, 66.0)
+		"black_boar":
+			return Vector2(98.0, 78.0)
+		"rootborn":
+			return Vector2(92.0, 96.0)
+		"forest_guardian", "boss":
+			return Vector2(104.0, 112.0)
+		_:
+			return Vector2(58.0, 64.0)
+
+
+func _enemy_v018_frame_index(enemy: Dictionary) -> int:
+	var phase := float(enemy.get("move_phase", 0.0))
+	return int(floor(absf(phase) / 2.2)) % 2
+
+
 func _draw_enemy(enemy: Dictionary) -> void:
 	var pos: Vector2 = enemy["pos"]
 	var kind := String(enemy.get("kind", "basic"))
 	var radius := float(enemy.get("radius", 14.0))
 	if area != Area.CAMP and _light_visibility(pos) < 0.12:
 		return
+
+	var facing: Vector2 = enemy.get("facing", Vector2(0.0, 1.0))
+	var direction := _character_v018_direction_key(facing, Vector2(0.0, 1.0))
+	var frame_index := _enemy_v018_frame_index(enemy)
+	var source := _enemy_v018_source_rect(kind, direction, frame_index)
+	var size := _enemy_v018_visual_size(kind)
+	var phase := float(enemy.get("move_phase", 0.0))
+	var bob := sin(phase * 1.08) * (1.8 if kind == "fast" else 1.0)
 	var flash := float(enemy.get("hit_flash", 0.0)) > 0.0
-	var body := Color("#70484a")
-	if kind == "fast":
-		body = Color("#83513f")
-	elif kind == "elite":
-		body = Color("#60425d")
-	elif kind == "black_boar":
-		body = Color("#4b3935")
-	elif kind == "rootborn":
-		body = Color("#4a4633")
-	elif kind in ["forest_guardian", "boss"]:
-		body = Color("#413443")
-	elif kind == "guard":
-		body = Color("#5e4945")
-	if flash:
-		body = body.lightened(0.55)
 
-	var shadow_scale := 1.55 if _is_chapter_boss(kind) else 1.15
-	_draw_ellipse_custom(pos + Vector2(0, radius * 0.78), Vector2(radius * shadow_scale, radius * 0.40), Color(0.01, 0.015, 0.012, 0.42))
+	var shadow_scale := 1.62 if _is_chapter_boss(kind) else (1.30 if kind in ["elite", "guard"] else 1.14)
+	_draw_ellipse_custom(
+		pos + Vector2(0, radius * 0.82),
+		Vector2(maxf(radius * shadow_scale, size.x * 0.31), maxf(radius * 0.38, size.y * 0.10)),
+		Color(0.01, 0.015, 0.012, 0.43)
+	)
 
-	var eye_left := pos + Vector2(-radius * 0.28, -radius * 0.58)
-	var eye_right := pos + Vector2(radius * 0.28, -radius * 0.58)
-
-	if kind == "fast":
-		_draw_ellipse_custom(pos + Vector2(0, 1), Vector2(radius * 1.35, radius * 0.70), body)
-		draw_circle(pos + Vector2(radius * 0.85, -4), radius * 0.46, body)
-		draw_line(pos + Vector2(-7, 6), pos + Vector2(-14, 15), body.darkened(0.15), 4.0)
-		draw_line(pos + Vector2(7, 6), pos + Vector2(15, 15), body.darkened(0.15), 4.0)
-	elif kind == "black_boar":
-		var charge := 0.5 + 0.5 * sin(float(enemy.get("move_phase", 0.0)) * 0.72)
-		_draw_ellipse_custom(pos + Vector2(-4, 3), Vector2(radius * 1.35, radius * 0.76), body)
-		draw_circle(pos + Vector2(radius * 0.95, -3), radius * 0.58, body.darkened(0.03))
-		draw_line(pos + Vector2(radius * 1.08, 3), pos + Vector2(radius * 1.42, 10), Color("#d2c3a4"), 3.2)
-		draw_line(pos + Vector2(radius * 1.05, 1), pos + Vector2(radius * 1.35, -8), Color("#d2c3a4"), 3.2)
-		for x in [-18.0, -4.0, 10.0, 22.0]:
-			draw_line(pos + Vector2(x, 13), pos + Vector2(x - 4.0 * charge, 28), body.darkened(0.18), 6.0)
-		draw_line(pos + Vector2(-radius, -8), pos + Vector2(-radius - 10, -18), body.darkened(0.12), 4.0)
-		eye_left = pos + Vector2(radius * 0.90, -8)
-		eye_right = pos + Vector2(radius * 1.03, -7)
-	elif kind == "rootborn":
-		_draw_ellipse_custom(pos + Vector2(0, 1), Vector2(radius * 0.90, radius * 1.08), body)
-		draw_rect(Rect2(pos + Vector2(-radius * 0.52, -radius * 0.65), Vector2(radius * 1.04, radius * 1.42)), body)
-		for offset in [-22.0, -8.0, 9.0, 23.0]:
-			draw_line(pos + Vector2(offset * 0.45, radius * 0.45), pos + Vector2(offset, radius * 1.30), Color("#5a4b34"), 6.0)
-		draw_line(pos + Vector2(-13, -22), pos + Vector2(-29, -43), Color("#665238"), 7.0)
-		draw_line(pos + Vector2(13, -22), pos + Vector2(30, -40), Color("#665238"), 7.0)
-		draw_circle(pos + Vector2(-21, -37), 5.0, Color("#35412f"))
-		draw_circle(pos + Vector2(23, -35), 5.0, Color("#35412f"))
-	elif kind in ["forest_guardian", "boss"]:
+	if kind in ["forest_guardian", "boss"]:
 		var boss_phase := int(enemy.get("boss_phase", 1))
 		if boss_phase >= 2:
 			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
-			draw_circle(pos, radius * (1.55 + pulse * 0.12), Color(0.68, 0.34, 0.22, 0.045 + float(boss_phase - 1) * 0.025))
-		_draw_ellipse_custom(pos + Vector2(0, 3), Vector2(radius * 1.05, radius * 1.15), body)
-		draw_circle(pos + Vector2(0, -radius * 0.75), radius * 0.62, body.darkened(0.08))
-		draw_line(pos + Vector2(-18, -23), pos + Vector2(-34, -43), Color("#5e4b38"), 6.0)
-		draw_line(pos + Vector2(-34, -43), pos + Vector2(-42, -55), Color("#5e4b38"), 4.0)
-		draw_line(pos + Vector2(18, -23), pos + Vector2(34, -43), Color("#5e4b38"), 6.0)
-		draw_line(pos + Vector2(34, -43), pos + Vector2(44, -54), Color("#5e4b38"), 4.0)
-		draw_line(pos + Vector2(-17, 24), pos + Vector2(-25, 42), body.darkened(0.15), 8.0)
-		draw_line(pos + Vector2(17, 24), pos + Vector2(25, 42), body.darkened(0.15), 8.0)
-	else:
-		_draw_ellipse_custom(pos + Vector2(0, 3), Vector2(radius * 0.78, radius * 1.05), body)
-		draw_circle(pos + Vector2(0, -radius * 0.72), radius * 0.55, body.darkened(0.05))
-		draw_line(pos + Vector2(-6, 10), pos + Vector2(-9, radius + 8), body.darkened(0.18), 5.0)
-		draw_line(pos + Vector2(6, 10), pos + Vector2(9, radius + 8), body.darkened(0.18), 5.0)
-		if kind == "elite":
-			draw_line(pos + Vector2(-8, -17), pos + Vector2(-17, -28), Color("#6c5542"), 4.0)
-			draw_line(pos + Vector2(8, -17), pos + Vector2(17, -28), Color("#6c5542"), 4.0)
+			draw_circle(
+				pos + Vector2(0, -size.y * 0.12),
+				size.x * (0.48 + pulse * 0.05),
+				Color(0.68, 0.34, 0.22, 0.045 + float(boss_phase - 1) * 0.025)
+			)
 
-	draw_circle(eye_left, maxf(1.6, radius * 0.09), Color("#efad51"))
-	draw_circle(eye_right, maxf(1.6, radius * 0.09), Color("#efad51"))
+	var visibility := maxf(0.22, _light_visibility(pos))
+	var warmth := clampf(1.0 - pos.distance_to(_active_light_center()) / maxf(1.0, _active_light_radius()), 0.0, 1.0)
+	var tint := Color(0.74, 0.79, 0.70, visibility).lerp(Color(1.0, 0.92, 0.78, visibility), warmth * 0.52)
+	if flash:
+		tint = Color(1.25, 1.15, 1.05, visibility)
+		draw_circle(pos + Vector2(0, -size.y * 0.18), size.x * 0.34, Color(1.0, 0.58, 0.38, 0.10))
+
+	var destination := Rect2(
+		pos + Vector2(-size.x * 0.5, -size.y * 0.68 + bob),
+		size
+	)
+	draw_texture_rect_region(TEX_ENEMIES_V018, destination, source, tint)
 
 	var hp := float(enemy.get("hp", 1.0))
 	var max_hp := float(enemy.get("max_hp", 1.0))
+	var top_y := -size.y * 0.62 - 8.0
 	if kind == "elite" or _is_chapter_boss(kind) or hp < max_hp:
-		var bar_w := radius * (3.0 if _is_chapter_boss(kind) else 2.4)
-		draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 18), Vector2(bar_w, 5)), Color(0, 0, 0, 0.48))
-		draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, -radius - 18), Vector2(bar_w * clampf(hp / max_hp, 0.0, 1.0), 5)), Color("#d7b872"))
+		var bar_w := size.x * (0.82 if _is_chapter_boss(kind) else 0.70)
+		draw_rect(Rect2(pos + Vector2(-bar_w * 0.5, top_y), Vector2(bar_w, 5)), Color(0, 0, 0, 0.50))
+		draw_rect(
+			Rect2(pos + Vector2(-bar_w * 0.5, top_y), Vector2(bar_w * clampf(hp / max_hp, 0.0, 1.0), 5)),
+			Color("#d7b872")
+		)
 
 	if _is_chapter_boss(kind):
 		var boss_label := _boss_display_name(kind)
 		if kind in ["forest_guardian", "boss"]:
 			boss_label += " • ФАЗА %d" % int(enemy.get("boss_phase", 1))
-		draw_string(font, pos + Vector2(-95, -radius - 29), boss_label, HORIZONTAL_ALIGNMENT_CENTER, 190, 10, Color("#ead7c7"))
+		draw_string(
+			font,
+			pos + Vector2(-100, top_y - 10),
+			boss_label,
+			HORIZONTAL_ALIGNMENT_CENTER,
+			200,
+			10,
+			Color("#ead7c7")
+		)
+
 
 func _draw_shot(shot: Dictionary) -> void:
 	var pos: Vector2 = shot["pos"]
@@ -5395,7 +5428,7 @@ func _draw_hud() -> void:
 			draw_string(font, Vector2(14, 55), hub_hint, HORIZONTAL_ALIGNMENT_LEFT, 275, 8, Color("#98a89c"))
 			var permanent_text := "урон +%d%% • слоты %d" % [int(meta.get("damage_level", 0)) * 10, 5 + int(meta.get("carry_level", 0))]
 			draw_string(font, Vector2(285, 55), permanent_text, HORIZONTAL_ALIGNMENT_RIGHT, 137, 8, Color("#c8b990"))
-		draw_string(font, Vector2(406, 55), "v0.18-A3", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
+		draw_string(font, Vector2(406, 55), "v0.18-A4", HORIZONTAL_ALIGNMENT_RIGHT, 42, 10, Color("#728077"))
 		return
 
 	if mode == Mode.RESULT:
