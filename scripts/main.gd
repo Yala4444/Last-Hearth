@@ -58,6 +58,22 @@ const V018_CHARACTER_FRAME := Vector2(60.0, 80.0)
 const V018_NPC_FRAME := Vector2(60.0, 90.0)
 const TEX_ENEMIES_V018: Texture2D = preload("res://assets/v018/enemies/enemies_v018.svg")
 const V018_ENEMY_FRAME := Vector2(96.0, 96.0)
+
+# v0.18-B authored Forgotten Forest world art.
+# The large playable location is assembled from transparent game assets, never a single backdrop.
+const TEX_FOREST_TREE_A_V018: Texture2D = preload("res://assets/v018/world/forest_tree_a.svg")
+const TEX_FOREST_TREE_B_V018: Texture2D = preload("res://assets/v018/world/forest_tree_b.svg")
+const TEX_FOREST_TREE_C_V018: Texture2D = preload("res://assets/v018/world/forest_tree_c.svg")
+const TEX_FOREST_BUSH_V018: Texture2D = preload("res://assets/v018/world/forest_bush.svg")
+const TEX_FOREST_FERN_V018: Texture2D = preload("res://assets/v018/world/forest_fern.svg")
+const TEX_FOREST_ROCK_V018: Texture2D = preload("res://assets/v018/world/forest_rock_cluster.svg")
+const TEX_FOREST_GROUND_PATCH_V018: Texture2D = preload("res://assets/v018/world/forest_ground_patch.svg")
+const TEX_HEARTH_3_V018: Texture2D = preload("res://assets/v018/world/hearth_3.svg")
+const TEX_HEARTH_4_V018: Texture2D = preload("res://assets/v018/world/hearth_4.svg")
+const TEX_HEARTH_5_V018: Texture2D = preload("res://assets/v018/world/hearth_5.svg")
+const TEX_MASTER_HUT_V018: Texture2D = preload("res://assets/v018/world/master_hut.svg")
+const TEX_WORKSHOP_V018: Texture2D = preload("res://assets/v018/world/workshop.svg")
+const TEX_WATCHTOWER_V018: Texture2D = preload("res://assets/v018/world/watchtower.svg")
 const TEX_TREE_A: Texture2D = preload("res://assets/v08/sprint1/tree_a.svg")
 const TEX_TREE_B: Texture2D = preload("res://assets/v08/sprint1/tree_b.svg")
 const TEX_TREE_C: Texture2D = preload("res://assets/v08/sprint1/tree_c.svg")
@@ -3687,6 +3703,7 @@ func _draw_hub() -> void:
 		return
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color("#111c17"))
 	_draw_ground_texture(Color("#1a2a21"), 58)
+	_draw_forest_backdrop(0.0)
 
 	var fires := int(meta.get("forest_fires", 0))
 	var hearth_bonus := int(meta.get("hearth_bonus", 0))
@@ -3897,6 +3914,7 @@ func _draw_hub_resource_area() -> void:
 	var ground := Color("#20352a") if grove else Color("#303735")
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), bg)
 	_draw_ground_texture(ground, 62)
+	_draw_forest_backdrop(0.0)
 	_draw_environment_decor()
 	_draw_light_field(hero_pos, 158.0)
 	for node: Dictionary in resource_nodes:
@@ -3974,49 +3992,19 @@ func _draw_book_stand(pos: Vector2) -> void:
 
 
 func _draw_hub_building(pos: Vector2, kind: String, label: String, subtitle: String) -> void:
-	_draw_ellipse_custom(pos + Vector2(0, 28), Vector2(43, 12), Color(0.01, 0.02, 0.015, 0.34))
-	var wall := Color("#5d4e3b")
-	var roof := Color("#7b6243")
+	var texture: Texture2D = TEX_MASTER_HUT_V018
+	var size := Vector2(128, 112)
 	if kind == "forge":
-		wall = Color("#594642")
-		roof = Color("#7b5148")
-	elif kind == "store":
-		wall = Color("#5d513d")
-		roof = Color("#7d6945")
+		texture = TEX_WORKSHOP_V018
+		size = Vector2(132, 112)
 	elif kind == "watch":
-		wall = Color("#4e4b3b")
-		roof = Color("#6f6846")
-
-	draw_rect(Rect2(pos + Vector2(-29, -12), Vector2(58, 41)), wall)
-	var roof_pts := PackedVector2Array([
-		pos + Vector2(-36, -12), pos + Vector2(0, -41), pos + Vector2(36, -12)
-	])
-	draw_colored_polygon(roof_pts, roof)
-	draw_line(pos + Vector2(-28, 1), pos + Vector2(28, 1), wall.lightened(0.08), 2.0)
-	draw_rect(Rect2(pos + Vector2(-6, 7), Vector2(12, 22)), Color("#292821"))
-
-	var window_glow := 0.72 + sin(Time.get_ticks_msec() * 0.004 + pos.x) * 0.10
-	draw_circle(pos + Vector2(15, 8), 12.0, Color(0.95, 0.61, 0.25, 0.035 * window_glow))
-	draw_rect(Rect2(pos + Vector2(10, 3), Vector2(10, 10)), Color(0.91, 0.63, 0.31, 0.65 * window_glow))
-	draw_line(pos + Vector2(15, 3), pos + Vector2(15, 13), Color("#4b3e30"), 1.4)
-	draw_line(pos + Vector2(10, 8), pos + Vector2(20, 8), Color("#4b3e30"), 1.4)
-
-	if kind == "forge":
-		draw_rect(Rect2(pos + Vector2(18, -34), Vector2(8, 28)), Color("#443c34"))
-		draw_circle(pos + Vector2(22, -39), 7.0, Color(0.72, 0.45, 0.30, 0.16))
-	elif kind == "store":
-		for i in range(3):
-			draw_line(pos + Vector2(-21, 14 - i * 8), pos + Vector2(-3, 14 - i * 8), Color("#a87b48"), 5.0, true)
-	else:
-		# A completed resident home should look inhabited rather than like a clean icon.
-		draw_line(pos + Vector2(-38, 23), pos + Vector2(-20, 17), Color("#775237"), 5.0, true)
-		draw_circle(pos + Vector2(-39, 23), 2.8, Color("#a2754a"))
-		draw_rect(Rect2(pos + Vector2(31, 15), Vector2(14, 11)), Color("#55483a"))
-		draw_line(pos + Vector2(31, 20), pos + Vector2(45, 20), Color("#816a4d"), 2.0)
-
+		texture = TEX_WATCHTOWER_V018
+		size = Vector2(112, 132)
+	_draw_centered_texture(texture, pos + Vector2(0, -10), size, Color.WHITE)
 	draw_string(font, pos + Vector2(-70, 49), label, HORIZONTAL_ALIGNMENT_CENTER, 140, 11, Color("#e6dcc6"))
 	if subtitle != "":
 		draw_string(font, pos + Vector2(-70, 62), subtitle, HORIZONTAL_ALIGNMENT_CENTER, 140, 10, Color("#9aa79a"))
+
 
 func _draw_map_table(pos: Vector2) -> void:
 	draw_rect(Rect2(pos + Vector2(-34, -13), Vector2(68, 30)), Color("#67533b"))
@@ -4054,6 +4042,7 @@ func _draw_expedition() -> void:
 	var night_bg := Color("#0a1211")
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), day_bg.lerp(night_bg, night_mix))
 	_draw_ground_texture(Color("#213529").lerp(Color("#13201a"), night_mix), 64)
+	_draw_forest_backdrop(night_mix)
 	if area == Area.CAMP:
 		_draw_map_variant_decor()
 	else:
@@ -4319,16 +4308,19 @@ func _draw_environment_decor() -> void:
 		var kind := String(item.get("kind", "grass"))
 		var scale := float(item.get("scale", 1.0))
 		var visibility := _light_visibility(pos)
-		var alpha := lerpf(0.035, 0.64, visibility)
+		var alpha := lerpf(0.035, 0.70, visibility)
 		if kind == "grass":
-			_draw_centered_texture(TEX_GRASS, pos + Vector2(0, -3), Vector2(20, 16) * scale, Color(0.78, 0.92, 0.76, alpha))
+			var choose_bush := int(pos.x * 3.0 + pos.y) % 5 == 0
+			if choose_bush:
+				_draw_centered_texture(TEX_FOREST_BUSH_V018, pos + Vector2(0, -6), Vector2(45, 30) * scale, Color(0.74, 0.88, 0.70, alpha * 0.80))
+			else:
+				_draw_centered_texture(TEX_FOREST_FERN_V018, pos + Vector2(0, -4), Vector2(30, 22) * scale, Color(0.78, 0.93, 0.73, alpha * 0.88))
 		elif kind == "pebble":
-			draw_circle(pos, 2.7 * scale, Color(0.35, 0.39, 0.36, alpha))
+			_draw_centered_texture(TEX_FOREST_ROCK_V018, pos, Vector2(24, 17) * scale, Color(0.75, 0.80, 0.75, alpha * 0.58))
 		elif kind == "ash":
-			draw_circle(pos, 3.2 * scale, Color(0.18, 0.17, 0.15, alpha * 0.8))
-			draw_line(pos + Vector2(-5, 2), pos + Vector2(5, -2), Color(0.20, 0.17, 0.14, alpha), 1.8)
+			_draw_centered_texture(TEX_FOREST_GROUND_PATCH_V018, pos, Vector2(36, 24) * scale, Color(0.30, 0.27, 0.22, alpha * 0.42))
 		else:
-			draw_line(pos + Vector2(-6, 2), pos + Vector2(7, -2), Color(0.34, 0.25, 0.17, alpha), 2.2)
+			_draw_centered_texture(TEX_FOREST_BUSH_V018, pos + Vector2(0, -4), Vector2(34, 23) * scale, Color(0.58, 0.70, 0.54, alpha * 0.58))
 
 
 func _draw_world_events() -> void:
@@ -4620,13 +4612,60 @@ func _draw_night_edge_eyes(alpha: float) -> void:
 
 
 func _draw_ground_texture(color: Color, spacing: int) -> void:
+	# Procedural noise is now only a subtle base. Authored transparent patches carry the location.
 	for y in range(140, 790, spacing):
 		for x in range(20, 470, spacing):
 			var offset := float((x * 13 + y * 7) % 17)
 			var p := Vector2(float(x) + offset, float(y))
-			draw_circle(p, 2.0, color)
-			if int((x + y) / spacing) % 3 == 0:
-				draw_circle(p + Vector2(9, 7), 7.0, Color(0.07, 0.12, 0.09, 0.055))
+			draw_circle(p, 1.6, color)
+			if int((x + y) / spacing) % 4 == 0:
+				draw_circle(p + Vector2(9, 7), 5.5, Color(0.07, 0.12, 0.09, 0.040))
+
+	var patches: Array[Vector2] = [
+		Vector2(70, 185), Vector2(202, 160), Vector2(356, 198),
+		Vector2(116, 330), Vector2(302, 312), Vector2(418, 365),
+		Vector2(55, 515), Vector2(218, 492), Vector2(368, 535),
+		Vector2(132, 685), Vector2(305, 700), Vector2(430, 650)
+	]
+	for i in range(patches.size()):
+		var patch_scale := 0.70 + float((i * 7) % 5) * 0.075
+		var patch_alpha := 0.15 + float((i * 11) % 4) * 0.025
+		_draw_centered_texture(
+			TEX_FOREST_GROUND_PATCH_V018,
+			patches[i],
+			Vector2(96, 64) * patch_scale,
+			Color(0.77, 0.90, 0.73, patch_alpha)
+		)
+
+
+func _draw_forest_backdrop(night_mix: float = 0.0) -> void:
+	# Edge assets create depth while leaving the central playable route clear.
+	var placements: Array[Dictionary] = [
+		{"p": Vector2(30, 175), "v": 0, "s": 0.92},
+		{"p": Vector2(105, 150), "v": 1, "s": 0.80},
+		{"p": Vector2(375, 150), "v": 2, "s": 0.82},
+		{"p": Vector2(450, 190), "v": 0, "s": 0.96},
+		{"p": Vector2(22, 380), "v": 2, "s": 0.82},
+		{"p": Vector2(458, 430), "v": 1, "s": 0.88},
+		{"p": Vector2(28, 690), "v": 1, "s": 0.92},
+		{"p": Vector2(452, 690), "v": 2, "s": 0.92}
+	]
+	for item: Dictionary in placements:
+		var texture: Texture2D = TEX_FOREST_TREE_A_V018
+		if int(item["v"]) == 1:
+			texture = TEX_FOREST_TREE_B_V018
+		elif int(item["v"]) == 2:
+			texture = TEX_FOREST_TREE_C_V018
+		var p: Vector2 = item["p"]
+		var tree_scale := float(item["s"])
+		var day_tint := Color(0.54, 0.66, 0.52, 0.32)
+		var night_tint := Color(0.23, 0.33, 0.32, 0.24)
+		_draw_centered_texture(
+			texture,
+			p + Vector2(0, -34),
+			Vector2(96, 128) * tree_scale,
+			day_tint.lerp(night_tint, night_mix)
+		)
 
 
 func _light_visibility(pos: Vector2) -> float:
@@ -4705,18 +4744,18 @@ func _draw_resource(node: Dictionary) -> void:
 	if kind == "tree":
 		var variant := int(node.get("variant", 0)) % 3
 		if alive:
-			var tree_tex: Texture2D = TEX_TREE_A
+			var tree_tex: Texture2D = TEX_FOREST_TREE_A_V018
 			if variant == 1:
-				tree_tex = TEX_TREE_B
+				tree_tex = TEX_FOREST_TREE_B_V018
 			elif variant == 2:
-				tree_tex = TEX_TREE_C
+				tree_tex = TEX_FOREST_TREE_C_V018
 			var hit_flash := float(node.get("hit_flash", 0.0))
 			var sway := sin(Time.get_ticks_msec() * 0.0012 + pos.x * 0.013) * 0.7
 			if hit_flash > 0.0:
 				sway += sin(Time.get_ticks_msec() * 0.065) * 3.2 * hit_flash
 				modulate = modulate.lerp(Color(1.0, 0.86, 0.58, modulate.a), hit_flash * 0.34)
-			var tree_size := Vector2(78, 86) * (1.0 + hit_flash * 0.018)
-			_draw_centered_texture(tree_tex, pos + Vector2(sway, -22), tree_size, modulate)
+			var tree_size := Vector2(96, 128) * (1.0 + hit_flash * 0.018)
+			_draw_centered_texture(tree_tex, pos + Vector2(sway, -38), tree_size, modulate)
 
 			if gather_cd > 0.0 and hero_pos.distance_to(pos) <= HERO_INTERACT_RADIUS + 4.0:
 				var hit_t := 1.0 - clampf(gather_cd / maxf(0.01, gather_interval), 0.0, 1.0)
@@ -4768,7 +4807,6 @@ func _draw_hearth(pos: Vector2, level: int) -> void:
 	var time := float(Time.get_ticks_msec()) * 0.001
 	var pulse := 1.0 + hearth_pulse * 0.08 + sin(time * 6.5) * 0.018
 	var glow_alpha := 0.045 + hearth_pulse * 0.040
-	var ring_radius := 34.0 + float(level) * 3.5
 	draw_circle(pos, 58.0 * pulse + float(level) * 5.0, Color(1.0, 0.50, 0.12, glow_alpha))
 	draw_circle(pos, 35.0 * pulse + float(level) * 3.0, Color(1.0, 0.68, 0.22, 0.055 + hearth_pulse * 0.05))
 
@@ -4777,47 +4815,16 @@ func _draw_hearth(pos: Vector2, level: int) -> void:
 	elif level == 2:
 		_draw_centered_texture(TEX_HEARTH_2, pos + Vector2(0, -2), Vector2(104, 104) * pulse, Color.WHITE)
 	else:
-		# Higher levels retain the existing built structure until Sprint 3 replaces them with dedicated assets.
-		draw_circle(pos + Vector2(0, 15), 50.0 + float(level) * 3.0, Color(0.02, 0.025, 0.02, 0.34))
-		for i in range(9):
-			var angle := TAU * float(i) / 9.0
-			var stone := pos + Vector2(cos(angle), sin(angle)) * ring_radius
-			draw_circle(stone, 7.5 + float(level) * 0.4, Color("#5b5950"))
-		for a in [-0.45, 0.45]:
-			var axis := Vector2(cos(a), sin(a))
-			draw_line(pos - axis * 20.0, pos + axis * 20.0, Color("#704326"), 8.0, true)
-		var flame_h := (29.0 + float(level) * 7.0) * pulse
-		var flame_w := 17.0 + float(level) * 2.4
-		var outer := PackedVector2Array([
-			pos + Vector2(0, -flame_h), pos + Vector2(flame_w, 8),
-			pos + Vector2(8, 22), pos + Vector2(-8, 22), pos + Vector2(-flame_w, 8)
-		])
-		draw_colored_polygon(outer, Color("#ee8e32"))
-		var middle := PackedVector2Array([
-			pos + Vector2(2, -flame_h * 0.72), pos + Vector2(flame_w * 0.62, 9),
-			pos + Vector2(0, 20), pos + Vector2(-flame_w * 0.62, 8)
-		])
-		draw_colored_polygon(middle, Color("#ffc45e"))
-		var inner := PackedVector2Array([
-			pos + Vector2(0, -flame_h * 0.42), pos + Vector2(7, 8),
-			pos + Vector2(0, 16), pos + Vector2(-7, 8)
-		])
-		draw_colored_polygon(inner, Color("#fff0b1"))
+		var hearth_texture: Texture2D = TEX_HEARTH_3_V018
+		var hearth_size := Vector2(124, 124)
+		if level == 4:
+			hearth_texture = TEX_HEARTH_4_V018
+			hearth_size = Vector2(134, 134)
+		elif level >= 5:
+			hearth_texture = TEX_HEARTH_5_V018
+			hearth_size = Vector2(144, 144)
+		_draw_centered_texture(hearth_texture, pos + Vector2(0, -7), hearth_size * pulse, Color.WHITE)
 
-	if level >= 3:
-		draw_line(pos + Vector2(-52, 30), pos + Vector2(-52, -28), Color("#6a5135"), 6.0)
-		draw_line(pos + Vector2(52, 30), pos + Vector2(52, -28), Color("#6a5135"), 6.0)
-		draw_line(pos + Vector2(-52, -25), pos + Vector2(52, -25), Color("#7a5b39"), 5.0)
-	if level >= 4:
-		draw_line(pos + Vector2(-68, 35), pos + Vector2(-68, -10), Color("#75583a"), 5.0)
-		draw_line(pos + Vector2(68, 35), pos + Vector2(68, -10), Color("#75583a"), 5.0)
-		draw_circle(pos + Vector2(-68, -15), 6.0, Color("#e6963c"))
-		draw_circle(pos + Vector2(68, -15), 6.0, Color("#e6963c"))
-	if level >= 5:
-		draw_arc(pos, ring_radius + 22.0, -2.8, -0.35, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
-		draw_arc(pos, ring_radius + 22.0, 0.35, 2.8, 22, Color(0.95, 0.71, 0.36, 0.38), 3.0)
-
-	# Smoke, sparks and a short expanding wave make the first upgrade a real payoff.
 	var smoke_strength := 0.11 if level <= 1 else 0.16
 	for i in range(3):
 		var phase := time * (0.38 + float(i) * 0.07) + float(i) * 2.1
@@ -5272,26 +5279,13 @@ func _draw_workshop_construction() -> void:
 
 func _draw_workshop() -> void:
 	var pos := _workshop_pos()
-	_draw_ellipse_custom(pos + Vector2(0, 23), Vector2(38, 10), Color(0.01, 0.02, 0.015, 0.26))
-	draw_rect(Rect2(pos + Vector2(-31, -14), Vector2(62, 42)), _lit_world_color(Color("#5c4935"), pos))
-	var roof := PackedVector2Array([
-		pos + Vector2(-38, -14), pos + Vector2(0, -43), pos + Vector2(38, -14)
-	])
-	draw_colored_polygon(roof, _lit_world_color(Color("#7b5f3c"), pos))
-	draw_rect(Rect2(pos + Vector2(-20, 4), Vector2(17, 13)), Color("#302d27"))
-	draw_line(pos + Vector2(12, 5), pos + Vector2(28, -7), Color("#c0a574"), 3.0)
-	draw_rect(Rect2(pos + Vector2(25, -11), Vector2(8, 7)), Color("#8f8c81"))
+	_draw_centered_texture(TEX_WORKSHOP_V018, pos + Vector2(0, -10), Vector2(132, 112), _asset_modulate(pos, 0.24))
 	draw_string(font, pos + Vector2(-52, 45), "МАСТЕРСКАЯ", HORIZONTAL_ALIGNMENT_CENTER, 104, 10, Color("#ded1b7"))
 
 
 func _draw_tower() -> void:
 	var pos := _tower_pos()
-	_draw_ellipse_custom(pos + Vector2(0, 22), Vector2(30, 9), Color(0.01, 0.02, 0.015, 0.25))
-	draw_line(pos + Vector2(-13, 25), pos + Vector2(-8, -38), _lit_world_color(Color("#604a31"), pos), 7.0)
-	draw_line(pos + Vector2(13, 25), pos + Vector2(8, -38), _lit_world_color(Color("#604a31"), pos), 7.0)
-	draw_rect(Rect2(pos + Vector2(-24, -48), Vector2(48, 17)), _lit_world_color(Color("#765939"), pos))
-	draw_line(pos + Vector2(-18, -33), pos + Vector2(18, -33), Color("#8f7048"), 4.0)
-	draw_line(pos + Vector2(0, -44), pos + Vector2(25, -56), Color("#d5c49d"), 3.0)
+	_draw_centered_texture(TEX_WATCHTOWER_V018, pos + Vector2(0, -18), Vector2(112, 132), _asset_modulate(pos, 0.24))
 	draw_string(font, pos + Vector2(-48, 42), "ДОЗОР", HORIZONTAL_ALIGNMENT_CENTER, 96, 10, Color("#ded1b7"))
 
 
